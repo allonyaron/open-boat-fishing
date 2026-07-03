@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Pre-scaffolding.** The monorepo does not exist yet. `ARCHITECTURE.md` and `CONTEXT.md` are the authoritative design documents. When building, follow those specs exactly — do not invent structure beyond what is documented there.
+**Scaffolded.** Monorepo exists with full Drizzle schema and first migration generated. Next step: seed script, then Next.js API routes + booking flow.
 
 ## What This Is
 
@@ -12,21 +12,22 @@ A **multi-tenant codebase, single-tenant deployment** platform for party fishing
 
 **MVP client:** Captree / Blue Wave fleet — 4 boats, 2 domains (`your-domain.com` + `your-domain.com`), same operator record.
 
-**Onboarding a new operator = fork repo + configure env vars + deploy to their own Vercel + Railway + point their domain. ~2-3 hours. No shared infrastructure.**
+**Onboarding a new operator = fork repo + configure env vars + deploy to their own Vercel + Railway Postgres + point their domain. ~2-3 hours. No shared infrastructure.**
 
 ## Planned Monorepo Structure (Turborepo)
 
 ```
-captree/
+open-boat-fishing/
   apps/
-    web/        # Next.js 14 App Router — marketing + booking UI + admin dashboard
-    api/        # Fastify — REST API + Stripe webhooks + PDF gen
+    web/        # Next.js 14 App Router — marketing + booking UI + admin dashboard + API routes
     mobile/     # Expo (managed) — consumer app + mate check-in app
   packages/
     db/         # Drizzle ORM schema + migrations (shared source of truth)
     types/      # Shared TypeScript types
-    utils/      # QR gen, PDF, Zod validation schemas
+    utils/      # QR gen, Zod validation schemas
 ```
+
+**No separate API server.** All backend logic lives in Next.js API routes (`apps/web/src/app/api/`). Stripe webhooks, booking creation, seat decrement — all Next.js route handlers deployed as Vercel serverless functions.
 
 ## Data Model (core hierarchy)
 
@@ -53,25 +54,25 @@ These are things the incumbent does that were not explicitly in the original arc
 - **Editable cart** — quantity is adjustable in the cart view; items can be individually removed
 - **Terms acceptance** — "Purchasing tickets means you accept the terms and conditions" inline at cart; need a `/terms` page
 - **Phone number at checkout** — collect mobile number during payment for SMS delivery (Stripe Payment Element supports this)
-- **Post-payment delivery screen** — after payment succeeds, show a dedicated screen with three options: Print Now (PDF download), Email to address, Text to phone. This is separate from the confirmation page.
-- **Boarding pass PDF (per ticket)** — one page per ticket; include boat name (color-matched to brand color), trip + date + time, "Purchased By" name, QR code, unique ticket ID
-- **Confirmation email is a link, not inline QR** — email sends a "click here to download boarding passes" link; QR is on the PDF, not embedded in email body. Include: "this email is sufficient for boarding" fallback line.
+- **Post-payment delivery screen** — after payment succeeds, show a dedicated screen with three options: Print Now (browser print dialog on `/boarding/[ticketId]`), Email to address, Text to phone. This is separate from the confirmation page.
+- **Boarding pass (printable page)** — `/boarding/[ticketId]` with CSS `@media print` — one ticket per page, boat name color-coded, trip + date + time, "Purchased By" name, QR code. No Puppeteer or PDF generation — browser's "Save as PDF" handles downloads.
+- **Confirmation email is a link, not inline QR** — email sends a "click here to view boarding passes" link to `/boarding/[bookingId]`; QR is on the printable page. Include: "this email is sufficient for boarding" fallback line.
 - **"Tickets Available" display logic** — some trips show remaining count (limited capacity), others just show as bookable; only show "SOLD OUT" when fully booked. Implement a `show_remaining` flag on products or trips.
 - **Email domain** — configure Resend with `oceansidecharters.example.com` (incumbent uses `office@oceansidecharters.example.com`)
 
 ## Key Architecture Decisions
 
-**Hosting:** Each client owns their own Vercel + Railway deployment, billed to their accounts. The developer deploys and configures it for them. No shared infrastructure between operators — each client's database is fully isolated.
+**Hosting:** Each client owns their own Vercel deployment + Railway Postgres, billed to their accounts. The developer deploys and configures it for them. No shared infrastructure between operators — each client's database is fully isolated.
+
+**Serverless:** All API logic runs as Next.js route handlers on Vercel. No persistent server needed — boarding passes are printable web pages (`/boarding/[ticketId]`) with CSS `@media print`, not server-generated PDFs.
 
 **Multi-tenancy (in code, not in deployment):** The code is written as if it could serve multiple operators, but in production each deployment has exactly one `operator_id` in its database. Write every DB query scoped to `operator_id`. Never build cross-operator features (no super-admin views across clients, no aggregate analytics across deployments). This keeps the codebase reusable for every new operator without being a liability if one client's data is ever compromised.
 
 **Payments:** Stripe Connect Destination Charges. Each operator is Merchant of Record on their own charges. Developer is the Stripe platform account. `application_fee_amount: 250` ($2.50) per ticket via `transfer_data.destination`. Use `/v1/payment_intents`, NOT `/v1/charges`.
 
-**Booking confirmation flow:** `payment_intent.succeeded` webhook → confirm booking → issue tickets → send email (Resend) + optional SMS (Twilio).
+**Booking confirmation flow:** `payment_intent.succeeded` webhook (Next.js API route) → confirm booking → issue tickets → send email (Resend) + optional SMS (Twilio).
 
-**Seat inventory:** Use PostgreSQL `FOR UPDATE SKIP LOCKED` on seat decrement to prevent race conditions — not application-level checks.
-
-**PDF manifests:** Generated via Puppeteer on the Fastify API server (Railway). Needs a persistent server — this is why the API is not serverless.
+**Seat inventory:** Use PostgreSQL `FOR UPDATE SKIP LOCKED` on seat decrement to prevent race conditions — not application-level checks. Works correctly with serverless because the lock is database-side.
 
 **Mobile check-in:** Offline-first. Manifest cached at app open via `expo-sqlite` + `MMKV`. Check-in events queued locally and synced when online. Bluetooth barcode scanners (Tera HW0002) emulate keyboard input into a `TextInput` — test this early.
 
@@ -111,31 +112,29 @@ The full flow the client uses today. Our platform must match or improve on every
 
 ## Build Order
 
-1. Monorepo setup → DB schema (`packages/db`) → Drizzle migrations → Fastify scaffold → Auth
-2. Stripe Connect onboarding → PaymentIntent API → webhook handler → ticket issuance → email/SMS
-3. Next.js marketing pages → trip schedule UI → booking flow → post-payment delivery screen → confirmation
-4. Expo: manifest screen + offline cache → QR scanner → name search → manual override → offline sync
-5. Admin dashboard: trip CRUD → booking management → manifest/PDF → revenue reporting → refunds
-6. Captree infra setup (Vercel + Railway on their accounts) → DNS migration → SEO → load test (k6) → go live
+1. ✅ Monorepo setup → DB schema (`packages/db`) → Drizzle migrations
+2. Seed script (`packages/db/src/seed.ts`) → Railway Postgres dev database
+3. Next.js API routes (`/api/bookings`, `/api/webhooks/stripe`) → Stripe Connect → ticket issuance → email/SMS
+4. Next.js UI → calendar → booking flow → cart → payment → post-payment delivery screen → `/boarding/[ticketId]` printable page
+5. Expo: manifest screen + offline cache → QR scanner → name search → manual override → offline sync
+6. Admin dashboard: trip CRUD → re-materialize → booking management → revenue reporting → refunds
+7. Captree infra setup (Vercel + Railway on their accounts) → DNS migration → SEO → load test (k6) → go live
 
-## Commands (once scaffolded)
-
-These are the expected commands — add the real ones here once the monorepo exists:
+## Commands
 
 ```bash
 # Root
-pnpm install          # install all workspaces
-pnpm dev              # run all apps in parallel (Turborepo)
-pnpm build            # build all apps
-pnpm lint             # lint all packages
-pnpm typecheck        # tsc across all packages
+pnpm install                      # install all workspaces
+pnpm dev                          # run all apps in parallel (Turborepo)
+pnpm build                        # build all apps
+pnpm typecheck                    # tsc across all packages
 
 # Database (packages/db)
-pnpm db:migrate       # run Drizzle migrations
-pnpm db:studio        # open Drizzle Studio
+pnpm db:migrate                   # run Drizzle migrations against DATABASE_URL
+pnpm db:studio                    # open Drizzle Studio (requires DATABASE_URL)
+pnpm --filter @openboat/db generate   # generate migration from schema changes
 
 # Individual apps
-pnpm --filter web dev
-pnpm --filter api dev
-pnpm --filter mobile start   # Expo dev server
+pnpm --filter @openboat/web dev
+pnpm --filter @openboat/mobile start  # Expo dev server
 ```
