@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Drizzle
+packages/db/migrations/meta/
+
+# Turborepo
+.turbo/
+
+# OS
+.DS_Store
+
+# HAR files (contain session tokens from live site)
+*.har
+
+# Editor
+.vscode/
+.idea/
+
+# Expo
+apps/mobile/.expo/
+apps/mobile/ios/
+apps/mobile/android/
