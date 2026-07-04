@@ -139,39 +139,94 @@ Maps domain names to operators. Captree gets two rows: `your-domain.com` and `yo
 ## What's Done vs. What's Next
 
 ### Done
-- Monorepo scaffold (Turborepo + pnpm workspaces)
-- Full Drizzle schema, zero type errors
-- First migration generated (`packages/db/migrations/0000_safe_kingpin.sql`)
-- Fastify API stub with `/health` endpoint
-- Next.js web app stub
-- Expo mobile app stub
+- Monorepo scaffold (Turborepo + pnpm workspaces) — packages namespaced `@openboat/*`
+- Full Drizzle schema, zero type errors — 15 tables, 5 enums
+- First migration generated and applied to Railway Postgres
+- Seed script — 1 operator, 4 vessels, 2 domains, 61 products, 98 price rows
+- GitHub repo: github.com/allonyaron/open-boat-fishing (private)
 
 ### Next in Build Order
 
-1. **Seed script** — `packages/db/src/seed.ts` — seeds the Captree operator row, 4 vessels with their colors, and the ~61 products from the HAR file. Run this against a fresh Railway DB to get a working dev environment.
+1. **Next.js API routes** — `apps/web/src/app/api/` — schedule query, booking create, Stripe webhook
+2. **Stripe Connect setup** — platform account, operator onboarding, PaymentIntent with $2.50 fee
+3. **Next.js UI** — calendar, trip modal, cart, payment, post-payment screen, `/boarding/[ticketId]`
+4. **Expo mate app** — manifest, QR scanner, name search, offline sync
+5. **Admin dashboard** — trip CRUD, re-materialize, booking list, revenue reporting, refunds
+6. **Production setup** — Vercel + Railway on Captree's accounts, DNS migration, go-live
 
-2. **Fastify API routes** — schedule query (`GET /schedule`), booking create (`POST /bookings`), Stripe webhook (`POST /webhooks/stripe`)
+---
 
-3. **Stripe Connect** — operator onboarding flow, PaymentIntent creation with `transfer_data.destination` and `application_fee_amount: 250`
+## Seed Script — What It Does and Why
 
-4. **Next.js calendar + booking flow** — calendar UI, trip detail modal with per-type quantity selectors, multi-trip cart, Stripe Elements payment form, post-payment delivery screen
+### Why the seed script is the first coding step after schema
 
-5. **Boarding pass PDF** — Puppeteer template matching the format in `images/` (boat name color-coded, QR code, ticket ID, "Purchased By")
+The schema is the blueprint — the seed makes it real. Without seeded data:
+- The calendar page has nothing to render
+- The booking flow has no products to select
+- Drizzle Studio is empty and useless for verifying data relationships
+- Any UI you build can't be tested against realistic data
 
-6. **Expo mate app** — manifest screen, QR scanner, name search, offline sync
+The seed answers the question: "what does the DB look like when a real operator uses it?"
 
-7. **Admin dashboard** — trip CRUD, re-materialize button, booking list, manifest print
+### What's seeded
+
+**Operator row** — The single `operators` row that every other table traces back to. Captree's email config is hardcoded here (sourced from the incumbent's `/config` endpoint).
+
+**4 Vessels** — Colors and names sourced directly from the incumbent's `/boats` API endpoint:
+| Vessel | Color | Capacity |
+|---|---|---|
+| Blue Wave | `#000099` (blue) | 29 |
+| Blue Wave Express | `#CC0000` (red) | 29 |
+| Harbor Princess | `#CC00CC` (purple) | 120 |
+| Harbor Star | `#FFC107` (amber) | 115 |
+
+**2 Domains** — `your-domain.com` (primary) and `your-domain.com` — both point at the same operator. The web app resolves the operator from the request's `Host` header against this table.
+
+**61 Products** — All `publish: true` products from the incumbent's `/` endpoint, organized by vessel. Each product has:
+- `category` — fish species shown on calendar cells (e.g. "Sea Bass", "Fluke")
+- `displayName` — full product name shown in the trip modal (e.g. "Night Striped Bass")
+- `showRemaining` — whether the calendar shows "X Left" count on cells
+
+**98 Price rows** — One row per ticket type per product. Only adult and child are seeded (Captree doesn't use senior pricing). 12 products have no prices yet because the incumbent used custom/descriptive price keys that didn't map cleanly — set these via the admin dashboard before go-live.
+
+### Key design decisions in the seed
+
+**Idempotent** — The seed checks if an operator row already exists before inserting anything. Run it twice, no duplicates, no errors. Safe to re-run during development.
+
+**HAR file as source of truth** — Product names, categories, vessel colors, and prices came from intercepted API calls to the incumbent's live system (saved in `.har` files, excluded from git). Once the seed script exists, the HAR files can be deleted.
+
+**Prices in cents** — All `price_cents` values are stored as integers in cents. `$68.00 = 6800`. A `$()` helper in the seed converts dollars → cents. This matches Stripe's format and avoids floating-point issues.
+
+**No schedules or trips seeded** — Schedules and materialized trips are created by the admin dashboard when the operator sets up their season. The seed only creates the static reference data (who, what boats, what products, what prices) — not the temporal data.
+
+### How to run
+
+```bash
+pnpm --filter @openboat/db seed
+```
+
+Requires `DATABASE_URL` in `packages/db/.env`. First run applies to Railway dev DB. For a fresh Captree production DB, run the same seed after provisioning their Railway Postgres.
+
+### How to reset and re-seed
+
+There's no teardown script yet. To reset: drop all tables in Railway (or delete and re-provision the DB), run the migration again, then re-seed.
+
+```bash
+pnpm --filter @openboat/db migrate
+pnpm --filter @openboat/db seed
+```
 
 ---
 
 ## Architecture Decisions Locked In
 
-- **Deployment:** Option A — multi-tenant code, single-tenant deployment. Each client owns their own Vercel + Railway on their own accounts. One `operators` row per database.
+- **Deployment:** Multi-tenant code, single-tenant deployment. Each client owns their own Vercel + Railway Postgres on their own accounts. One `operators` row per database.
+- **No separate API server:** All backend logic lives in Next.js API routes (`apps/web/src/app/api/`), deployed as Vercel serverless functions. The Fastify API was dropped in favor of this simpler model.
+- **Boarding passes:** Printable web pages at `/boarding/[ticketId]` with CSS `@media print`. No Puppeteer, no PDF generation. Browser's "Save as PDF" handles downloads.
 - **Auth:** Two separate tables — `customers` (email-based) and `staff` (PIN-based). Never merged.
 - **Payments:** Stripe Connect Destination Charges. `application_fee_amount: 250` ($2.50/ticket). Use `/v1/payment_intents`, not `/v1/charges`.
-- **Seat inventory:** `FOR UPDATE SKIP LOCKED` on `trips.seats_remaining` — not application-level checks.
+- **Seat inventory:** `FOR UPDATE SKIP LOCKED` on `trips.seats_remaining` — not application-level checks. Works correctly with serverless because the lock is database-side.
 - **Trip materialization:** On schedule save for the full bounded date range. Re-materialize button for edits. No nightly cron for MVP.
-- **PDF generation:** Puppeteer on Railway (Fastify server) — requires persistent server, not serverless.
 - **Mobile check-in:** Offline-first via `expo-sqlite` + MMKV. Bluetooth scanner (Tera HW0002) emulates keyboard input into a `TextInput`.
-- **Email:** Resend, from `office@oceansidecharters.example.com`. Confirmation email is a link to download boarding passes, not inline QR.
+- **Email:** Resend, from `office@oceansidecharters.example.com`. Confirmation email is a link to the boarding pass page, not inline QR.
 - **SMS:** Twilio, sent after `payment_intent.succeeded` confirms.
