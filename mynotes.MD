@@ -189,13 +189,30 @@ The seed answers the question: "what does the DB look like when a real operator 
 
 **98 Price rows** — One row per ticket type per product. Only adult and child are seeded (Captree doesn't use senior pricing). 12 products have no prices yet because the incumbent used custom/descriptive price keys that didn't map cleanly — set these via the admin dashboard before go-live.
 
+### Two-file structure — platform vs. operator data
+
+The seed is split into two files to keep the platform generic:
+
+```
+packages/db/src/
+  seed.ts        ← generic runner, knows nothing about any operator
+  seed-data.ts   ← Captree-specific config (the only file that changes per client)
+```
+
+**`seed-data.ts`** exports three things:
+- `operatorData` — name, slug, email config
+- `domainData` — list of domains that map to this operator
+- `fleetData` — vessels, each with their nested product list
+
+**`seed.ts`** imports those exports and does the actual DB insertions. It has no hardcoded names, colors, or prices anywhere. When onboarding a new operator, you only touch `seed-data.ts`.
+
 ### Key design decisions in the seed
 
 **Idempotent** — The seed checks if an operator row already exists before inserting anything. Run it twice, no duplicates, no errors. Safe to re-run during development.
 
 **HAR file as source of truth** — Product names, categories, vessel colors, and prices came from intercepted API calls to the incumbent's live system (saved in `.har` files, excluded from git). Once the seed script exists, the HAR files can be deleted.
 
-**Prices in cents** — All `price_cents` values are stored as integers in cents. `$68.00 = 6800`. A `$()` helper in the seed converts dollars → cents. This matches Stripe's format and avoids floating-point issues.
+**Prices in cents** — All `price_cents` values are stored as integers in cents. `$68.00 = 6800`. A `toCents()` helper in seed.ts converts dollars → cents. This matches Stripe's format and avoids floating-point issues.
 
 **No schedules or trips seeded** — Schedules and materialized trips are created by the admin dashboard when the operator sets up their season. The seed only creates the static reference data (who, what boats, what products, what prices) — not the temporal data.
 
