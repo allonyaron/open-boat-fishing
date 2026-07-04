@@ -141,19 +141,31 @@ Maps domain names to operators. Captree gets two rows: `your-domain.com` and `yo
 
 ### Done
 - Monorepo scaffold (Turborepo + pnpm workspaces) — packages namespaced `@openboat/*`
-- Full Drizzle schema, zero type errors — 15 tables, 5 enums
-- First migration generated and applied to Railway Postgres
+- Full Drizzle schema, zero type errors — 13 tables, 5 enums applied to Railway Postgres
 - Seed script — 1 operator, 4 vessels, 2 domains, 61 products, 98 price rows
+- Dev trip fixtures — 52 trips materialized July–September 2026 via `seed-trips-dev.ts`
+- `GET /api/trips?month=YYYY-MM` — calendar data route with nested vessel + product + prices
+- Booking calendar UI — month grid → week strip → trip cards with inline ticket steppers
+- Design system applied: Space Grotesk + Plus Jakarta Sans fonts, teal `#0E7C7B` brand color
+- Desktop two-column layout (calendar + sticky summary card), mobile checkout bar
+- `/status` page — live DB stats, build progress, planned features tracker
 - GitHub repo: github.com/allonyaron/open-boat-fishing (private)
 
 ### Next in Build Order
 
-1. **Next.js API routes** — `apps/web/src/app/api/` — schedule query, booking create, Stripe webhook
-2. **Stripe Connect setup** — platform account, operator onboarding, PaymentIntent with $2.50 fee
-3. **Next.js UI** — calendar, trip modal, cart, payment, post-payment screen, `/boarding/[ticketId]`
-4. **Expo mate app** — manifest, QR scanner, name search, offline sync
-5. **Admin dashboard** — trip CRUD, re-materialize, booking list, revenue reporting, refunds
-6. **Production setup** — Vercel + Railway on Captree's accounts, DNS migration, go-live
+1. **Stripe Connect** — platform account setup, `POST /api/bookings` creates PaymentIntent with $2.50 fee, Stripe Payment Element in checkout UI
+2. **Stripe webhook** — `payment_intent.succeeded` → confirm booking → decrement seats → issue tickets → Resend email + Twilio SMS
+3. **Confirmation page** — post-payment screen with QR + "Add to Apple Wallet"
+4. `/boarding/[ticketId]` — printable boarding pass, CSS `@media print`
+5. **Admin dashboard** — schedule CRUD, trip materialize, booking list, refunds
+6. **Expo mate app** — manifest, QR scanner, offline sync
+7. **Production setup** — Vercel + Railway on Captree's accounts, DNS cutover, go-live
+
+### Planned Features (decided, not yet built)
+- **Automated waitlist** — cancellation triggers time-limited reservation link to next in queue
+- **Repeat customer / magic link** — silent account creation at checkout, magic link return flow
+- **Apple/Google Wallet passes** — post-payment, boarding pass on lock screen
+- **Persistent cross-trip cart** — cart survives month navigation, multi-trip checkout
 
 ---
 
