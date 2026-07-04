@@ -5,19 +5,20 @@
 ```
 open-boat-fishing/
   apps/
-    web/        Next.js 14 — marketing + booking + admin
-    api/        Fastify — REST API, webhooks, PDF gen
+    web/        Next.js 14 — marketing + booking UI + admin + API routes
     mobile/     Expo — consumer app + mate check-in
   packages/
     db/         Drizzle schema + migrations ← core piece
     types/      shared TS types (stub)
-    utils/      QR gen, PDF, Zod schemas (stub)
+    utils/      QR gen, Zod schemas (stub)
   package.json        root, Turborepo scripts
   turbo.json          task pipeline config
   pnpm-workspace.yaml workspace definition
 ```
 
-**Why Turborepo?** One `pnpm dev` starts all three apps. One `pnpm typecheck` checks all packages. Turborepo caches build outputs so unchanged packages aren't rebuilt. `packages/db` is the shared dependency — both `api` and `web` import from it.
+**No separate API server.** All backend logic (booking, Stripe webhooks, schedule queries) lives in Next.js API routes under `apps/web/src/app/api/`, deployed as Vercel serverless functions. Boarding passes are printable web pages (`/boarding/[ticketId]`) — no Puppeteer, no PDF generation.
+
+**Why Turborepo?** One `pnpm dev` starts all apps. One `pnpm typecheck` checks all packages. Turborepo caches build outputs so unchanged packages aren't rebuilt. `packages/db` is the shared dependency — both `web` and `mobile` import from it.
 
 ---
 

@@ -38,16 +38,17 @@ your-domain.com/boats/blue-wave-express
 ## Monorepo Structure (Turborepo)
 
 ```
-captree/
+open-boat-fishing/
   apps/
-    web/        # Next.js 14 — marketing site + booking UI + admin dashboard
-    api/        # Fastify — REST API consumed by web + mobile
+    web/        # Next.js 14 — marketing site + booking UI + admin dashboard + API routes
     mobile/     # Expo (React Native) — consumer app + mate check-in app
   packages/
     db/         # Drizzle ORM schema + migrations (shared source of truth)
     types/      # Shared TypeScript types (Trip, Booking, Ticket, etc.)
-    utils/      # Shared logic (QR gen, PDF, Zod validation schemas)
+    utils/      # Shared logic (QR gen, Zod validation schemas)
 ```
+
+> **No separate API server.** All backend logic lives in Next.js API routes deployed as Vercel serverless functions. Boarding passes are printable web pages (`/boarding/[ticketId]`) — no Puppeteer or PDF generation needed.
 
 ---
 
@@ -59,16 +60,16 @@ captree/
 | Styling | Tailwind CSS + shadcn/ui | Fast, polished, accessible, responsive |
 | Mobile app | Expo (managed) + Expo Router | iOS, Android, optionally web from one codebase. Camera API for QR scan. |
 | Offline storage | expo-sqlite + MMKV | Manifest cached at app open; check-in events queued when offline |
-| Backend API | Fastify + TypeScript | Handles long-running tasks (PDF gen, webhooks) that don't fit serverless |
+| Backend API | Next.js API routes (serverless) | Booking, Stripe webhooks, schedule queries — all Vercel serverless functions |
 | Database | PostgreSQL | Relational integrity for bookings/tickets/payments |
 | ORM | Drizzle ORM | Lightweight, type-safe, migrations-first. Schema in `packages/db`. |
 | Payments | Stripe Connect (Destination Charges) | `application_fee_amount: 250` per ticket ($2.50). Client is Merchant of Record. |
 | Email | Resend | Transactional email, React email templates |
 | SMS | Twilio | QR + confirmation code at booking confirmation |
 | QR codes | `qrcode` npm package | Encodes booking ID, generated server-side |
-| PDF manifest | Puppeteer (on API server) | Renders HTML → PDF. Needs persistent server, not serverless. |
+| Boarding passes | Printable web page (`/boarding/[ticketId]`) | CSS `@media print`, one ticket per page. Browser "Save as PDF" for downloads. |
 | Hosting — web | Vercel | Next.js native, zero-config. Each client has their own Vercel project on their account. |
-| Hosting — API | Railway | Persistent Node.js + managed PostgreSQL. Each client has their own Railway project on their account. |
+| Hosting — DB | Railway | Managed PostgreSQL only. Each client has their own Railway project on their account. |
 | DNS/CDN | Cloudflare | DNS migration, CDN, DDoS protection. Client owns their domain + DNS. |
 
 ---

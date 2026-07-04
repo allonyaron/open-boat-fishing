@@ -24,9 +24,7 @@ One codebase. Each client gets their own Vercel + Railway deployment with their 
 
 **Operator onboarding:** Developer forks the repo, runs migrations against a fresh DB, configures env vars, points the client's domain at their Vercel deployment. ~2-3 hours per new operator. Self-service signup is a future feature.
 
-**Platform name:** TBD — placeholder in code for now.
-
-**Platform name:** TBD — placeholder in code for now.
+**Platform name:** openboat (npm namespace `@openboat/*`). Not yet customer-facing branded.
 
 ---
 
