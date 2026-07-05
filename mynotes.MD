@@ -145,21 +145,25 @@ Maps domain names to operators. Captree gets two rows: `your-domain.com` and `yo
 - Seed script — 1 operator, 4 vessels, 2 domains, 61 products, 98 price rows
 - Dev trip fixtures — 52 trips materialized July–September 2026 via `seed-trips-dev.ts`
 - `GET /api/trips?month=YYYY-MM` — calendar data route with nested vessel + product + prices
-- Booking calendar UI — month grid → week strip → trip cards with inline ticket steppers
-- Design system applied: Space Grotesk + Plus Jakarta Sans fonts, teal `#0E7C7B` brand color
-- Desktop two-column layout (calendar + sticky summary card), mobile checkout bar
-- `/status` page — live DB stats, build progress, planned features tracker
+- Booking calendar UI — month grid → week strip → expandable trip cards with stepper buttons
+- Design system: Space Grotesk + Plus Jakarta Sans, teal `#0E7C7B`, full token set in tailwind.config.ts
+- Desktop: two-column layout (calendar left, sticky summary card right). Mobile: checkout bar pinned bottom with blur
+- `/status` page — dark theme, live DB stats, build progress bar, planned features tracker
+- **Stripe Connect** — platform account + Laura's connected test account (`acct_1TpdmKQ2psTV61Cr`)
+- `POST /api/bookings` — creates pending booking + PaymentIntent routed to Laura's account with $2.50/ticket platform fee
+- `/checkout` — Stripe Payment Element with brand theme (Apple Pay / Google Pay supported via Payment Element)
+- `/booking/confirmation` — post-payment page with confirmation code, trip details, total paid
+- Full test flow verified end-to-end: calendar → checkout → Stripe test card → confirmation page ✅
 - GitHub repo: github.com/allonyaron/open-boat-fishing (private)
 
 ### Next in Build Order
 
-1. **Stripe Connect** — platform account setup, `POST /api/bookings` creates PaymentIntent with $2.50 fee, Stripe Payment Element in checkout UI
-2. **Stripe webhook** — `payment_intent.succeeded` → confirm booking → decrement seats → issue tickets → Resend email + Twilio SMS
-3. **Confirmation page** — post-payment screen with QR + "Add to Apple Wallet"
-4. `/boarding/[ticketId]` — printable boarding pass, CSS `@media print`
-5. **Admin dashboard** — schedule CRUD, trip materialize, booking list, refunds
-6. **Expo mate app** — manifest, QR scanner, offline sync
-7. **Production setup** — Vercel + Railway on Captree's accounts, DNS cutover, go-live
+1. **Stripe webhook** — `POST /api/webhooks/stripe`: `payment_intent.succeeded` → flip booking to `confirmed` → decrement `seats_remaining` with `FOR UPDATE SKIP LOCKED` → write `tickets` rows → write `payments` row → send Resend email + Twilio SMS. Requires Stripe CLI for local testing.
+2. **Customer info form** — collect real name/email/phone before checkout (currently hardcoded to "Guest")
+3. `/boarding/[bookingId]` — printable boarding pass page with QR code, CSS `@media print`
+4. **Admin dashboard** — schedule CRUD, trip materialize, booking list, refunds
+5. **Expo mate app** — manifest, QR scanner, offline sync
+6. **Production setup** — Vercel + Railway on Captree's accounts, DNS cutover, go-live
 
 ### Planned Features (decided, not yet built)
 - **Automated waitlist** — cancellation triggers time-limited reservation link to next in queue
@@ -245,6 +249,39 @@ There's no teardown script yet. To reset: drop all tables in Railway (or delete 
 pnpm --filter @openboat/db migrate
 pnpm --filter @openboat/db seed
 ```
+
+---
+
+## Booking UI — Design Decisions
+
+### Calendar: month grid → week strip (not a persistent month view)
+Clicking an available day in the month grid collapses it to a week strip showing just that week's pills, then reveals trip cards below. This is faster than a modal and keeps context — the customer can see the whole week at a glance and tap adjacent days without going back to month. The month grid is the entry point; the week strip is the working view.
+
+### Trip cards expand inline (no modal, no side panel)
+We evaluated three patterns:
+- **Modal** (what the incumbent uses) — loses calendar context, feels dated
+- **Side panel** (built briefly) — good on desktop, awkward on mobile, cart state gets complicated
+- **Inline expanded card** (final choice) — trip card expands in place to show ticket steppers. Calendar stays visible, works on all screen sizes, single-select keeps it simple
+
+### Stepper buttons instead of dropdowns
+`−` / count / `+` buttons instead of `<select>`. Matches native mobile feel, faster to tap, cleaner visually. Minus is disabled (grayed border) at 0; plus is always teal.
+
+### Desktop vs mobile layout
+- **Desktop (≥1024px)**: two-column grid — calendar+cards left, sticky summary card right. Summary card shows live order total and Reserve button. Customer never loses sight of what they're buying.
+- **Mobile**: full-width, single column. Checkout bar pinned to bottom with `backdrop-filter: blur` — shows live total + Reserve button, always reachable.
+
+### Design system source
+Design handoff came from Claude Artifacts (`.dc.html` prototype). Colors, typography, radii, and shadows are all specified in `apps/web/tailwind.config.ts` as named tokens (`teal`, `ink`, `muted`, `surface`, `hairline`, etc.) so they can be used as Tailwind classes throughout. Fonts loaded via `next/font/google` — Space Grotesk for headings/numbers, Plus Jakarta Sans for body/UI.
+
+### Checkout flow
+Reserve button → passes cart as URL-encoded JSON to `/checkout` → Next.js server component creates booking + PaymentIntent on load → Stripe Payment Element renders. On success, Stripe redirects to `/booking/confirmation?code=XXXXXX&redirect_status=succeeded`. No separate cart page — the sticky summary card IS the cart for single-trip purchases. Multi-trip cart is a planned feature.
+
+### Payments: Stripe Connect Destination Charges
+- You (developer) are the Stripe platform account
+- Laura is a connected account (`acct_...`) — Stripe Express onboarding
+- PaymentIntent uses `transfer_data.destination` (not `on_behalf_of`) — funds settle to Laura's account after Stripe's payout schedule
+- `application_fee_amount` = $2.50 × ticket count — deducted before transfer
+- All amounts in cents throughout — no floats anywhere
 
 ---
 
