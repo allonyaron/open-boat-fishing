@@ -426,6 +426,23 @@ export function BookingCalendar({
   const ticketCount = adult + child;
   const canReserve = ticketCount > 0;
 
+  function goToCheckout() {
+    if (!selectedTrip || !canReserve) return;
+    const cart = [{
+      tripId: selectedTrip.id,
+      tickets: [
+        ...(adult > 0 ? [{ ticketType: "adult" as const, quantity: adult }] : []),
+        ...(child > 0 ? [{ ticketType: "child" as const, quantity: child }] : []),
+      ],
+    }];
+    const params = new URLSearchParams({
+      cart: encodeURIComponent(JSON.stringify(cart)),
+      name: "Guest",
+      email: "guest@example.com",
+    });
+    window.location.href = `/checkout?${params}`;
+  }
+
   return (
     <div className="min-h-screen bg-surface font-jakarta">
       {/* App bar */}
@@ -630,6 +647,7 @@ export function BookingCalendar({
 
                 <button
                   disabled={!canReserve}
+                  onClick={goToCheckout}
                   className={`w-full py-[15px] rounded-btn font-grotesk text-[15px] font-semibold flex items-center justify-center gap-2 transition-colors ${
                     canReserve
                       ? "bg-teal text-white hover:bg-teal-hover"
@@ -660,6 +678,7 @@ export function BookingCalendar({
           </div>
           <button
             disabled={!canReserve}
+            onClick={goToCheckout}
             className={`flex items-center gap-2 px-[22px] py-[14px] rounded-btn font-grotesk text-[15px] font-semibold transition-colors ${
               canReserve
                 ? "bg-teal text-white hover:bg-teal-hover"
