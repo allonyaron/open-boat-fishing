@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { operators, trips, bookings, bookingItems } from "@openboat/db";
+import { operators, trips, bookings, bookingItems, tickets, productPrices } from "@openboat/db";
 import { eq, inArray } from "drizzle-orm";
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 
 const PLATFORM_FEE_CENTS = 250; // $2.50 per ticket
 
 function confirmationCode() {
-  return randomBytes(3).toString("hex").toUpperCase(); // 6-char e.g. "A3F9C2"
+  return randomBytes(3).toString("hex").toUpperCase();
 }
 
 type CartItem = {
@@ -34,19 +34,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
 
-  // Load all trips in the cart
   const tripIds = cart.map((c) => c.tripId);
-  const tripRows = await db
-    .select()
-    .from(trips)
-    .where(inArray(trips.id, tripIds));
+  const tripRows = await db.select().from(trips).where(inArray(trips.id, tripIds));
 
   if (tripRows.length !== tripIds.length) {
     return NextResponse.json({ error: "One or more trips not found" }, { status: 404 });
   }
 
-  // Load prices for all products in cart
-  const { productPrices } = await import("@openboat/db");
   const productIds = [...new Set(tripRows.map((t) => t.productId))];
   const priceRows = await db
     .select()
@@ -91,32 +85,55 @@ export async function POST(req: NextRequest) {
     })
     .returning();
 
-  // Create booking items
+  // Create booking items + tickets (one ticket row per passenger)
   for (const item of cart) {
     const trip = tripRows.find((t) => t.id === item.tripId)!;
-    const subtotal = item.tickets.reduce((s, ticket) => {
+    const subtotal = item.tickets.reduce((s, t) => {
       const price = priceRows.find(
-        (p) => p.productId === trip.productId && p.ticketType === ticket.ticketType
+        (p) => p.productId === trip.productId && p.ticketType === t.ticketType
       )!;
-      return s + price.priceCents * ticket.quantity;
+      return s + price.priceCents * t.quantity;
     }, 0);
 
-    await db.insert(bookingItems).values({
-      bookingId: booking.id,
-      tripId: item.tripId,
-      operatorId: operator.id,
-      subtotalCents: subtotal,
+    const [bookingItem] = await db
+      .insert(bookingItems)
+      .values({
+        bookingId: booking.id,
+        tripId: item.tripId,
+        operatorId: operator.id,
+        subtotalCents: subtotal,
+      })
+      .returning();
+
+    const ticketValues = item.tickets.flatMap((t) => {
+      const price = priceRows.find(
+        (p) => p.productId === trip.productId && p.ticketType === t.ticketType
+      )!;
+      return Array.from({ length: t.quantity }, () => {
+        const id = randomUUID();
+        return {
+          id,
+          bookingItemId: bookingItem.id,
+          bookingId: booking.id,
+          operatorId: operator.id,
+          ticketType: t.ticketType,
+          priceCents: price.priceCents,
+          qrPayload: id,
+        };
+      });
     });
+
+    if (ticketValues.length > 0) {
+      await db.insert(tickets).values(ticketValues);
+    }
   }
 
-  // Create Stripe PaymentIntent routed to Laura's account
+  // Create Stripe PaymentIntent routed to the connected account
   const connectedAccountId = process.env.STRIPE_CONNECTED_ACCOUNT_ID!;
   const paymentIntent = await stripe.paymentIntents.create({
     amount: totalCents,
     currency: "usd",
-    transfer_data: {
-      destination: connectedAccountId,
-    },
+    transfer_data: { destination: connectedAccountId },
     application_fee_amount: platformFeeCents,
     metadata: {
       bookingId: booking.id,
@@ -125,7 +142,6 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Store the PaymentIntent ID on the booking
   await db
     .update(bookings)
     .set({ stripePaymentIntentId: paymentIntent.id })

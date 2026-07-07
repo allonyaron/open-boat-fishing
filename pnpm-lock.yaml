@@ -69,9 +69,12 @@ importers:
       '@stripe/stripe-js':
         specifier: ^9.9.0
         version: 9.9.0
+      drizzle-orm:
+        specifier: ^0.44.7
+        version: 0.44.7(expo-sqlite@15.2.14(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.4(react-native@0.79.2(@babel/core@7.29.7)(@types/react@18.3.31)(react@18.3.1)))(react-native@0.79.2(@babel/core@7.29.7)(@types/react@18.3.31)(react@18.3.1))(react@18.3.1))(react-native@0.79.2(@babel/core@7.29.7)(@types/react@18.3.31)(react@18.3.1))(react@18.3.1))(postgres@3.4.9)
       next:
         specifier: 14.2.30
-        version: 14.2.30(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 14.2.30(@babel/core@7.29.7)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -5943,6 +5946,11 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.22.5
 
+  drizzle-orm@0.44.7(expo-sqlite@15.2.14(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.4(react-native@0.79.2(@babel/core@7.29.7)(@types/react@18.3.31)(react@18.3.1)))(react-native@0.79.2(@babel/core@7.29.7)(@types/react@18.3.31)(react@18.3.1))(react@18.3.1))(react-native@0.79.2(@babel/core@7.29.7)(@types/react@18.3.31)(react@18.3.1))(react@18.3.1))(postgres@3.4.9):
+    optionalDependencies:
+      expo-sqlite: 15.2.14(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.4(react-native@0.79.2(@babel/core@7.29.7)(@types/react@18.3.31)(react@18.3.1)))(react-native@0.79.2(@babel/core@7.29.7)(@types/react@18.3.31)(react@18.3.1))(react@18.3.1))(react-native@0.79.2(@babel/core@7.29.7)(@types/react@18.3.31)(react@18.3.1))(react@18.3.1)
+      postgres: 3.4.9
+
   drizzle-orm@0.44.7(expo-sqlite@15.2.14(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.4(react-native@0.79.2(@babel/core@7.29.7)(react@18.3.1)))(react-native@0.79.2(@babel/core@7.29.7)(react@18.3.1))(react@18.3.1))(react-native@0.79.2(@babel/core@7.29.7)(react@18.3.1))(react@18.3.1))(postgres@3.4.9):
     optionalDependencies:
       expo-sqlite: 15.2.14(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.4(react-native@0.79.2(@babel/core@7.29.7)(react@18.3.1)))(react-native@0.79.2(@babel/core@7.29.7)(react@18.3.1))(react@18.3.1))(react-native@0.79.2(@babel/core@7.29.7)(react@18.3.1))(react@18.3.1)
@@ -6953,7 +6961,7 @@ snapshots:
 
   nested-error-stacks@2.0.1: {}
 
-  next@14.2.30(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  next@14.2.30(@babel/core@7.29.7)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@next/env': 14.2.30
       '@swc/helpers': 0.5.5
@@ -6963,7 +6971,7 @@ snapshots:
       postcss: 8.4.31
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-      styled-jsx: 5.1.1(react@18.3.1)
+      styled-jsx: 5.1.1(@babel/core@7.29.7)(react@18.3.1)
     optionalDependencies:
       '@next/swc-darwin-arm64': 14.2.30
       '@next/swc-darwin-x64': 14.2.30
@@ -7604,10 +7612,12 @@ snapshots:
 
   structured-headers@0.4.1: {}
 
-  styled-jsx@5.1.1(react@18.3.1):
+  styled-jsx@5.1.1(@babel/core@7.29.7)(react@18.3.1):
     dependencies:
       client-only: 0.0.1
       react: 18.3.1
+    optionalDependencies:
+      '@babel/core': 7.29.7
 
   sucrase@3.35.0:
     dependencies:

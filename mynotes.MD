@@ -150,20 +150,28 @@ Maps domain names to operators. Captree gets two rows: `your-domain.com` and `yo
 - Desktop: two-column layout (calendar left, sticky summary card right). Mobile: checkout bar pinned bottom with blur
 - `/status` page — dark theme, live DB stats, build progress bar, planned features tracker
 - **Stripe Connect** — platform account + Laura's connected test account (`acct_1TpdmKQ2psTV61Cr`)
-- `POST /api/bookings` — creates pending booking + PaymentIntent routed to Laura's account with $2.50/ticket platform fee
+- `POST /api/bookings` — creates pending booking + booking items + tickets at creation time, PaymentIntent routed to Laura's account with $2.50/ticket platform fee
 - `/checkout` — Stripe Payment Element with brand theme (Apple Pay / Google Pay supported via Payment Element)
 - `/booking/confirmation` — post-payment page with confirmation code, trip details, total paid
-- Full test flow verified end-to-end: calendar → checkout → Stripe test card → confirmation page ✅
+- **Stripe webhook** — `POST /api/webhooks/stripe`: `payment_intent.succeeded` → confirmed booking + seats decremented + payments row. Idempotent. Tested end-to-end ✅
+- `/boarding/[bookingId]` — printable boarding pass page, QR code per ticket, vessel color header, CSS `@media print`
 - GitHub repo: github.com/allonyaron/open-boat-fishing (private)
 
 ### Next in Build Order
 
-1. **Stripe webhook** — `POST /api/webhooks/stripe`: `payment_intent.succeeded` → flip booking to `confirmed` → decrement `seats_remaining` with `FOR UPDATE SKIP LOCKED` → write `tickets` rows → write `payments` row → send Resend email + Twilio SMS. Requires Stripe CLI for local testing.
-2. **Customer info form** — collect real name/email/phone before checkout (currently hardcoded to "Guest")
-3. `/boarding/[bookingId]` — printable boarding pass page with QR code, CSS `@media print`
-4. **Admin dashboard** — schedule CRUD, trip materialize, booking list, refunds
-5. **Expo mate app** — manifest, QR scanner, offline sync
-6. **Production setup** — Vercel + Railway on Captree's accounts, DNS cutover, go-live
+1. **Customer info form** — collect real name/email/phone before checkout (currently hardcoded to "Guest")
+2. **Admin dashboard** — schedule CRUD, trip materialize, booking list, refunds
+3. **Expo mate app** — manifest, QR scanner, offline sync
+4. **Production setup** — Vercel + Railway on Captree's accounts, DNS cutover, go-live
+
+### ⚠️ Pre-Launch Checklist (must not ship without these)
+
+- [ ] **Stripe webhook — production registration**: Add `https://[domain]/api/webhooks/stripe` in Stripe Dashboard → Developers → Webhooks. Subscribe to `payment_intent.succeeded`. Copy the production `whsec_` into Vercel env vars as `STRIPE_WEBHOOK_SECRET`. The Stripe CLI listener is dev-only and does not run in production.
+- [ ] **Customer info form**: Real name/email/phone must be collected before checkout. Currently hardcoded to "Guest" / "guest@example.com".
+- [ ] **12 products with no prices**: Set prices via admin dashboard before go-live (seeded products with unmapped price keys from incumbent).
+- [ ] **Resend email**: Wire up confirmation email after webhook confirms booking.
+- [ ] **DNS cutover**: Point your-domain.com + your-domain.com to Vercel deployment.
+- [ ] **Live Stripe keys**: Swap test keys (`sk_test_`, `pk_test_`) for live keys (`sk_live_`, `pk_live_`) in Vercel env vars.
 
 ### Planned Features (decided, not yet built)
 - **Automated waitlist** — cancellation triggers time-limited reservation link to next in queue

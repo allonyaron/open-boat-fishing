@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements } from "@stripe/react-stripe-js";
 import { CheckoutForm } from "./CheckoutForm";
@@ -20,8 +20,13 @@ function CheckoutInner() {
     ticketCount: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const initialized = useRef(false);
 
   useEffect(() => {
+    // Guard against React StrictMode double-invocation in dev
+    if (initialized.current) return;
+    initialized.current = true;
+
     const raw = params.get("cart");
     const name = params.get("name");
     const email = params.get("email");
