@@ -1,0 +1,72 @@
+name: Mobile Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/mobile/**"
+      - "packages/**"
+
+concurrency:
+  group: mobile-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-and-doctor:
+    name: Typecheck & Expo Doctor
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck mobile app
+        id: typecheck
+        run: pnpm --filter @openboat/mobile typecheck
+
+      - name: Run expo-doctor
+        id: expo_doctor
+        working-directory: apps/mobile
+        run: npx expo-doctor@latest
+
+      - name: Comment on PR if checks failed
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const typecheckStatus = '${{ steps.typecheck.outcome }}';
+            const doctorStatus = '${{ steps.expo_doctor.outcome }}';
+
+            const lines = ['## Mobile CI Checks Failed', ''];
+
+            if (typecheckStatus === 'failure') {
+              lines.push('- **TypeScript typecheck** failed — run `pnpm --filter @openboat/mobile typecheck` locally to see errors.');
+            }
+            if (doctorStatus === 'failure') {
+              lines.push('- **expo-doctor** failed — run `npx expo-doctor@latest` inside `apps/mobile/` to diagnose config/dependency issues.');
+            }
+
+            lines.push('');
+            lines.push('Fix the issues above and push a new commit to re-run CI.');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: lines.join('\n'),
+            });

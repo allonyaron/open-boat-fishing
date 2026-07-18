@@ -4,7 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Scaffolded.** Monorepo exists with full Drizzle schema and first migration generated. Next step: seed script, then Next.js API routes + booking flow.
+**In progress.** Steps 1–4 complete. Web app: schema migrated (0001), seed complete (157 dev trips across 4 vessels), booking API + webhook + boarding pass built, mobile-first BookingCalendar rebuilt with desktop toggle. Expo consumer app scaffolded and running in Expo Go — Trips tab with month calendar, trip cards, ticket bottom sheet, and cart bar built. Next: tickets wallet (step 7) then web checkout flow (step 6).
+
+## Known Tech Debt (pre-launch, not blocking dev)
+
+- **QR signing** — `tickets.qrPayload` is currently a bare UUID. Must be replaced with an HMAC of the ticket ID using a per-operator secret before launch. A guessable ID lets someone mint a plausible pass. The mate app must validate the signature offline against the cached manifest.
+- **Webhook fee transitions** — `fee_status` is written as `held` at booking time but never transitions to `earned` (trip sailed + grace window cleared) or `reversed` (cancellation). The sail signal + `applicationFees.createRefund()` on cancellation still need to be implemented. Revenue reporting is blocked on this.
 
 ## What This Is
 
@@ -20,12 +25,20 @@ A **multi-tenant codebase, single-tenant deployment** platform for party fishing
 open-boat-fishing/
   apps/
     web/        # Next.js 14 App Router — marketing + booking UI + admin dashboard + API routes
-    mobile/     # Expo (managed) — consumer app + mate check-in app
+    mobile/     # Expo (managed) — two apps from one codebase (see below)
   packages/
     db/         # Drizzle ORM schema + migrations (shared source of truth)
     types/      # Shared TypeScript types
     utils/      # QR gen, Zod validation schemas
 ```
+
+### Mobile Apps (Expo EAS — two distinct apps, one codebase)
+
+**Consumer booking app** — white-labeled, published to App Store + Google Play under the *operator's* name (e.g., "OpenBoat Fishing" by Captree, not by the developer). Scope: browse trip calendar, buy tickets, view/manage bookings, display boarding pass QR in-app (wallet-style), receive push notifications for trip reminders. Each new operator gets their own App Store Connect + Google Play Console accounts; Expo EAS handles per-client builds via separate `eas.json` build profiles (different bundle ID, app name, icon, theme colors per client).
+
+**Mate check-in app** — internal tool, distributed via TestFlight / internal Play track (no public App Store listing needed). Scope: offline manifest, QR scanner, name search, manual override, sync when online.
+
+**Onboarding a new operator's app** = new EAS build profile + client's App Store/Play accounts + submit. ~1-2 hours per platform.
 
 **No separate API server.** All backend logic lives in Next.js API routes (`apps/web/src/app/api/`). Stripe webhooks, booking creation, seat decrement — all Next.js route handlers deployed as Vercel serverless functions.
 
@@ -43,6 +56,56 @@ operators → vessels → products → product_prices → schedules → trips �
 - `bookings` = one per customer purchase, can span multiple trips (multi-trip cart); `tickets` = one per passenger
 - Multi-domain per operator: domain → operator_id mapping in platform config
 
+### Required fields not yet in the schema
+
+Surfaced by competitor API analysis (`/docs/captree-booking-ux-audit.md` §6) and the fee decision:
+
+```
+trips
+  + status              enum('scheduled','pending_settlement','sailed','cancelled')
+                                     not null default 'scheduled'
+  + sailed_at           timestamptz null
+  + cancelled_at        timestamptz null
+  + cancellation_reason text null          -- 'weather' | 'mechanical' | 'low_bookings' | free text
+  + boarding_time       time null          -- distinct from departure (06:30 board / 07:00 depart)
+  + duration_day        int not null default 0   -- multi-day trips: duration on the trip,
+  + duration_hr         int                      -- NOT a spanning calendar entity
+  + duration_min        int
+  + online_cutoff       timestamptz null   -- online booking closes
+  + deposit_percentage  int null           -- null = pay in full
+
+tickets
+  + fee_amount_cents    int not null default 150  -- SNAPSHOT at write time, never read
+                                                  -- from config at bill time
+  + fee_status          enum('held','earned','reversed') not null default 'held'
+
+operators
+  + fee_bearer          enum('passenger','operator') not null default 'passenger'
+  + fee_display         enum('itemized','folded')    not null default 'itemized'
+  + cancel_window_hrs   int not null default 48   -- customer self-cancel cutoff
+  + settle_grace_hrs    int not null default 48   -- departure → earned; absorbs late cancellations
+```
+
+**Capacity is per-trip, not per-vessel.** The same hull runs 45 on a full-day and 30 on a limited-capacity trip. `schedules` already carries capacity and materializes it onto `trips` — that is correct as written. Two constraints: a materialized trip's capacity must be editable **without re-materializing the schedule**, and capacity must never be settable below tickets already sold (validate loudly). Dev seed uses **29**.
+
+**The sail signal needs a settlement lag — the captain records weather cancellations LATE.** Assume trips get cancelled *after* their departure time has passed and refunds go out then. This is the expected case, not an edge case. So the status transition is **not** at departure:
+
+```
+scheduled ──(departure passes)──▶ pending_settlement
+                                         │
+                    ┌────────────────────┴────────────────────┐
+         (grace expires, no cancellation)          (captain cancels late)
+                    ▼                                         ▼
+                 sailed                                   cancelled
+           fee_status → earned                      fee_status → reversed
+```
+
+Fees stay `held` through the grace window (`operators.settle_grace_hrs`, default 48h), so a late cancellation is an ordinary reversal instead of unwinding a revenue recognition that shouldn't have happened. Aging can be a cron or a lazy check on read — lazy is simpler and there's no cron in the stack.
+
+**Cancelling a trip is one atomic transaction:** refund every ticket, reverse every fee, set `status`/`cancelled_at`, fire notifications. If a cancellation ever arrives after `sailed` was set, that's a true unwind — log it as an exception, not a normal path.
+
+**Make cancellation one tap at the dock.** The friction of recording a cancellation is why it happens late. Both the mate app and the admin dashboard should let the captain kill a trip instantly and fire a push the moment it's recorded — otherwise customers drive to Captree, find no boat, and get refunded the next day.
+
 ## Booking Flow Requirements (gaps found vs. original plan)
 
 These are things the incumbent does that were not explicitly in the original architecture docs:
@@ -55,10 +118,18 @@ These are things the incumbent does that were not explicitly in the original arc
 - **Terms acceptance** — "Purchasing tickets means you accept the terms and conditions" inline at cart; need a `/terms` page
 - **Phone number at checkout** — collect mobile number during payment for SMS delivery (Stripe Payment Element supports this)
 - **Post-payment delivery screen** — after payment succeeds, show a dedicated screen with three options: Print Now (browser print dialog on `/boarding/[ticketId]`), Email to address, Text to phone. This is separate from the confirmation page.
-- **Boarding pass (printable page)** — `/boarding/[ticketId]` with CSS `@media print` — one ticket per page, boat name color-coded, trip + date + time, "Purchased By" name, QR code. No Puppeteer or PDF generation — browser's "Save as PDF" handles downloads.
+- **Boarding pass (printable page)** — two URL forms, one component: `/boarding/[bookingId]` (whole order, every ticket stacked — this is what the confirmation email links to) and `/boarding/[ticketId]` (single ticket; build this first, the booking page maps over it). Each ticket is one `<article>` with `page-break-after: always`. Fields: operator masthead in `operator.brand_color` (white-labeled, not hardcoded red), "Boarding pass" + ticket type, boat name color-coded from `vessels.color_hex` **and in text** (never color alone — half these print in grayscale), product display name, departs AND returns, "Purchased by" (the buyer; all tickets in an order carry the same name), QR top-right, ticket ID in monospace at the bottom as the scan-failure fallback.
+- **The QR must encode a signed value, not a bare ticket ID** — a URL to `/boarding/[ticketId]` or an HMAC of the ticket ID with a per-operator secret. A guessable ID lets someone increment their own and mint a plausible pass. The mate app validates the signature offline against the cached manifest.
+- **Print CSS is why this is a web page** — `@media print` sets `page-break-after: always` per pass, hides chrome, and critically sets `print-color-adjust: exact` (browsers strip background colors when printing; without it the boat-color coding vanishes on paper). Print button is `window.print()`; the browser's dialog handles Save-as-PDF. No Puppeteer, no server-side PDF.
+- **A cancelled/refunded ticket must render a CANCELLED state** — the pass URL is durable and effectively public. Check ticket status on render.
 - **Confirmation email is a link, not inline QR** — email sends a "click here to view boarding passes" link to `/boarding/[bookingId]`; QR is on the printable page. Include: "this email is sufficient for boarding" fallback line.
 - **"Tickets Available" display logic** — some trips show remaining count (limited capacity), others just show as bookable; only show "SOLD OUT" when fully booked. Implement a `show_remaining` flag on products or trips.
 - **Email domain** — configure Resend with `oceansidecharters.example.com` (incumbent uses `office@oceansidecharters.example.com`)
+- **Fee presentation is operator-configurable, account-wide** — `operators.fee_bearer` (`passenger` | `operator`) and `operators.fee_display` (`itemized` | `folded`) produce four combinations. Defaults: `passenger` / `itemized` (matching GoFish). Scope is account-wide, never per-product: the fee is identical on every ticket and only its presentation varies; per-product display would make a multi-trip cart show a fee on one line and hide it on the next. Surface the setting in the pricing setup screen (where the captain is already thinking about money), not in account settings. Include a live preview: "Customer sees → $80.50".
+- **Rod rental is an optional per-product ticket type** — most Captree trips include rods in the fare (one price row); long-distance trips may offer rods for an extra fee (a second row, e.g. `Passenger with rod`). Captain enables and prices it per product. Default off. No `is_addon` flag and no parent-product relationship — a rod is just another named ticket type.
+- **Customer cancellation cutoff is 48 hours** before departure (`operators.cancel_window_hrs`, default 48). Inside 48h the customer's self-service cancel is closed. **The captain's manual refund has no time limit** — it is a separate, always-available admin power, not an override of the 48h rule.
+- **The platform fee always reverses on cancellation** — weather, customer self-cancel, or captain discretion. No exceptions. A **no-show earns the fee** (the passenger didn't cancel; the boat sailed with the seat sold).
+- **No slip/dock numbers** — Captree doesn't assign them. Boat name + boat color do the wayfinding on the pass and in reminder pushes.
 
 ## Key Architecture Decisions
 
@@ -68,7 +139,18 @@ These are things the incumbent does that were not explicitly in the original arc
 
 **Multi-tenancy (in code, not in deployment):** The code is written as if it could serve multiple operators, but in production each deployment has exactly one `operator_id` in its database. Write every DB query scoped to `operator_id`. Never build cross-operator features (no super-admin views across clients, no aggregate analytics across deployments). This keeps the codebase reusable for every new operator without being a liability if one client's data is ever compromised.
 
-**Payments:** Stripe Connect Destination Charges. Each operator is Merchant of Record on their own charges. Developer is the Stripe platform account. `application_fee_amount: 250` ($2.50) per ticket via `transfer_data.destination`. Use `/v1/payment_intents`, NOT `/v1/charges`.
+**Payments:** Stripe Connect Destination Charges. Each operator is Merchant of Record on their own charges. Developer is the Stripe platform account. Use `/v1/payment_intents`, NOT `/v1/charges`. Payment methods — credit/debit card, PayPal, Venmo, Apple Pay, Google Pay — are all enabled via the Stripe Payment Element; no separate PayPal integration needed. Stripe handles routing regardless of which method the customer picks.
+
+**Platform fee: $1.50 per ticket** (`application_fee_amount: 150`), NOT $2.50. Taken at charge time via `transfer_data.destination`. The fee is only *earned* when a trip sails, so it is tracked as held-then-earned in our own books:
+
+- `tickets.fee_amount_cents` — snapshot at write time (default 150). Never read the fee from config when billing; historical tickets bill at the rate in force when sold.
+- `tickets.fee_status` — `held` at charge time → `earned` only after the trip clears its settlement grace window (departure + `settle_grace_hrs`, default 48h) → `reversed` on cancellation. The lag exists because the captain records weather cancellations late; see the schema section.
+- **Revenue reporting counts only `WHERE fee_status = 'earned'`.** Stripe's balance and our earned-revenue number will disagree constantly by design; `fee_status` is what explains the gap.
+- **Every cancellation reverses the fee** — weather, customer self-cancel, or captain discretion, no exceptions. The cancellation handler calls `applicationFees.createRefund()` alongside the customer refund, in the same transaction.
+- **Partial cancellations** (multi-trip cart, one trip dies) reverse only that trip's tickets' fees, not the whole booking's.
+- **A no-show earns the fee** — the passenger didn't cancel; the boat sailed with the seat sold.
+
+Rationale and the rejected alternative (monthly invoicing on sailed tickets) are in `/docs/fee-mechanism-decision.md`. Revisit at operator #3.
 
 **Booking confirmation flow:** `payment_intent.succeeded` webhook (Next.js API route) → confirm booking → issue tickets → send email (Resend) + optional SMS (Twilio).
 
@@ -110,15 +192,24 @@ The full flow the client uses today. Our platform must match or improve on every
 - `captree_com.har` — full checkout flow
 - Incumbent departure time hack: `:01/:02/:03` minute suffixes disambiguate multiple products at the same hour on the same boat — our materialized `trips` model does not need this
 
+## Competitive Position
+
+**GoFish (`gofish.rocks`) is a live direct competitor** in this exact segment — they publish a landing page for Long Island fishing charters, and Miss Montauk runs on them. They charge $1.50/passenger, on the operator's own domain, operator as merchant of record, free migration, no setup fee. Nearly every structural advantage this platform was designed around, they already ship. **Do not position on price or on "you keep your brand."**
+
+Two things are actually differentiated. First, **execution**: their production site points at `dev-api.gofish.rocks`, does seat holds over `GET` requests that mutate inventory, and runs a half-migrated payment stack (Square 404s, Stripe loads only for fingerprinting, Authorize.net seal on the page). Our `FOR UPDATE SKIP LOCKED` seat decrement is genuinely better engineering — but that advantage only exists if we actually ship something robust. Second, and more important: **the consumer mobile app with an offline tickets wallet.** No competitor in this category — GoFish, FareHarbor, AttractionSuite, or the incumbent — ships one. Captree State Park's dock is where cell coverage is worst, and a boarding pass that won't load at the gangway is the nightmare scenario. **The booking flow is table stakes; the app is the product.** Prioritize accordingly.
+
 ## Build Order
 
 1. ✅ Monorepo setup → DB schema (`packages/db`) → Drizzle migrations
-2. Seed script (`packages/db/src/seed.ts`) → Railway Postgres dev database
-3. Next.js API routes (`/api/bookings`, `/api/webhooks/stripe`) → Stripe Connect → ticket issuance → email/SMS
-4. Next.js UI → calendar → booking flow → cart → payment → post-payment delivery screen → `/boarding/[ticketId]` printable page
-5. Expo: manifest screen + offline cache → QR scanner → name search → manual override → offline sync
-6. Admin dashboard: trip CRUD → re-materialize → booking management → revenue reporting → refunds
-7. Captree infra setup (Vercel + Railway on their accounts) → DNS migration → SEO → load test (k6) → go live
+2. ✅ Schema additions (`trips.status`, fee fields, `boarding_time`, duration fields) → migration `0001_nifty_maximus.sql` applied
+3. ✅ Seed script (`packages/db/src/seed-trips-dev.ts`) → 157 dev trips across 4 vessels, capacity 29
+4. ✅ Mobile-first rebuild of web `BookingCalendar.tsx` — month grid + day list, desktop calendar/list toggle, bottom sheet ticket selector, pinned cart bar
+5. `/api/bookings`, `/api/webhooks/stripe`, cart total, cancellation handler → Stripe Connect (`application_fee_amount: 150`, `fee_status` held/earned/reversed) → ticket issuance → email/SMS. Needs `trips.status` from step 2 for the sail signal that flips `fee_status` to `earned`.
+6. Cart → checkout → payment → post-payment delivery screen → `/boarding/[ticketId]` printable page
+7. **Expo consumer app** — scaffolded, EAS configured, GitHub Actions CI/CD in place. Trips tab with month calendar, colored vessel dots, trip cards, ticket bottom sheet, and multi-trip cart built. **Next: tickets wallet (offline boarding pass)** — SQLite cache of purchased tickets, QR display that works offline. Then booking flow → push notifications → EAS build + store submission under client's accounts.
+8. Expo mate check-in app → manifest + offline cache → QR scanner → name search → manual override → offline sync → TestFlight/internal track
+9. Admin dashboard: trip CRUD → per-trip capacity edit → re-materialize → booking management → revenue reporting → refunds
+10. Captree infra (Vercel + Railway on their accounts) → DNS migration → SEO → load test (k6) → go live
 
 ## Commands
 
@@ -136,5 +227,15 @@ pnpm --filter @openboat/db generate   # generate migration from schema changes
 
 # Individual apps
 pnpm --filter @openboat/web dev
-pnpm --filter @openboat/mobile start  # Expo dev server
+pnpm --filter @openboat/mobile dev    # Expo dev server (use `-- --clear` to clear Metro cache)
+```
+
+## Dependency Overrides (pnpm-workspace.yaml)
+
+Two overrides are pinned in `pnpm-workspace.yaml` — do not remove without testing:
+
+- `react-native-screens: ~4.11.1` — Expo SDK 53 expects this version. `4.25.x` uses a `CodegenTypes` namespace not exported by `react-native@0.79.6`, causing Metro bundling to fail with "Unknown prop type" errors.
+- `react: 19.0.0` / `react-dom: 19.0.0` — `react-native@0.79.6` bundles `react-native-renderer@19.0.0`; mismatched React versions cause an "Incompatible React versions" runtime error.
+
+```bash
 ```

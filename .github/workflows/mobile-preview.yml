@@ -1,0 +1,51 @@
+name: Mobile Preview Build & OTA Update
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/mobile/**"
+      - "packages/**"
+
+concurrency:
+  group: mobile-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: EAS Preview Build + OTA Update
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: EAS Build (preview — all platforms)
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas build --profile preview --platform all --non-interactive
+
+      - name: EAS Update (OTA — branch main)
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas update --branch main --message "Deploy from ${{ github.sha }}" --non-interactive

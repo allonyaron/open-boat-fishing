@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Trip = {
   id: string;
@@ -18,258 +20,162 @@ export type Trip = {
   };
 };
 
+export type EnrichedCartItem = {
+  tripId: string;
+  departureDate: string;
+  startTime: string;
+  endTime: string;
+  vesselName: string;
+  vesselColor: string;
+  category: string;
+  productName: string;
+  seatsRemaining: number;
+  tickets: {
+    ticketType: "adult" | "child";
+    quantity: number;
+    priceCents: number;
+  }[];
+};
+
+type ViewMode = "list" | "calendar";
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MONTHS = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
+];
 const DAYS_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-
-function parseMonth(month: string) {
-  const [y, m] = month.split("-").map(Number);
-  return { year: y, mon: m };
-}
 
 function toMonthStr(year: number, mon: number) {
   return `${year}-${String(mon).padStart(2, "0")}`;
 }
-
-function fmtTime(iso: string) {
+function parseMonth(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  return { year: y, mon: m };
+}
+function fmtTime(iso: string | Date) {
   return new Date(iso).toLocaleTimeString("en-US", {
     hour: "numeric", minute: "2-digit", timeZone: "America/New_York",
   });
 }
-
-function fmtDayLabel(dateStr: string) {
-  const d = new Date(dateStr + "T12:00:00Z");
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+function fmtDayHeader(dateStr: string) {
+  return new Date(dateStr + "T12:00:00Z").toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric",
+  });
 }
-
-function weekDaysFor(dateStr: string): string[] {
-  const d = new Date(dateStr + "T12:00:00Z");
-  const dow = d.getUTCDay();
-  const days: string[] = [];
-  for (let i = 0; i < 7; i++) {
-    const dd = new Date(d);
-    dd.setUTCDate(d.getUTCDate() - dow + i);
-    days.push(dd.toISOString().slice(0, 10));
-  }
-  return days;
-}
-
-function allDaysInMonth(month: string): string[] {
-  const { year, mon } = parseMonth(month);
-  const last = new Date(Date.UTC(year, mon, 0)).getUTCDate();
-  return Array.from({ length: last }, (_, i) =>
-    `${month}-${String(i + 1).padStart(2, "0")}`
-  );
-}
-
 function dollars(cents: number) {
-  return `$${Math.round(cents / 100)}`;
+  const n = cents / 100;
+  return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
 }
 
 // ─── Stepper ──────────────────────────────────────────────────────────────────
 
-function Stepper({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+function Stepper({ value, onChange, max }: { value: number; onChange: (n: number) => void; max: number }) {
   return (
-    <div className="flex items-center gap-4">
-      <button
-        onClick={() => onChange(Math.max(0, value - 1))}
-        disabled={value === 0}
-        className={`w-[34px] h-[34px] rounded-pill flex items-center justify-center text-xl leading-none transition-colors ${
-          value === 0
-            ? "border border-[#E4E8E7] text-[#C3CBCA] cursor-default"
-            : "border-[1.5px] border-teal text-teal"
-        }`}
-      >
-        −
-      </button>
-      <span className="font-grotesk text-[17px] font-semibold min-w-[16px] text-center">{value}</span>
-      <button
-        onClick={() => onChange(value + 1)}
-        className="w-[34px] h-[34px] rounded-pill bg-teal text-white flex items-center justify-center text-xl leading-none hover:bg-teal-hover transition-colors"
-      >
-        +
-      </button>
+    <div className="flex items-center gap-3">
+      <button type="button" onClick={() => onChange(Math.max(0, value - 1))} disabled={value === 0}
+        className={`w-9 h-9 rounded-pill flex items-center justify-center text-lg transition-colors ${
+          value === 0 ? "border border-hairline text-disabled-text cursor-default" : "border-[1.5px] border-teal text-teal"
+        }`}>−</button>
+      <span className="font-grotesk text-[17px] font-semibold w-5 text-center">{value}</span>
+      <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}
+        className="w-9 h-9 rounded-pill bg-teal text-white flex items-center justify-center text-lg hover:bg-teal-hover transition-colors disabled:bg-disabled disabled:text-disabled-text">+</button>
     </div>
   );
 }
 
-// ─── Trip Card ────────────────────────────────────────────────────────────────
+// ─── Trip Row ─────────────────────────────────────────────────────────────────
 
-function TripCard({
-  trip,
-  selected,
-  adult,
-  child,
-  onSelect,
-  onAdult,
-  onChild,
-}: {
-  trip: Trip;
-  selected: boolean;
-  adult: number;
-  child: number;
-  onSelect: () => void;
-  onAdult: (n: number) => void;
-  onChild: (n: number) => void;
-}) {
-  const adultPrice = trip.product.prices.find((p) => p.ticketType === "adult");
-  const childPrice = trip.product.prices.find((p) => p.ticketType === "child");
-  const lowStock = trip.seatsRemaining > 0 && trip.seatsRemaining <= 15;
+function TripRow({ trip, cartQty, onSelect }: { trip: Trip; cartQty: number; onSelect: () => void }) {
   const soldOut = trip.seatsRemaining === 0;
-
+  const lowStock = !soldOut && trip.product.showRemaining && trip.seatsRemaining <= 10;
   return (
-    <div
-      className={`bg-white rounded-card overflow-hidden transition-all duration-150 cursor-pointer ${
-        selected
-          ? "border-[1.5px] border-teal shadow-card-selected"
-          : "border-[1.5px] border-card-border shadow-card"
-      }`}
-      onClick={onSelect}
-    >
-      {/* Card head */}
-      <div className="p-4 flex gap-4 items-start">
-        {/* Left */}
-        <div className="flex-1 min-w-0 flex flex-col gap-[7px]">
-          <span className="inline-block self-start text-[11px] font-bold tracking-[0.08em] uppercase text-teal bg-teal-tint px-2 py-0.5 rounded-badge">
-            {trip.product.category}
-          </span>
-          <div className="font-grotesk text-[18px] font-semibold text-ink leading-tight">
-            {trip.product.displayName}
-          </div>
-          <div className="flex items-center gap-1.5 text-[13px] text-muted">
-            <ClockIcon />
-            {fmtTime(trip.startTime)} – {fmtTime(trip.endTime)}
-          </div>
-          <div className="flex items-center gap-1.5 text-[13px] text-muted">
-            <BoatIcon />
-            {trip.vessel.name}
-          </div>
-        </div>
-
-        {/* Right */}
-        <div className="flex flex-col items-end gap-2 flex-shrink-0">
-          {adultPrice && (
-            <div className="font-grotesk text-[20px] font-bold text-ink">
-              {dollars(adultPrice.priceCents)}
-            </div>
-          )}
-          {trip.product.showRemaining && !soldOut && (
-            <span
-              className={`text-[12px] font-semibold px-[9px] py-1 rounded-pill ${
-                lowStock
-                  ? "bg-warning-bg text-warning"
-                  : "bg-success-bg text-success"
-              }`}
-            >
-              {lowStock ? `Only ${trip.seatsRemaining} left` : `${trip.seatsRemaining} available`}
-            </span>
-          )}
-          {soldOut && (
-            <span className="text-[12px] font-semibold px-[9px] py-1 rounded-pill bg-warning-bg text-warning">
-              Sold out
-            </span>
-          )}
-          {/* Radio indicator */}
-          <div
-            className={`w-[22px] h-[22px] rounded-pill border-2 flex items-center justify-center transition-colors ${
-              selected ? "border-teal" : "border-[#D4DAD9]"
-            }`}
-          >
-            {selected && <div className="w-[11px] h-[11px] rounded-pill bg-teal" />}
-          </div>
-        </div>
+    <button type="button" onClick={onSelect} disabled={soldOut}
+      className={`w-full text-left flex items-center gap-3 p-4 bg-white rounded-[16px] border transition-all ${
+        soldOut ? "border-hairline opacity-60 cursor-not-allowed"
+        : cartQty > 0 ? "border-teal shadow-card-selected"
+        : "border-card-border shadow-card hover:border-teal/40"
+      }`}>
+      <div className="w-1 self-stretch rounded-pill flex-shrink-0" style={{ backgroundColor: trip.vessel.color }} />
+      <div className="flex-1 min-w-0">
+        <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-teal mb-0.5">{trip.product.category}</div>
+        <div className="font-grotesk text-[15px] font-semibold text-ink truncate">{trip.product.displayName}</div>
+        <div className="text-[13px] text-muted mt-0.5">{trip.vessel.name} · {fmtTime(trip.startTime)} – {fmtTime(trip.endTime)}</div>
       </div>
-
-      {/* Expanded ticket section */}
-      {selected && !soldOut && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <div className="h-px bg-hairline mx-4" />
-          <div className="px-4 pt-3 pb-4 space-y-4">
-            <div className="text-[11px] font-bold tracking-[0.1em] uppercase text-faint">
-              Tickets
-            </div>
-            {adultPrice && (
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[14px] font-semibold text-ink">Adult</div>
-                  <div className="text-[13px] text-faint">{dollars(adultPrice.priceCents)} · 13+</div>
-                </div>
-                <Stepper value={adult} onChange={onAdult} />
-              </div>
-            )}
-            {childPrice && (
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[14px] font-semibold text-ink">Child</div>
-                  <div className="text-[13px] text-faint">{dollars(childPrice.priceCents)} · 5–12</div>
-                </div>
-                <Stepper value={child} onChange={onChild} />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+        {cartQty > 0 && <span className="text-[11px] font-bold text-teal bg-teal-tint px-2 py-0.5 rounded-pill">{cartQty} in cart</span>}
+        {soldOut ? <span className="text-[11px] font-semibold text-warning bg-warning-bg px-2 py-0.5 rounded-pill">Sold out</span>
+        : lowStock ? <span className="text-[11px] font-semibold text-warning bg-warning-bg px-2 py-0.5 rounded-pill">{trip.seatsRemaining} left</span>
+        : trip.product.showRemaining ? <span className="text-[11px] font-semibold text-success bg-success-bg px-2 py-0.5 rounded-pill">{trip.seatsRemaining} avail.</span>
+        : null}
+        <ChevronRight />
+      </div>
+    </button>
   );
 }
 
-// ─── Month Grid ───────────────────────────────────────────────────────────────
+// ─── Month Grid (desktop calendar view) ───────────────────────────────────────
 
 function MonthGrid({
-  month,
-  availableDays,
-  onDaySelect,
+  month, byDate, selectedDay, onDaySelect,
 }: {
-  month: string;
-  availableDays: Set<string>;
-  onDaySelect: (day: string) => void;
+  month: string; byDate: Record<string, Trip[]>; selectedDay: string | null; onDaySelect: (d: string) => void;
 }) {
   const { year, mon } = parseMonth(month);
   const firstDow = new Date(Date.UTC(year, mon - 1, 1)).getUTCDay();
-  const days = allDaysInMonth(month);
+  const lastDay = new Date(Date.UTC(year, mon, 0)).getUTCDate();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const days = Array.from({ length: lastDay }, (_, i) =>
+    `${month}-${String(i + 1).padStart(2, "0")}`
+  );
   const cells: (string | null)[] = [...Array(firstDow).fill(null), ...days];
   while (cells.length % 7 !== 0) cells.push(null);
-  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <div>
-      <div className="grid grid-cols-7 mb-1">
+      <div className="grid grid-cols-7 mb-2">
         {DAYS_SHORT.map((d) => (
-          <div key={d} className="text-center text-[10px] font-bold text-faint uppercase py-2">
-            {d}
-          </div>
+          <div key={d} className="text-center text-[11px] font-bold text-faint uppercase py-2">{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-1.5">
         {cells.map((date, i) => {
           if (!date) return <div key={i} />;
-          const avail = availableDays.has(date);
+          const trips = byDate[date] ?? [];
+          const isSelected = date === selectedDay;
           const isToday = date === today;
+          const hasTrips = trips.length > 0;
           const dayNum = parseInt(date.slice(-2));
-          const tripCount = avail ? 1 : 0; // simplified — real count comes from grouping
 
           return (
             <button
               key={date}
-              disabled={!avail}
-              onClick={() => onDaySelect(date)}
-              className={`min-h-[78px] rounded-[12px] p-2 text-left transition-all ${
-                avail
-                  ? "border border-card-border bg-white hover:border-teal/40 hover:shadow-sm"
-                  : "bg-[#FAFBFB] border border-[#F0F2F2] cursor-default"
-              } ${isToday ? "ring-1 ring-teal/30" : ""}`}
+              onClick={() => hasTrips && onDaySelect(date)}
+              disabled={!hasTrips}
+              className={`min-h-[80px] rounded-[14px] p-2.5 text-left transition-all ${
+                isSelected
+                  ? "bg-teal shadow-day-selected"
+                  : hasTrips
+                  ? "bg-white border border-card-border hover:border-teal/50 shadow-card cursor-pointer"
+                  : "bg-fill/60 border border-hairline cursor-default"
+              } ${isToday && !isSelected ? "ring-1 ring-teal/40" : ""}`}
             >
-              <div
-                className={`font-grotesk text-[14px] font-semibold ${
-                  avail ? "text-ink" : "text-[#C3CBCA]"
-                }`}
-              >
-                {dayNum}
-              </div>
-              {avail && (
-                <div className="mt-1.5 inline-block text-[10px] font-bold text-teal bg-teal-tint px-1.5 py-0.5 rounded-[5px]">
-                  {tripCount > 1 ? `${tripCount} trips` : "trips"}
+              <div className={`font-grotesk text-[14px] font-semibold mb-2 ${
+                isSelected ? "text-white" : hasTrips ? "text-ink" : "text-faint"
+              }`}>{dayNum}</div>
+              {hasTrips && (
+                <div className="flex flex-wrap gap-[3px]">
+                  {trips.slice(0, 5).map((t, j) => (
+                    <div key={j} className="w-[7px] h-[7px] rounded-pill"
+                      style={{ backgroundColor: isSelected ? "rgba(255,255,255,0.65)" : t.vessel.color }} />
+                  ))}
+                  {trips.length > 5 && (
+                    <span className={`text-[9px] font-bold leading-[7px] ${isSelected ? "text-white/65" : "text-faint"}`}>
+                      +{trips.length - 5}
+                    </span>
+                  )}
                 </div>
               )}
             </button>
@@ -280,466 +186,432 @@ function MonthGrid({
   );
 }
 
-// ─── Week Strip ───────────────────────────────────────────────────────────────
+// ─── Ticket Sheet (bottom sheet, mobile + desktop) ────────────────────────────
 
-function WeekStrip({
-  selDay,
-  availableDays,
-  onDaySelect,
-  onBack,
+function TicketSheet({
+  trip, adultQty, childQty, onAdult, onChild, onClose, onAdd,
 }: {
-  selDay: string;
-  availableDays: Set<string>;
-  onDaySelect: (day: string) => void;
-  onBack: () => void;
+  trip: Trip; adultQty: number; childQty: number;
+  onAdult: (n: number) => void; onChild: (n: number) => void;
+  onClose: () => void; onAdd: () => void;
 }) {
-  const weekDays = weekDaysFor(selDay);
+  const adultPrice = trip.product.prices.find((p) => p.ticketType === "adult");
+  const childPrice = trip.product.prices.find((p) => p.ticketType === "child");
+  const total = (adultQty * (adultPrice?.priceCents ?? 0)) + (childQty * (childPrice?.priceCents ?? 0));
+  const ticketCount = adultQty + childQty;
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
 
   return (
-    <div>
-      <button
-        onClick={onBack}
-        className="mb-3 text-[15px] font-semibold text-teal font-grotesk flex items-center gap-1 border border-[#CFE4E3] bg-[#F1FAF9] px-3 py-1.5 rounded-pill"
-      >
-        ‹ Back to month
-      </button>
-      <div className="flex gap-2.5 overflow-x-auto pb-1">
-        {weekDays.map((date) => {
-          const avail = availableDays.has(date);
-          const isSelected = date === selDay;
-          const d = new Date(date + "T12:00:00Z");
-          const dow = DAYS_SHORT[d.getUTCDay()];
-          const dayNum = d.getUTCDate();
+    <>
+      <div className="fixed inset-0 bg-black/40 z-40 animate-fade-in" onClick={onClose} />
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[24px] shadow-2xl animate-slide-up max-h-[90dvh] flex flex-col md:left-auto md:right-0 md:top-[60px] md:bottom-0 md:w-[420px] md:rounded-none md:rounded-tl-[24px] md:rounded-bl-[24px] md:max-h-none md:shadow-[-8px_0_30px_rgba(0,0,0,0.08)]">
+        <div className="flex justify-center pt-3 pb-1 flex-shrink-0 md:hidden">
+          <div className="w-10 h-1 rounded-pill bg-hairline" />
+        </div>
+        <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-hairline flex-shrink-0">
+          <div className="font-grotesk text-[17px] font-semibold text-ink">Select tickets</div>
+          <button onClick={onClose} className="w-8 h-8 rounded-pill hover:bg-fill flex items-center justify-center text-muted transition-colors">✕</button>
+        </div>
 
-          return (
-            <button
-              key={date}
-              disabled={!avail}
-              onClick={() => avail && onDaySelect(date)}
-              className={`flex-shrink-0 w-[58px] rounded-[18px] py-3 pb-2.5 flex flex-col items-center gap-1.5 transition-all ${
-                isSelected
-                  ? "bg-teal shadow-day-selected"
-                  : avail
-                  ? "bg-fill hover:bg-teal/10"
-                  : "opacity-45 bg-fill cursor-default"
-              }`}
-            >
-              <span
-                className={`text-[11px] font-semibold tracking-[0.06em] uppercase ${
-                  isSelected ? "text-white/85" : "text-faint"
-                }`}
-              >
-                {dow}
-              </span>
-              <span
-                className={`font-grotesk text-[19px] font-semibold ${
-                  isSelected ? "text-white" : "text-ink"
-                }`}
-              >
-                {dayNum}
-              </span>
-              <div
-                className={`w-[5px] h-[5px] rounded-pill ${
-                  isSelected ? "bg-white" : avail ? "bg-teal" : "bg-transparent"
-                }`}
-              />
-            </button>
-          );
-        })}
+        <div className="overflow-y-auto flex-1 px-5">
+          <div className="py-4 border-b border-hairline">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-2 h-2 rounded-pill" style={{ backgroundColor: trip.vessel.color }} />
+              <span className="text-[12px] font-bold uppercase tracking-wide text-faint">{trip.vessel.name}</span>
+            </div>
+            <div className="font-grotesk text-[20px] font-semibold text-ink">{trip.product.displayName}</div>
+            <div className="text-[13px] text-muted mt-1">{fmtTime(trip.startTime)} – {fmtTime(trip.endTime)}</div>
+            {trip.product.showRemaining && (
+              <div className="text-[12px] text-success font-semibold mt-1.5">{trip.seatsRemaining} tickets available</div>
+            )}
+          </div>
+          <div className="py-4 space-y-5 pb-2">
+            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-faint">Tickets</div>
+            {adultPrice && (
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[15px] font-semibold text-ink">Adult</div>
+                  <div className="text-[13px] text-faint">{dollars(adultPrice.priceCents)} · 13+</div>
+                </div>
+                <Stepper value={adultQty} onChange={onAdult} max={trip.seatsRemaining - childQty} />
+              </div>
+            )}
+            {childPrice && (
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[15px] font-semibold text-ink">Child</div>
+                  <div className="text-[13px] text-faint">{dollars(childPrice.priceCents)} · 5–12</div>
+                </div>
+                <Stepper value={childQty} onChange={onChild} max={trip.seatsRemaining - adultQty} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] border-t border-hairline flex-shrink-0">
+          {ticketCount > 0 && (
+            <div className="flex justify-between items-baseline mb-3">
+              <span className="text-[14px] text-muted">{ticketCount} ticket{ticketCount !== 1 ? "s" : ""}</span>
+              <span className="font-grotesk text-[22px] font-bold text-ink">{dollars(total)}</span>
+            </div>
+          )}
+          <button type="button" onClick={onAdd} disabled={ticketCount === 0}
+            className="w-full py-4 rounded-btn font-grotesk text-[15px] font-semibold transition-colors bg-teal text-white hover:bg-teal-hover disabled:bg-disabled disabled:text-disabled-text">
+            {ticketCount === 0 ? "Select tickets" : "Add to cart"}
+          </button>
+        </div>
       </div>
+    </>
+  );
+}
+
+// ─── Desktop Right Sidebar ────────────────────────────────────────────────────
+
+function DesktopSidebar({
+  viewMode, selectedDay, dayTrips, totalCents, totalTickets,
+  onTripSelect, onCheckout, tripQty,
+}: {
+  viewMode: ViewMode; selectedDay: string | null; dayTrips: Trip[];
+  totalCents: number; totalTickets: number;
+  onTripSelect: (t: Trip) => void; onCheckout: () => void;
+  tripQty: (id: string) => number;
+}) {
+  return (
+    <div className="hidden md:flex flex-col w-[360px] border-l border-hairline bg-white sticky top-[60px] h-[calc(100vh-60px)]">
+      {viewMode === "calendar" ? (
+        selectedDay ? (
+          <>
+            <div className="px-5 py-4 border-b border-hairline flex-shrink-0">
+              <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-faint mb-0.5">Trips</div>
+              <div className="font-grotesk text-[17px] font-semibold text-ink">{fmtDayHeader(selectedDay)}</div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {dayTrips.length === 0
+                ? <div className="text-center py-10 text-[13px] text-faint">No trips this day</div>
+                : dayTrips.map((t) => (
+                    <TripRow key={t.id} trip={t} cartQty={tripQty(t.id)} onSelect={() => onTripSelect(t)} />
+                  ))}
+            </div>
+            {totalTickets > 0 && <SidebarCartFooter totalCents={totalCents} totalTickets={totalTickets} onCheckout={onCheckout} />}
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center flex-1 text-center px-8">
+            <div className="w-11 h-11 rounded-[13px] bg-teal-tint flex items-center justify-center mb-3">
+              <CalendarIcon />
+            </div>
+            <div className="font-grotesk text-[15px] font-semibold text-ink mb-1">Select a date</div>
+            <div className="text-[13px] text-faint">Click a highlighted day to see trips</div>
+            {totalTickets > 0 && <SidebarCartFooter totalCents={totalCents} totalTickets={totalTickets} onCheckout={onCheckout} />}
+          </div>
+        )
+      ) : (
+        // List mode sidebar: cart summary
+        totalTickets === 0 ? (
+          <div className="flex flex-col items-center justify-center flex-1 text-center px-8">
+            <div className="font-grotesk text-[15px] font-semibold text-ink mb-1">Your cart</div>
+            <div className="text-[13px] text-faint">Select a trip to add tickets</div>
+          </div>
+        ) : (
+          <SidebarCartFooter totalCents={totalCents} totalTickets={totalTickets} onCheckout={onCheckout} />
+        )
+      )}
     </div>
   );
 }
 
-// ─── Main Calendar ────────────────────────────────────────────────────────────
+function SidebarCartFooter({ totalCents, totalTickets, onCheckout }: { totalCents: number; totalTickets: number; onCheckout: () => void }) {
+  return (
+    <div className="border-t border-hairline p-5 flex-shrink-0">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <div className="text-[12px] font-bold uppercase tracking-wide text-faint mb-0.5">Total</div>
+          <div className="font-grotesk text-[24px] font-bold text-ink">{dollars(totalCents)}</div>
+        </div>
+        <div className="text-[13px] text-muted">{totalTickets} ticket{totalTickets !== 1 ? "s" : ""}</div>
+      </div>
+      <button type="button" onClick={onCheckout}
+        className="w-full py-4 rounded-btn bg-teal text-white font-grotesk text-[15px] font-semibold hover:bg-teal-hover transition-colors flex items-center justify-center gap-2">
+        Reserve <ArrowRight />
+      </button>
+    </div>
+  );
+}
 
-export function BookingCalendar({
-  initialTrips,
-  initialMonth,
-}: {
-  initialTrips: Trip[];
-  initialMonth: string;
-}) {
+// ─── Mobile Cart Bar ──────────────────────────────────────────────────────────
+
+function CartBar({ totalCents, ticketCount, onCheckout }: { totalCents: number; ticketCount: number; onCheckout: () => void }) {
+  if (ticketCount === 0) return null;
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-30 md:hidden bg-white/92 backdrop-blur-[14px] border-t border-hairline px-5 pt-3.5 pb-[max(1.5rem,env(safe-area-inset-bottom))] flex items-center justify-between">
+      <div>
+        <div className="font-grotesk text-[22px] font-bold text-ink">{dollars(totalCents)}</div>
+        <div className="text-[12px] text-faint">{ticketCount} ticket{ticketCount !== 1 ? "s" : ""}</div>
+      </div>
+      <button type="button" onClick={onCheckout}
+        className="flex items-center gap-2 px-6 py-3.5 rounded-btn bg-teal text-white font-grotesk text-[15px] font-semibold hover:bg-teal-hover transition-colors">
+        Reserve <ArrowRight />
+      </button>
+    </div>
+  );
+}
+
+// ─── Main ────────────────────────────────────────────────────────────────────
+
+export function BookingCalendar({ initialTrips, initialMonth, operatorName }: { initialTrips: Trip[]; initialMonth: string; operatorName: string }) {
   const [month, setMonth] = useState(initialMonth);
-  const [trips, setTrips] = useState(initialTrips);
+  const [trips, setTrips] = useState<Trip[]>(initialTrips);
   const [loading, setLoading] = useState(false);
-  const [calView, setCalView] = useState<"month" | "week">("month");
-  const [selDay, setSelDay] = useState<string | null>(null);
-  const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
-  const [adult, setAdult] = useState(0);
-  const [child, setChild] = useState(0);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [cart, setCart] = useState<Map<string, number>>(new Map());
+  const [sheetTripId, setSheetTripId] = useState<string | null>(null);
+  const [sheetAdult, setSheetAdult] = useState(0);
+  const [sheetChild, setSheetChild] = useState(0);
+
+  // Default to calendar view on desktop after hydration
+  useEffect(() => {
+    if (window.innerWidth >= 768) setViewMode("calendar");
+  }, []);
 
   const { year, mon } = parseMonth(month);
 
-  async function goToMonth(newMonth: string) {
+  async function goToMonth(m: string) {
     setLoading(true);
-    const res = await fetch(`/api/trips?month=${newMonth}`);
-    const data = await res.json();
+    const data = await fetch(`/api/trips?month=${m}`).then((r) => r.json());
     setTrips(data);
-    setMonth(newMonth);
-    setCalView("month");
-    setSelDay(null);
-    setSelectedTripId(null);
-    setAdult(0);
-    setChild(0);
+    setMonth(m);
+    setSelectedDay(null);
     setLoading(false);
   }
-
   function prevMonth() {
     const d = new Date(Date.UTC(year, mon - 2, 1));
     goToMonth(toMonthStr(d.getUTCFullYear(), d.getUTCMonth() + 1));
   }
-
   function nextMonth() {
     const d = new Date(Date.UTC(year, mon, 1));
     goToMonth(toMonthStr(d.getUTCFullYear(), d.getUTCMonth() + 1));
   }
 
-  function handleDaySelect(day: string) {
-    setSelDay(day);
-    setCalView("week");
-    const dayTrips = byDate[day] ?? [];
-    setSelectedTripId(dayTrips[0]?.id ?? null);
-    setAdult(0);
-    setChild(0);
+  const key = (tripId: string, type: "adult" | "child") => `${tripId}:${type}`;
+  const getQty = (tripId: string, type: "adult" | "child") => cart.get(key(tripId, type)) ?? 0;
+  const tripQty = (tripId: string) => getQty(tripId, "adult") + getQty(tripId, "child");
+  const totalTickets = Array.from(cart.values()).reduce((a, b) => a + b, 0);
+  const totalCents = trips.reduce((sum, t) => {
+    const a = t.product.prices.find((p) => p.ticketType === "adult")?.priceCents ?? 0;
+    const c = t.product.prices.find((p) => p.ticketType === "child")?.priceCents ?? 0;
+    return sum + getQty(t.id, "adult") * a + getQty(t.id, "child") * c;
+  }, 0);
+
+  function openSheet(trip: Trip) {
+    setSheetTripId(trip.id);
+    setSheetAdult(getQty(trip.id, "adult"));
+    setSheetChild(getQty(trip.id, "child"));
+  }
+  function commitSheet() {
+    if (!sheetTripId) return;
+    const next = new Map(cart);
+    sheetAdult > 0 ? next.set(key(sheetTripId, "adult"), sheetAdult) : next.delete(key(sheetTripId, "adult"));
+    sheetChild > 0 ? next.set(key(sheetTripId, "child"), sheetChild) : next.delete(key(sheetTripId, "child"));
+    setCart(next);
+    setSheetTripId(null);
   }
 
-  function handleTripSelect(tripId: string) {
-    if (tripId === selectedTripId) return;
-    setSelectedTripId(tripId);
-    setAdult(0);
-    setChild(0);
+  function goToCart() {
+    const tripIds = [...new Set([...cart.keys()].map((k) => k.split(":")[0]))];
+    const cartItems: EnrichedCartItem[] = tripIds.map((tripId) => {
+      const trip = trips.find((t) => t.id === tripId)!;
+      const adultPrice = trip.product.prices.find((p) => p.ticketType === "adult");
+      const childPrice = trip.product.prices.find((p) => p.ticketType === "child");
+      return {
+        tripId,
+        departureDate: trip.departureDate,
+        startTime: trip.startTime,
+        endTime: trip.endTime,
+        vesselName: trip.vessel.name,
+        vesselColor: trip.vessel.color,
+        category: trip.product.category,
+        productName: trip.product.displayName,
+        seatsRemaining: trip.seatsRemaining,
+        tickets: [
+          ...(getQty(tripId, "adult") > 0 ? [{ ticketType: "adult" as const, quantity: getQty(tripId, "adult"), priceCents: adultPrice?.priceCents ?? 0 }] : []),
+          ...(getQty(tripId, "child") > 0 ? [{ ticketType: "child" as const, quantity: getQty(tripId, "child"), priceCents: childPrice?.priceCents ?? 0 }] : []),
+        ],
+      };
+    });
+    window.location.href = `/cart?data=${encodeURIComponent(JSON.stringify(cartItems))}`;
   }
 
   const byDate = trips.reduce<Record<string, Trip[]>>((acc, t) => {
     (acc[t.departureDate] ??= []).push(t);
     return acc;
   }, {});
-
-  const availableDays = new Set(Object.keys(byDate));
-  const dayTrips = selDay ? (byDate[selDay] ?? []) : [];
-  const selectedTrip = dayTrips.find((t) => t.id === selectedTripId) ?? null;
-
-  const adultPrice = selectedTrip?.product.prices.find((p) => p.ticketType === "adult");
-  const childPrice = selectedTrip?.product.prices.find((p) => p.ticketType === "child");
-  const total = (adult * (adultPrice?.priceCents ?? 0)) + (child * (childPrice?.priceCents ?? 0));
-  const ticketCount = adult + child;
-  const canReserve = ticketCount > 0;
-
-  function goToCheckout() {
-    if (!selectedTrip || !canReserve) return;
-    const cart = [{
-      tripId: selectedTrip.id,
-      tickets: [
-        ...(adult > 0 ? [{ ticketType: "adult" as const, quantity: adult }] : []),
-        ...(child > 0 ? [{ ticketType: "child" as const, quantity: child }] : []),
-      ],
-    }];
-    const params = new URLSearchParams({
-      cart: encodeURIComponent(JSON.stringify(cart)),
-      name: "Guest",
-      email: "guest@example.com",
-    });
-    window.location.href = `/checkout?${params}`;
-  }
+  const dates = Object.keys(byDate).sort();
+  const dayTrips = selectedDay ? (byDate[selectedDay] ?? []) : [];
+  const sheetTrip = sheetTripId ? trips.find((t) => t.id === sheetTripId) ?? null : null;
 
   return (
     <div className="min-h-screen bg-surface font-jakarta">
       {/* App bar */}
-      <header className="bg-white border-b border-hairline h-[66px] flex items-center justify-between px-5 md:px-8">
-        <div className="flex items-center gap-3">
-          <div className="w-[34px] h-[34px] rounded-[10px] bg-teal flex items-center justify-center flex-shrink-0">
-            <BoatIconWhite />
+      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-[14px] border-b border-hairline h-[60px] flex items-center justify-between px-5">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-[9px] bg-teal flex items-center justify-center">
+            <BoatIcon />
           </div>
-          <span className="font-grotesk text-[17px] font-semibold text-ink">OpenBoat Fishing</span>
+          <span className="font-grotesk text-[17px] font-semibold text-ink">{operatorName}</span>
         </div>
+
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-1.5 text-[12px] font-medium text-muted bg-fill px-3 py-1.5 rounded-pill">
-            <PinIcon />
-            Captree State Park, NY
+          {/* View toggle — desktop only */}
+          <div className="hidden md:flex items-center gap-0.5 bg-fill rounded-[10px] p-0.5">
+            {(["list", "calendar"] as ViewMode[]).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-3 py-1.5 rounded-[8px] text-[13px] font-semibold transition-all capitalize ${
+                  viewMode === mode
+                    ? "bg-white text-ink shadow-card"
+                    : "text-faint hover:text-muted"
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
           </div>
-          <div className="w-[34px] h-[34px] rounded-pill bg-teal-tint flex items-center justify-center text-[13px] font-semibold text-teal">
-            JD
+
+          {/* Month nav */}
+          <div className="flex items-center gap-1.5">
+            <button onClick={prevMonth} className="w-8 h-8 rounded-[8px] border border-card-border bg-white flex items-center justify-center text-muted hover:bg-fill transition-colors">
+              <ChevronLeft />
+            </button>
+            <span className="font-grotesk text-[13px] font-semibold text-ink min-w-[90px] text-center">
+              {MONTHS[mon - 1]} {year}
+            </span>
+            <button onClick={nextMonth} className="w-8 h-8 rounded-[8px] border border-card-border bg-white flex items-center justify-center text-muted hover:bg-fill transition-colors">
+              <ChevronRight />
+            </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-[1120px] mx-auto px-5 md:px-8">
-        <div className="md:grid md:gap-7 py-6" style={{ gridTemplateColumns: "1fr 372px" }}>
+      {/* Body: left content + right sidebar */}
+      <div className="md:flex md:h-[calc(100vh-60px)]">
 
-          {/* ── Left column ─────────────────────────────────────── */}
-          <div>
-            {/* Title + month nav */}
-            <div className="flex items-center justify-between mb-5">
-              <h1 className="font-grotesk text-[26px] font-semibold text-ink">Book a trip</h1>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={prevMonth}
-                  className="w-[34px] h-[34px] rounded-[10px] border border-card-border bg-white flex items-center justify-center text-muted hover:bg-fill transition-colors"
-                >
-                  ‹
-                </button>
-                <span className="font-grotesk text-[15px] font-semibold text-ink min-w-[92px] text-center">
-                  {MONTHS[mon - 1]} {year}
-                </span>
-                <button
-                  onClick={nextMonth}
-                  className="w-[34px] h-[34px] rounded-[10px] border border-card-border bg-white flex items-center justify-center text-muted hover:bg-fill transition-colors"
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-
-            {/* Calendar */}
-            <div className={`transition-opacity ${loading ? "opacity-40 pointer-events-none" : ""}`}>
-              {calView === "month" ? (
-                <MonthGrid
-                  month={month}
-                  availableDays={availableDays}
-                  onDaySelect={handleDaySelect}
-                />
-              ) : selDay ? (
-                <WeekStrip
-                  selDay={selDay}
-                  availableDays={availableDays}
-                  onDaySelect={handleDaySelect}
-                  onBack={() => { setCalView("month"); setSelDay(null); }}
-                />
-              ) : null}
-            </div>
-
-            {/* Trip list or empty state */}
-            <div className="mt-5">
-              {calView === "month" && (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="w-[46px] h-[46px] rounded-[14px] bg-teal-tint flex items-center justify-center mb-3">
-                    <CalendarIcon />
-                  </div>
-                  <div className="font-grotesk text-[16px] font-semibold text-ink mb-1">
-                    Pick a date to start
-                  </div>
-                  <div className="text-[13px] text-faint max-w-[220px]">
-                    Tap any highlighted day to see the trips sailing that day.
-                  </div>
-                </div>
-              )}
-
-              {calView === "week" && selDay && (
-                <>
-                  <div className="mb-3 flex items-baseline gap-2">
-                    <span className="font-grotesk text-[17px] font-semibold text-ink">
-                      {fmtDayLabel(selDay)}
-                    </span>
-                    <span className="text-[13px] text-faint">
-                      · {dayTrips.length} trip{dayTrips.length !== 1 ? "s" : ""} available
-                    </span>
-                  </div>
-                  <div className="space-y-3 pb-36">
-                    {dayTrips.map((trip) => (
-                      <TripCard
-                        key={trip.id}
-                        trip={trip}
-                        selected={trip.id === selectedTripId}
-                        adult={trip.id === selectedTripId ? adult : 0}
-                        child={trip.id === selectedTripId ? child : 0}
-                        onSelect={() => handleTripSelect(trip.id)}
-                        onAdult={setAdult}
-                        onChild={setChild}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* ── Right column — sticky summary (desktop only) ─────── */}
-          {selectedTrip && (
-            <div className="hidden md:block">
-              <div className="sticky top-6 bg-white border border-card-border rounded-[22px] shadow-summary p-[22px] space-y-4">
-                <div>
-                  <span className="inline-block text-[11px] font-bold tracking-[0.08em] uppercase text-teal bg-teal-tint px-2 py-0.5 rounded-badge mb-1">
-                    {selectedTrip.product.category}
-                  </span>
-                  <div className="font-grotesk text-[21px] font-semibold text-ink leading-tight">
-                    {selectedTrip.product.displayName}
-                  </div>
-                  {selDay && (
-                    <div className="text-[13px] text-faint mt-0.5">{fmtDayLabel(selDay)}</div>
-                  )}
-                </div>
-
-                {/* Details tile */}
-                <div className="grid grid-cols-3 bg-[#F7F9F9] rounded-[14px] p-3.5 gap-3">
-                  {[
-                    { label: "DEPARTS", value: fmtTime(selectedTrip.startTime) },
-                    { label: "RETURNS", value: fmtTime(selectedTrip.endTime) },
-                    { label: "BOAT", value: selectedTrip.vessel.name },
-                  ].map((d) => (
-                    <div key={d.label}>
-                      <div className="text-[10px] font-bold text-faint uppercase tracking-wide">{d.label}</div>
-                      <div className="text-[14px] font-semibold text-ink mt-0.5">{d.value}</div>
+        {/* Left: list or calendar */}
+        <div className={`flex-1 overflow-y-auto transition-opacity ${loading ? "opacity-40 pointer-events-none" : ""}`}>
+          {viewMode === "list" ? (
+            <div className="max-w-2xl mx-auto px-4 py-5 pb-32 md:pb-8">
+              {dates.length === 0 ? (
+                <EmptyState />
+              ) : (
+                <div className="space-y-6">
+                  {dates.map((date) => (
+                    <div key={date}>
+                      <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-faint mb-2.5 px-1">
+                        {fmtDayHeader(date)}
+                      </div>
+                      <div className="space-y-2">
+                        {(byDate[date] ?? []).map((trip) => (
+                          <TripRow key={trip.id} trip={trip} cartQty={tripQty(trip.id)} onSelect={() => openSheet(trip)} />
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
-
-                {/* Availability */}
-                {selectedTrip.product.showRemaining && (
-                  <div className="flex items-center gap-2 text-[13px] font-semibold text-success">
-                    <div className="w-2 h-2 rounded-pill bg-success" />
-                    {selectedTrip.seatsRemaining} tickets available
-                  </div>
-                )}
-
-                <div className="h-px bg-hairline" />
-
-                {/* Ticket steppers */}
-                <div>
-                  <div className="text-[11px] font-bold tracking-[0.1em] uppercase text-faint mb-3">Tickets</div>
-                  <div className="space-y-4">
-                    {adultPrice && (
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-[14px] font-semibold text-ink">Adult</div>
-                          <div className="text-[13px] text-faint">{dollars(adultPrice.priceCents)} · 13+</div>
-                        </div>
-                        <Stepper value={adult} onChange={setAdult} />
-                      </div>
-                    )}
-                    {childPrice && (
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-[14px] font-semibold text-ink">Child</div>
-                          <div className="text-[13px] text-faint">{dollars(childPrice.priceCents)} · 5–12</div>
-                        </div>
-                        <Stepper value={child} onChange={setChild} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="h-px bg-hairline" />
-
-                {/* Order summary */}
-                {ticketCount === 0 ? (
-                  <div className="text-center text-[#A8B4B3] text-[13px] py-2">No tickets added yet</div>
-                ) : (
-                  <div className="space-y-2">
-                    {adult > 0 && adultPrice && (
-                      <div className="flex justify-between text-[14px]">
-                        <span className="text-muted">Adult × {adult}</span>
-                        <span className="font-semibold text-ink">{dollars(adult * adultPrice.priceCents)}</span>
-                      </div>
-                    )}
-                    {child > 0 && childPrice && (
-                      <div className="flex justify-between text-[14px]">
-                        <span className="text-muted">Child × {child}</span>
-                        <span className="font-semibold text-ink">{dollars(child * childPrice.priceCents)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between items-baseline pt-1 border-t border-hairline">
-                      <span className="text-[15px] font-semibold text-ink">Total</span>
-                      <span className="font-grotesk text-[24px] font-bold text-ink">{dollars(total)}</span>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  disabled={!canReserve}
-                  onClick={goToCheckout}
-                  className={`w-full py-[15px] rounded-btn font-grotesk text-[15px] font-semibold flex items-center justify-center gap-2 transition-colors ${
-                    canReserve
-                      ? "bg-teal text-white hover:bg-teal-hover"
-                      : "bg-disabled text-disabled-text cursor-default"
-                  }`}
-                >
-                  {canReserve ? "Reserve" : "Select tickets"}
-                  <ArrowIcon />
-                </button>
-              </div>
+              )}
+            </div>
+          ) : (
+            <div className="px-5 py-5">
+              {dates.length === 0 ? <EmptyState /> : (
+                <MonthGrid month={month} byDate={byDate} selectedDay={selectedDay} onDaySelect={setSelectedDay} />
+              )}
             </div>
           )}
         </div>
+
+        {/* Right sidebar — desktop */}
+        <DesktopSidebar
+          viewMode={viewMode}
+          selectedDay={selectedDay}
+          dayTrips={dayTrips}
+          totalCents={totalCents}
+          totalTickets={totalTickets}
+          onTripSelect={openSheet}
+          onCheckout={goToCart}
+          tripQty={tripQty}
+        />
       </div>
 
-      {/* Mobile checkout bar */}
-      {calView === "week" && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/92 backdrop-blur-[14px] border-t border-hairline px-5 pt-3.5 pb-8 flex items-center justify-between">
-          <div>
-            <div className="font-grotesk text-[22px] font-bold text-ink">
-              {ticketCount > 0 ? dollars(total) : "—"}
-            </div>
-            <div className="text-[12px] text-faint mt-0.5">
-              {ticketCount > 0
-                ? `${ticketCount} ticket${ticketCount !== 1 ? "s" : ""} · ${selectedTrip?.product.displayName ?? ""}`
-                : "No tickets added yet"}
-            </div>
-          </div>
-          <button
-            disabled={!canReserve}
-            onClick={goToCheckout}
-            className={`flex items-center gap-2 px-[22px] py-[14px] rounded-btn font-grotesk text-[15px] font-semibold transition-colors ${
-              canReserve
-                ? "bg-teal text-white hover:bg-teal-hover"
-                : "bg-disabled text-disabled-text cursor-default"
-            }`}
-          >
-            {canReserve ? "Reserve" : "Select tickets"}
-            <ArrowIcon />
-          </button>
-        </div>
+      {/* Ticket sheet */}
+      {sheetTrip && (
+        <TicketSheet
+          trip={sheetTrip}
+          adultQty={sheetAdult}
+          childQty={sheetChild}
+          onAdult={setSheetAdult}
+          onChild={setSheetChild}
+          onClose={() => setSheetTripId(null)}
+          onAdd={commitSheet}
+        />
       )}
+
+      {/* Mobile cart bar */}
+      <CartBar totalCents={totalCents} ticketCount={totalTickets} onCheckout={goToCart} />
     </div>
   );
 }
 
-// ─── Inline SVG icons ─────────────────────────────────────────────────────────
+// ─── Small pieces ─────────────────────────────────────────────────────────────
 
-function ClockIcon() {
+function EmptyState() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-    </svg>
+    <div className="flex flex-col items-center justify-center py-24 text-center">
+      <div className="w-12 h-12 rounded-[14px] bg-teal-tint flex items-center justify-center mb-3">
+        <CalendarIcon />
+      </div>
+      <div className="font-grotesk text-[16px] font-semibold text-ink mb-1">No trips this month</div>
+      <div className="text-[13px] text-faint">Try the next month →</div>
+    </div>
   );
 }
+
+// ─── Icons ────────────────────────────────────────────────────────────────────
 
 function BoatIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2"/><path d="M4 20l2-8h12l2 8"/><path d="M12 4v8"/><path d="M8 8h8"/>
     </svg>
   );
 }
-
-function BoatIconWhite() {
+function ChevronLeft() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2"/><path d="M4 20l2-8h12l2 8"/><path d="M12 4v8"/><path d="M8 8h8"/>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m15 18-6-6 6-6"/>
     </svg>
   );
 }
-
-function PinIcon() {
+function ChevronRight() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m9 18 6-6-6-6"/>
     </svg>
   );
 }
-
-function CalendarIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0E7C7B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
-    </svg>
-  );
-}
-
-function ArrowIcon() {
+function ArrowRight() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+    </svg>
+  );
+}
+function CalendarIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0E7C7B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
     </svg>
   );
 }

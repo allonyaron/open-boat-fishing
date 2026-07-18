@@ -10,9 +10,13 @@ import {
 export function CheckoutForm({
   totalCents,
   confirmationCode,
+  customerEmail,
+  customerPhone,
 }: {
   totalCents: number;
   confirmationCode: string;
+  customerEmail: string;
+  customerPhone: string;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -29,7 +33,7 @@ export function CheckoutForm({
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}/booking/confirmation?code=${confirmationCode}`,
+        return_url: `${window.location.origin}/booking/delivery?code=${confirmationCode}&email=${encodeURIComponent(customerEmail)}&phone=${encodeURIComponent(customerPhone)}`,
       },
     });
 

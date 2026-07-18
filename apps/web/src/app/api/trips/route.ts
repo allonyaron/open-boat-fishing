@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
         eq(t.operatorId, operator.id),
         gte(t.departureDate, startDate),
         lte(t.departureDate, endDate),
-        eq(t.cancelled, false)
+        eq(t.status, "scheduled")
       ),
     with: {
       vessel: true,

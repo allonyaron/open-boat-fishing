@@ -5,7 +5,7 @@ import { operators, trips, bookings, bookingItems, tickets, productPrices } from
 import { eq, inArray } from "drizzle-orm";
 import { randomBytes, randomUUID } from "crypto";
 
-const PLATFORM_FEE_CENTS = 250; // $2.50 per ticket
+const PLATFORM_FEE_CENTS = 150; // $1.50 per ticket
 
 function confirmationCode() {
   return randomBytes(3).toString("hex").toUpperCase();
@@ -39,6 +39,29 @@ export async function POST(req: NextRequest) {
 
   if (tripRows.length !== tripIds.length) {
     return NextResponse.json({ error: "One or more trips not found" }, { status: 404 });
+  }
+
+  // Validate quantities and check seat availability
+  const seatRequestsByTrip: Record<string, number> = {};
+  for (const item of cart) {
+    for (const t of item.tickets) {
+      if (!["adult", "child", "senior"].includes(t.ticketType)) {
+        return NextResponse.json({ error: `Invalid ticket type: ${t.ticketType}` }, { status: 400 });
+      }
+      if (!Number.isInteger(t.quantity) || t.quantity <= 0) {
+        return NextResponse.json({ error: "Ticket quantity must be a positive integer" }, { status: 400 });
+      }
+      seatRequestsByTrip[item.tripId] = (seatRequestsByTrip[item.tripId] ?? 0) + t.quantity;
+    }
+  }
+  for (const trip of tripRows) {
+    const requested = seatRequestsByTrip[trip.id] ?? 0;
+    if (requested > (trip.seatsRemaining ?? 0)) {
+      return NextResponse.json(
+        { error: `Not enough seats available — only ${trip.seatsRemaining} left` },
+        { status: 409 }
+      );
+    }
   }
 
   const productIds = [...new Set(tripRows.map((t) => t.productId))];
@@ -118,6 +141,8 @@ export async function POST(req: NextRequest) {
           operatorId: operator.id,
           ticketType: t.ticketType,
           priceCents: price.priceCents,
+          feeAmountCents: PLATFORM_FEE_CENTS,
+          feeStatus: "held" as const,
           qrPayload: id,
         };
       });

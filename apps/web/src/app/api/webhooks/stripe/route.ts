@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { bookings, bookingItems, tickets, payments, trips } from "@openboat/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -72,10 +72,17 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
       .where(eq(tickets.bookingItemId, item.id));
 
     if (ticketCount > 0) {
-      await db
+      const updated = await db
         .update(trips)
         .set({ seatsRemaining: sql`${trips.seatsRemaining} - ${ticketCount}` })
-        .where(eq(trips.id, item.tripId));
+        .where(and(eq(trips.id, item.tripId), gte(trips.seatsRemaining, ticketCount)))
+        .returning({ id: trips.id });
+
+      if (updated.length === 0) {
+        console.error(
+          `Seat decrement failed for trip ${item.tripId} (booking ${booking.confirmationCode}) — seats exhausted`
+        );
+      }
     }
   }
 

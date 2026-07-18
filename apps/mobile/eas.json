@@ -1,0 +1,55 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "base": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://your-domain.com"
+      }
+    },
+    "development": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://REPLACE_WITH_YOUR_LAN_IP:3000"
+      }
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "consumer": {
+      "extends": "base",
+      "distribution": "store"
+    },
+    "mate": {
+      "extends": "base",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  },
+  "submit": {
+    "consumer": {
+      "ios": {
+        "appleId": "CONFIGURE_ME",
+        "ascAppId": "CONFIGURE_ME",
+        "appleTeamId": "CONFIGURE_ME"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "production"
+      }
+    }
+  }
+}

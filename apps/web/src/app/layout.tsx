@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import { db } from "@/lib/db";
+import { operators } from "@openboat/db";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -14,10 +16,14 @@ const plusJakarta = Plus_Jakarta_Sans({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "OpenBoat Fishing",
-  description: "Book your fishing trip with OpenBoat Fishing",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const [operator] = await db.select({ name: operators.name }).from(operators).limit(1);
+  const name = operator?.name ?? "Fishing Charter";
+  return {
+    title: name,
+    description: `Book your fishing trip with ${name}`,
+  };
+}
 
 export default function RootLayout({
   children,

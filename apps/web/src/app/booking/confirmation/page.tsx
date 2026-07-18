@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { bookings, bookingItems, trips, products, vessels } from "@openboat/db";
+import { bookings, bookingItems, trips, products, vessels, operators } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
@@ -18,6 +18,9 @@ export default async function ConfirmationPage({
     .where(eq(bookings.confirmationCode, code));
 
   if (!booking) notFound();
+
+  const [operator] = await db.select({ name: operators.name }).from(operators).limit(1);
+  const operatorName = operator?.name ?? "Fishing Charter";
 
   const items = await db
     .select({
@@ -60,7 +63,7 @@ export default async function ConfirmationPage({
               <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2"/><path d="M4 20l2-8h12l2 8"/><path d="M12 4v8"/><path d="M8 8h8"/>
             </svg>
           </div>
-          <span className="font-grotesk text-[17px] font-semibold text-ink">OpenBoat Fishing</span>
+          <span className="font-grotesk text-[17px] font-semibold text-ink">{operatorName}</span>
         </a>
       </header>
 

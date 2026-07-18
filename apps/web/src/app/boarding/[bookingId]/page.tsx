@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { bookings, bookingItems, tickets, trips, products, vessels } from "@openboat/db";
+import { bookings, bookingItems, tickets, trips, products, vessels, operators } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { PrintButton } from "./PrintButton";
@@ -16,6 +16,9 @@ export default async function BoardingPassPage({
 
   if (!booking) notFound();
 
+  const [operator] = await db.select({ name: operators.name }).from(operators).limit(1);
+  const operatorName = operator?.name ?? "Fishing Charter";
+
   const ticketRows = await db
     .select({
       id: tickets.id,
@@ -23,9 +26,11 @@ export default async function BoardingPassPage({
       priceCents: tickets.priceCents,
       qrPayload: tickets.qrPayload,
       passengerName: tickets.passengerName,
+      voided: tickets.voided,
       departureDate: trips.departureDate,
       startTime: trips.startTime,
       endTime: trips.endTime,
+      tripStatus: trips.status,
       vesselName: vessels.name,
       vesselColor: vessels.color,
       productName: products.displayName,
@@ -70,7 +75,7 @@ export default async function BoardingPassPage({
             </svg>
           </div>
           <div>
-            <div className="font-semibold text-sm text-gray-900">OpenBoat Fishing — Boarding Passes</div>
+            <div className="font-semibold text-sm text-gray-900">{operatorName} — Boarding Passes</div>
             <div className="text-xs text-gray-500">Confirmation: {booking.confirmationCode} · {ticketRows.length} ticket{ticketRows.length !== 1 ? "s" : ""}</div>
           </div>
         </div>
@@ -78,19 +83,26 @@ export default async function BoardingPassPage({
       </div>
 
       {/* One ticket per page */}
-      {ticketRows.map((ticket, i) => (
+      {ticketRows.map((ticket, i) => {
+        const cancelled = ticket.voided || booking.status === "cancelled" || ticket.tripStatus === "cancelled";
+        return (
         <div
           key={ticket.id}
           className="ticket-page font-sans"
           style={{ pageBreakAfter: i < ticketRows.length - 1 ? "always" : "auto" }}
         >
+          {cancelled && (
+            <div style={{ background: "#B91C1C", color: "white", textAlign: "center", padding: "0.5rem", fontWeight: 700, letterSpacing: "0.12em", fontSize: "0.75rem" }}>
+              CANCELLED — THIS TICKET IS NO LONGER VALID
+            </div>
+          )}
           {/* Header bar — color-coded to vessel */}
           <div
             className="ticket-header"
-            style={{ backgroundColor: ticket.vesselColor }}
+            style={{ backgroundColor: cancelled ? "#6B7280" : ticket.vesselColor }}
           >
             <div className="ticket-header-left">
-              <div className="ticket-operator">CAPTREE FISHING TICKETS</div>
+              <div className="ticket-operator">{operatorName.toUpperCase()} TICKETS</div>
               <div className="ticket-vessel">{ticket.vesselName}</div>
             </div>
             <div className="ticket-header-right">
@@ -158,12 +170,14 @@ export default async function BoardingPassPage({
             <span>Ticket {i + 1} of {ticketRows.length}</span>
           </div>
         </div>
-      ))}
+        );
+      })}
 
       <style>{`
         @media print {
           .no-print { display: none !important; }
           body { margin: 0; padding: 0; }
+          * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
         }
 
         .ticket-page {

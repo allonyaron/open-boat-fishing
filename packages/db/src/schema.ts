@@ -31,6 +31,15 @@ export const ticketTypeEnum = pgEnum("ticket_type", [
 export const checkInMethodEnum = pgEnum("check_in_method", [
   "qr", "name_search", "manual",
 ]);
+export const tripStatusEnum = pgEnum("trip_status", [
+  "scheduled",          // future trip, bookable
+  "pending_settlement", // departure passed; waiting out the grace window
+  "sailed",             // grace window cleared; fees earned
+  "cancelled",          // captain cancelled; fees reversed
+]);
+export const feeStatusEnum = pgEnum("fee_status", ["held", "earned", "reversed"]);
+export const feeBearerEnum = pgEnum("fee_bearer", ["passenger", "operator"]);
+export const feeDisplayEnum = pgEnum("fee_display", ["itemized", "folded"]);
 
 // ─── Operators ─────────────────────────────────────────────────────────────────
 // One row per fishing boat business. In production each deployment has exactly
@@ -46,6 +55,10 @@ export const operators = pgTable("operators", {
   emailDomain: text("email_domain").notNull(),        // e.g. oceansidecharters.example.com
   twilioFromNumber: text("twilio_from_number"),
   termsUrl: text("terms_url"),
+  feeBearer: feeBearerEnum("fee_bearer").notNull().default("passenger"),
+  feeDisplay: feeDisplayEnum("fee_display").notNull().default("itemized"),
+  cancelWindowHrs: integer("cancel_window_hrs").notNull().default(48),
+  settleGraceHrs: integer("settle_grace_hrs").notNull().default(48),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -131,7 +144,16 @@ export const trips = pgTable("trips", {
   endTime: timestamp("end_time", { withTimezone: true }).notNull(),
   capacity: integer("capacity").notNull(),
   seatsRemaining: integer("seats_remaining").notNull(),
-  cancelled: boolean("cancelled").notNull().default(false),
+  status: tripStatusEnum("status").notNull().default("scheduled"),
+  sailedAt: timestamp("sailed_at", { withTimezone: true }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  cancellationReason: text("cancellation_reason"),
+  boardingTime: time("boarding_time"),              // 06:30 board / 07:00 depart
+  durationDay: integer("duration_day").notNull().default(0),
+  durationHr: integer("duration_hr"),
+  durationMin: integer("duration_min"),
+  onlineCutoff: timestamp("online_cutoff", { withTimezone: true }),
+  depositPercentage: integer("deposit_percentage"), // null = pay in full
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [
@@ -201,7 +223,7 @@ export const bookings = pgTable("bookings", {
   status: bookingStatusEnum("status").notNull().default("pending"),
   stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
   totalCents: integer("total_cents").notNull(),
-  platformFeeCents: integer("platform_fee_cents").notNull(),       // $2.50 × ticket count
+  platformFeeCents: integer("platform_fee_cents").notNull(),       // $1.50 × ticket count
   customerName: text("customer_name").notNull(),
   customerEmail: text("customer_email").notNull(),
   customerPhone: text("customer_phone"),
@@ -237,6 +259,8 @@ export const tickets = pgTable("tickets", {
   operatorId: uuid("operator_id").notNull().references(() => operators.id),
   ticketType: ticketTypeEnum("ticket_type").notNull(),
   priceCents: integer("price_cents").notNull(),
+  feeAmountCents: integer("fee_amount_cents").notNull().default(150), // snapshot at write time
+  feeStatus: feeStatusEnum("fee_status").notNull().default("held"),
   passengerName: text("passenger_name"),
   qrPayload: text("qr_payload").notNull(),           // encodes ticket id for scanning
   voided: boolean("voided").notNull().default(false),
