@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { bookings, bookingItems, tickets, payments, trips } from "@openboat/db";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +30,8 @@ export async function POST(req: NextRequest) {
 
   if (event.type === "payment_intent.succeeded") {
     await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
+  } else if (event.type === "payment_intent.canceled") {
+    await handlePaymentIntentCanceled(event.data.object as Stripe.PaymentIntent);
   }
 
   return NextResponse.json({ ok: true });
@@ -53,38 +55,11 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
     return;
   }
 
-  // Confirm the booking
+  // Confirm the booking (seats were already decremented at booking creation)
   await db
     .update(bookings)
     .set({ status: "confirmed" })
     .where(eq(bookings.id, bookingId));
-
-  // Decrement seatsRemaining for each trip, by the number of tickets issued
-  const itemRows = await db
-    .select({ id: bookingItems.id, tripId: bookingItems.tripId })
-    .from(bookingItems)
-    .where(eq(bookingItems.bookingId, bookingId));
-
-  for (const item of itemRows) {
-    const [{ ticketCount }] = await db
-      .select({ ticketCount: sql<number>`cast(count(*) as int)` })
-      .from(tickets)
-      .where(eq(tickets.bookingItemId, item.id));
-
-    if (ticketCount > 0) {
-      const updated = await db
-        .update(trips)
-        .set({ seatsRemaining: sql`${trips.seatsRemaining} - ${ticketCount}` })
-        .where(and(eq(trips.id, item.tripId), gte(trips.seatsRemaining, ticketCount)))
-        .returning({ id: trips.id });
-
-      if (updated.length === 0) {
-        console.error(
-          `Seat decrement failed for trip ${item.tripId} (booking ${booking.confirmationCode}) — seats exhausted`
-        );
-      }
-    }
-  }
 
   // Record the payment
   await db.insert(payments).values({
@@ -101,4 +76,39 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
   // TODO: Send confirmation email via Resend
   // TODO: Send SMS via Twilio
   console.log(`Booking confirmed: ${booking.confirmationCode} (${bookingId})`);
+}
+
+// Restore seats when a PaymentIntent is explicitly cancelled (customer abandoned
+// checkout and Stripe cancelled the PI, or we cancelled it programmatically).
+// Does not fire on payment_intent.payment_failed — the customer can retry there.
+async function handlePaymentIntentCanceled(pi: Stripe.PaymentIntent) {
+  const bookingId = pi.metadata.bookingId;
+  if (!bookingId) return;
+
+  const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
+  if (!booking || booking.status === "confirmed") return;
+
+  const itemRows = await db
+    .select({ id: bookingItems.id, tripId: bookingItems.tripId })
+    .from(bookingItems)
+    .where(eq(bookingItems.bookingId, bookingId));
+
+  await db.transaction(async (tx) => {
+    for (const item of itemRows) {
+      const [{ ticketCount }] = await tx
+        .select({ ticketCount: sql<number>`cast(count(*) as int)` })
+        .from(tickets)
+        .where(eq(tickets.bookingItemId, item.id));
+
+      if (ticketCount > 0) {
+        await tx
+          .update(trips)
+          .set({ seatsRemaining: sql`${trips.seatsRemaining} + ${ticketCount}` })
+          .where(eq(trips.id, item.tripId));
+      }
+    }
+    await tx.update(bookings).set({ status: "cancelled" }).where(eq(bookings.id, bookingId));
+  });
+
+  console.log(`Booking cancelled, seats restored: ${booking.confirmationCode} (${bookingId})`);
 }

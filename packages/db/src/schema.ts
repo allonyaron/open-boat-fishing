@@ -74,6 +74,10 @@ export const vessels = pgTable("vessels", {
   capacity: integer("capacity").notNull(),
   description: text("description"),
   active: boolean("active").notNull().default(true),
+  // Group discount: null = disabled. When a single booking has >= threshold
+  // tickets on this vessel, groupDiscountPct% is deducted from those tickets.
+  groupDiscountThreshold: integer("group_discount_threshold"),
+  groupDiscountPct: integer("group_discount_pct"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [
@@ -128,6 +132,40 @@ export const schedules = pgTable("schedules", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// ─── Schedule Prices ──────────────────────────────────────────────────────────
+// Per-schedule price overrides. Takes precedence over product_prices at booking
+// time. Enables weekday vs. weekend pricing by having separate schedules (e.g.
+// Mon–Fri at $58, Sat–Sun at $62) each with their own price rows.
+// Falls back to product_prices when no schedule-level price exists.
+
+export const schedulePrices = pgTable("schedule_prices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  scheduleId: uuid("schedule_id").notNull().references(() => schedules.id),
+  operatorId: uuid("operator_id").notNull().references(() => operators.id),
+  ticketType: ticketTypeEnum("ticket_type").notNull(),
+  priceCents: integer("price_cents").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  unique().on(t.scheduleId, t.ticketType),
+  index("schedule_prices_schedule_idx").on(t.scheduleId),
+]);
+
+// ─── Holiday Dates ────────────────────────────────────────────────────────────
+// Dates that should be priced as weekend/holiday regardless of day of week.
+// Labor Day (Mon), Memorial Day (Mon), July 4th (any), etc. The operator adds
+// these via the admin dashboard; the weekend schedule's price rows then apply.
+
+export const holidayDates = pgTable("holiday_dates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  operatorId: uuid("operator_id").notNull().references(() => operators.id),
+  date: date("date").notNull(),
+  label: text("label").notNull(),                    // "Labor Day 2026"
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  unique().on(t.operatorId, t.date),
+]);
 
 // ─── Trips ────────────────────────────────────────────────────────────────────
 // Materialized individual departures. Written by the materialize-on-save logic
@@ -224,6 +262,7 @@ export const bookings = pgTable("bookings", {
   stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
   totalCents: integer("total_cents").notNull(),
   platformFeeCents: integer("platform_fee_cents").notNull(),       // $1.50 × ticket count
+  groupDiscountCents: integer("group_discount_cents").notNull().default(0),
   customerName: text("customer_name").notNull(),
   customerEmail: text("customer_email").notNull(),
   customerPhone: text("customer_phone"),
@@ -326,6 +365,7 @@ export const operatorsRelations = relations(operators, ({ many }) => ({
   staff: many(staff),
   bookings: many(bookings),
   domains: many(domains),
+  holidayDates: many(holidayDates),
 }));
 
 export const vesselsRelations = relations(vessels, ({ one, many }) => ({
@@ -351,6 +391,16 @@ export const schedulesRelations = relations(schedules, ({ one, many }) => ({
   operator: one(operators, { fields: [schedules.operatorId], references: [operators.id] }),
   product: one(products, { fields: [schedules.productId], references: [products.id] }),
   trips: many(trips),
+  prices: many(schedulePrices),
+}));
+
+export const schedulePricesRelations = relations(schedulePrices, ({ one }) => ({
+  schedule: one(schedules, { fields: [schedulePrices.scheduleId], references: [schedules.id] }),
+  operator: one(operators, { fields: [schedulePrices.operatorId], references: [operators.id] }),
+}));
+
+export const holidayDatesRelations = relations(holidayDates, ({ one }) => ({
+  operator: one(operators, { fields: [holidayDates.operatorId], references: [operators.id] }),
 }));
 
 export const tripsRelations = relations(trips, ({ one, many }) => ({

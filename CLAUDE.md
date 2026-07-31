@@ -4,12 +4,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**In progress.** Steps 1–4 complete. Web app: schema migrated (0001), seed complete (157 dev trips across 4 vessels), booking API + webhook + boarding pass built, mobile-first BookingCalendar rebuilt with desktop toggle. Expo consumer app scaffolded and running in Expo Go — Trips tab with month calendar, trip cards, ticket bottom sheet, and cart bar built. Next: tickets wallet (step 7) then web checkout flow (step 6).
+**In progress.** Steps 1–6 complete (with known gaps). Step 7 (Expo) partially done.
+
+**Web app:** Full booking flow live end-to-end — BookingCalendar → cart → checkout (Stripe PaymentElement) → post-payment delivery screen → printable boarding passes at `/boarding/[bookingId]`. Webhooks handle `payment_intent.succeeded` (confirm booking) and `payment_intent.canceled` (restore seats). Seat inventory uses `FOR UPDATE` row-lock inside a transaction (race-condition-safe).
+
+**Expo consumer app:** Trips tab complete (month calendar, vessel dots, trip cards, ticket bottom sheet, cart bar). Tickets tab and Account tab are stubs.
+
+**Known gaps blocking production:**
+- Email confirmation not sent (Resend TODO in webhook)
+- SMS not sent (Twilio TODO in webhook)
+- `fee_status` never transitions from `held` → `earned` or `reversed` (revenue reporting blocked)
+- Trip cancellation handler not implemented (no sail signal, no `applicationFees.createRefund()`)
+- QR payload is bare UUID — needs HMAC signing before launch
+- Weekend vs. weekday pricing not modelled (incumbent Blue Wave charges differently on weekends — schema change needed)
+
+**Next:** Resend email → fee transitions → mobile tickets wallet (step 7) → admin dashboard (step 9).
 
 ## Known Tech Debt (pre-launch, not blocking dev)
 
 - **QR signing** — `tickets.qrPayload` is currently a bare UUID. Must be replaced with an HMAC of the ticket ID using a per-operator secret before launch. A guessable ID lets someone mint a plausible pass. The mate app must validate the signature offline against the cached manifest.
 - **Webhook fee transitions** — `fee_status` is written as `held` at booking time but never transitions to `earned` (trip sailed + grace window cleared) or `reversed` (cancellation). The sail signal + `applicationFees.createRefund()` on cancellation still need to be implemented. Revenue reporting is blocked on this.
+- **Weekend/weekday pricing** — implemented via `schedule_prices` table (migration `0002`). Create separate schedules per price tier (e.g. Mon–Fri at $58, Sat–Sun at $62); the booking route checks `schedule_prices` first, falls back to `product_prices`. Seed data not yet updated with Captree's actual weekday/weekend split — needs admin dashboard or manual seed entries.
+- **Holiday pricing** — `holiday_dates` table added (migration `0002`). No booking logic yet; holidays should resolve to the weekend schedule's price. Needs admin UI and booking route update to check trip date against `holiday_dates`.
 
 ## What This Is
 
@@ -204,9 +220,9 @@ Two things are actually differentiated. First, **execution**: their production s
 2. ✅ Schema additions (`trips.status`, fee fields, `boarding_time`, duration fields) → migration `0001_nifty_maximus.sql` applied
 3. ✅ Seed script (`packages/db/src/seed-trips-dev.ts`) → 157 dev trips across 4 vessels, capacity 29
 4. ✅ Mobile-first rebuild of web `BookingCalendar.tsx` — month grid + day list, desktop calendar/list toggle, bottom sheet ticket selector, pinned cart bar
-5. `/api/bookings`, `/api/webhooks/stripe`, cart total, cancellation handler → Stripe Connect (`application_fee_amount: 150`, `fee_status` held/earned/reversed) → ticket issuance → email/SMS. Needs `trips.status` from step 2 for the sail signal that flips `fee_status` to `earned`.
-6. Cart → checkout → payment → post-payment delivery screen → `/boarding/[ticketId]` printable page
-7. **Expo consumer app** — scaffolded, EAS configured, GitHub Actions CI/CD in place. Trips tab with month calendar, colored vessel dots, trip cards, ticket bottom sheet, and multi-trip cart built. **Next: tickets wallet (offline boarding pass)** — SQLite cache of purchased tickets, QR display that works offline. Then booking flow → push notifications → EAS build + store submission under client's accounts.
+5. ✅ (partial) `/api/bookings` (transaction-safe, `FOR UPDATE` seat lock, schedule-level pricing, group discounts), `/api/webhooks/stripe` (`payment_intent.succeeded` + `payment_intent.canceled`), Stripe Connect (`application_fee_amount: 150`), ticket issuance. **Remaining:** Resend email, Twilio SMS, `fee_status` transitions (`held → earned/reversed`), trip cancellation handler.
+6. ✅ Cart → checkout (Stripe PaymentElement) → post-payment delivery screen → `/boarding/[bookingId]` printable boarding passes
+7. ⚠️ (partial) Expo consumer app scaffolded, EAS configured. Trips tab complete. **Remaining:** tickets wallet (SQLite cache, offline QR display) → booking/checkout flow → push notifications → EAS build + store submission.
 8. Expo mate check-in app → manifest + offline cache → QR scanner → name search → manual override → offline sync → TestFlight/internal track
 9. Admin dashboard: trip CRUD → per-trip capacity edit → re-materialize → booking management → revenue reporting → refunds
 10. Captree infra (Vercel + Railway on their accounts) → DNS migration → SEO → load test (k6) → go live

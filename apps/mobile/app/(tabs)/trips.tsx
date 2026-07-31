@@ -42,7 +42,7 @@ type CartKey = string; // "tripId:ticketType"
 function getApiUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   if (__DEV__) {
-    const host = (Constants.expoConfig as any)?.hostUri?.split(':')[0];
+    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(':')[0];
     if (host) return `http://${host}:3000`;
   }
   throw new Error('EXPO_PUBLIC_API_URL must be set for production builds');
@@ -339,8 +339,8 @@ export default function TripsScreen() {
     fetch(`${API_URL}/api/trips?month=${monthStr}`)
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) setTrips(data);
-        else setError((data as any).error ?? 'Failed to load trips');
+        if (Array.isArray(data)) setTrips(data as Trip[]);
+        else setError((data as { error?: string }).error ?? 'Failed to load trips');
       })
       .catch(() => setError('Could not connect to server.\nMake sure the web app is running.'))
       .finally(() => setLoading(false));
