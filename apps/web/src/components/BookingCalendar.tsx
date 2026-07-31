@@ -377,6 +377,55 @@ export function BookingCalendar({ initialTrips, initialMonth, operatorName }: { 
     if (window.innerWidth >= 768) setViewMode("calendar");
   }, []);
 
+  // Restore cart from localStorage after hydration
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("openboat_cart");
+      if (!raw) return;
+      const items: EnrichedCartItem[] = JSON.parse(raw);
+      const map = new Map<string, number>();
+      items.forEach((item) => {
+        item.tickets.forEach((t) => {
+          map.set(`${item.tripId}:${t.ticketType}`, t.quantity);
+        });
+      });
+      if (map.size > 0) setCart(map);
+    } catch { /* ignore corrupt data */ }
+  }, []);
+
+  // Persist cart to localStorage whenever it changes (enriched with trip data)
+  useEffect(() => {
+    if (cart.size === 0) {
+      localStorage.removeItem("openboat_cart");
+      return;
+    }
+    const tripIds = [...new Set([...cart.keys()].map((k) => k.split(":")[0]))];
+    const items: EnrichedCartItem[] = tripIds.flatMap((tripId) => {
+      const trip = trips.find((t) => t.id === tripId);
+      if (!trip) return [];
+      const adultQty = cart.get(`${tripId}:adult`) ?? 0;
+      const childQty = cart.get(`${tripId}:child`) ?? 0;
+      const adultPrice = trip.product.prices.find((p) => p.ticketType === "adult");
+      const childPrice = trip.product.prices.find((p) => p.ticketType === "child");
+      return [{
+        tripId,
+        departureDate: trip.departureDate,
+        startTime: trip.startTime,
+        endTime: trip.endTime,
+        vesselName: trip.vessel.name,
+        vesselColor: trip.vessel.color,
+        category: trip.product.category,
+        productName: trip.product.displayName,
+        seatsRemaining: trip.seatsRemaining,
+        tickets: [
+          ...(adultQty > 0 ? [{ ticketType: "adult" as const, quantity: adultQty, priceCents: adultPrice?.priceCents ?? 0 }] : []),
+          ...(childQty > 0 ? [{ ticketType: "child" as const, quantity: childQty, priceCents: childPrice?.priceCents ?? 0 }] : []),
+        ],
+      }];
+    });
+    if (items.length > 0) localStorage.setItem("openboat_cart", JSON.stringify(items));
+  }, [cart, trips]);
+
   const { year, mon } = parseMonth(month);
 
   async function goToMonth(m: string) {
@@ -421,28 +470,7 @@ export function BookingCalendar({ initialTrips, initialMonth, operatorName }: { 
   }
 
   function goToCart() {
-    const tripIds = [...new Set([...cart.keys()].map((k) => k.split(":")[0]))];
-    const cartItems: EnrichedCartItem[] = tripIds.map((tripId) => {
-      const trip = trips.find((t) => t.id === tripId)!;
-      const adultPrice = trip.product.prices.find((p) => p.ticketType === "adult");
-      const childPrice = trip.product.prices.find((p) => p.ticketType === "child");
-      return {
-        tripId,
-        departureDate: trip.departureDate,
-        startTime: trip.startTime,
-        endTime: trip.endTime,
-        vesselName: trip.vessel.name,
-        vesselColor: trip.vessel.color,
-        category: trip.product.category,
-        productName: trip.product.displayName,
-        seatsRemaining: trip.seatsRemaining,
-        tickets: [
-          ...(getQty(tripId, "adult") > 0 ? [{ ticketType: "adult" as const, quantity: getQty(tripId, "adult"), priceCents: adultPrice?.priceCents ?? 0 }] : []),
-          ...(getQty(tripId, "child") > 0 ? [{ ticketType: "child" as const, quantity: getQty(tripId, "child"), priceCents: childPrice?.priceCents ?? 0 }] : []),
-        ],
-      };
-    });
-    window.location.href = `/cart?data=${encodeURIComponent(JSON.stringify(cartItems))}`;
+    window.location.href = "/cart";
   }
 
   const byDate = trips.reduce<Record<string, Trip[]>>((acc, t) => {

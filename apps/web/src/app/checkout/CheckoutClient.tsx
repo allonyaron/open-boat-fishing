@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements } from "@stripe/react-stripe-js";
 import { CheckoutForm } from "./CheckoutForm";
-import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
 const stripePromise = loadStripe(
@@ -12,9 +11,8 @@ const stripePromise = loadStripe(
 );
 
 function CheckoutInner({ operatorName }: { operatorName: string }) {
-  const params = useSearchParams();
-  const customerEmail = params.get("email") ?? "";
-  const customerPhone = params.get("phone") ?? "";
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [meta, setMeta] = useState<{
     totalCents: number;
@@ -29,23 +27,25 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
     if (initialized.current) return;
     initialized.current = true;
 
-    const raw = params.get("cart");
-    const name = params.get("name");
-    const email = params.get("email");
-    const phone = params.get("phone");
+    let checkoutData: { cart: unknown; name: string; email: string; phone: string } | null = null;
+    try {
+      const raw = sessionStorage.getItem("openboat_checkout");
+      if (!raw) { setError("No checkout session found. Please return to your cart."); return; }
+      checkoutData = JSON.parse(raw);
+      sessionStorage.removeItem("openboat_checkout");
+    } catch {
+      setError("Invalid checkout data.");
+      return;
+    }
 
-    if (!raw || !name || !email) {
+    const { cart, name, email, phone } = checkoutData!;
+    if (!cart || !name || !email) {
       setError("Missing cart or customer info.");
       return;
     }
 
-    let cart;
-    try {
-      cart = JSON.parse(decodeURIComponent(raw));
-    } catch {
-      setError("Invalid cart data.");
-      return;
-    }
+    setCustomerEmail(email);
+    setCustomerPhone(phone ?? "");
 
     fetch("/api/bookings", {
       method: "POST",
@@ -61,9 +61,10 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
           confirmationCode: data.confirmationCode,
           ticketCount: data.ticketCount,
         });
+        localStorage.removeItem("openboat_cart");
       })
       .catch(() => setError("Failed to create booking."));
-  }, [params]);
+  }, []);
 
   if (error) {
     return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ContactOverlay } from "@/components/ContactOverlay";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
 
@@ -109,16 +109,26 @@ function TripCard({
   );
 }
 
-export function CartClient({ operatorName, rawData }: { operatorName: string; rawData: string }) {
-  let initialItems: EnrichedCartItem[] = [];
-  try {
-    initialItems = JSON.parse(decodeURIComponent(rawData));
-  } catch {
-    // invalid data — show empty cart
-  }
-
-  const [items, setItems] = useState<EnrichedCartItem[]>(initialItems);
+export function CartClient({ operatorName }: { operatorName: string }) {
+  const [items, setItems] = useState<EnrichedCartItem[]>([]);
   const [showContact, setShowContact] = useState(false);
+
+  // Load cart from localStorage after hydration
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("openboat_cart");
+      if (raw) setItems(JSON.parse(raw));
+    } catch { /* ignore */ }
+  }, []);
+
+  // Keep localStorage in sync when quantities are edited in the cart
+  useEffect(() => {
+    if (items.length === 0) {
+      localStorage.removeItem("openboat_cart");
+    } else {
+      localStorage.setItem("openboat_cart", JSON.stringify(items));
+    }
+  }, [items]);
 
   function setQty(tripId: string, ticketType: "adult" | "child", qty: number) {
     setItems((prev) =>
@@ -144,13 +154,8 @@ export function CartClient({ operatorName, rawData }: { operatorName: string; ra
       tripId: item.tripId,
       tickets: item.tickets.map((t) => ({ ticketType: t.ticketType, quantity: t.quantity })),
     }));
-    const params = new URLSearchParams({
-      cart: encodeURIComponent(JSON.stringify(cartItems)),
-      name,
-      email,
-      ...(phone ? { phone } : {}),
-    });
-    window.location.href = `/checkout?${params}`;
+    sessionStorage.setItem("openboat_checkout", JSON.stringify({ cart: cartItems, name, email, phone }));
+    window.location.href = "/checkout";
   }
 
   const totalCents = items.reduce(
