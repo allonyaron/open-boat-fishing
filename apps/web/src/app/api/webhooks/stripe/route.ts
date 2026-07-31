@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { bookings, bookingItems, tickets, payments, trips } from "@openboat/db";
-import { eq, sql } from "drizzle-orm";
+import { sendBookingConfirmation } from "@/lib/email";
+import { bookings, bookingItems, tickets, payments, trips, operators, vessels, products } from "@openboat/db";
+import { eq, inArray, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -73,7 +74,76 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
     metadata: pi.metadata,
   });
 
-  // TODO: Send confirmation email via Resend
+  // Send confirmation email
+  try {
+    const [operator] = await db.select().from(operators).where(eq(operators.id, booking.operatorId));
+    if (operator) {
+      const itemRows = await db.select().from(bookingItems).where(eq(bookingItems.bookingId, bookingId));
+      const tripIds = itemRows.map((i) => i.tripId);
+      const [ticketRows, tripRows] = await Promise.all([
+        db.select().from(tickets).where(eq(tickets.bookingId, bookingId)),
+        tripIds.length > 0 ? db.select().from(trips).where(inArray(trips.id, tripIds)) : Promise.resolve([] as (typeof trips.$inferSelect)[]),
+      ]);
+      const vesselIds = [...new Set(tripRows.map((t) => t.vesselId))];
+      const productIds = [...new Set(tripRows.map((t) => t.productId))];
+      const [vesselRows, productRows] = await Promise.all([
+        vesselIds.length > 0 ? db.select().from(vessels).where(inArray(vessels.id, vesselIds)) : Promise.resolve([] as (typeof vessels.$inferSelect)[]),
+        productIds.length > 0 ? db.select().from(products).where(inArray(products.id, productIds)) : Promise.resolve([] as (typeof products.$inferSelect)[]),
+      ]);
+
+      // Aggregate ticket lines per (trip, ticketType) for display
+      const lineMap = new Map<string, { count: number; priceCents: number; tripId: string; ticketType: string }>();
+      for (const t of ticketRows) {
+        const item = itemRows.find((i) => i.id === t.bookingItemId)!;
+        const key = `${item.tripId}:${t.ticketType}`;
+        const existing = lineMap.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          lineMap.set(key, { count: 1, priceCents: t.priceCents, tripId: item.tripId, ticketType: t.ticketType });
+        }
+      }
+
+      function fmtTime(iso: string | Date) {
+        const d = new Date(iso);
+        const h = d.getHours(), m = d.getMinutes(), ampm = h >= 12 ? "PM" : "AM";
+        const h12 = h % 12 || 12;
+        return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+      }
+
+      const ticketLines = [...lineMap.values()].map((l) => {
+        const trip = tripRows.find((t) => t.id === l.tripId)!;
+        const vessel = vesselRows.find((v) => v.id === trip.vesselId)!;
+        const product = productRows.find((p) => p.id === trip.productId)!;
+        return {
+          ticketType: l.ticketType,
+          count: l.count,
+          priceCents: l.priceCents,
+          tripDate: new Date(trip.departureDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }),
+          vesselName: vessel.name,
+          productName: product.displayName,
+          departs: fmtTime(trip.startTime),
+          returns: fmtTime(trip.endTime),
+        };
+      });
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://your-domain.com";
+      await sendBookingConfirmation({
+        to: booking.customerEmail,
+        customerName: booking.customerName,
+        confirmationCode: booking.confirmationCode,
+        bookingId,
+        totalCents: booking.totalCents,
+        ticketLines,
+        fromAddress: operator.emailFrom,
+        appUrl,
+      });
+    }
+  } catch (emailErr) {
+    // Email failure must not fail the webhook — booking is already confirmed
+    console.error("Failed to send confirmation email:", emailErr);
+  }
+
   // TODO: Send SMS via Twilio
   console.log(`Booking confirmed: ${booking.confirmationCode} (${bookingId})`);
 }
