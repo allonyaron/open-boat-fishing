@@ -4,21 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**In progress.** Steps 1–6 complete (with known gaps). Step 7 (Expo) partially done.
+**In progress.** Steps 1–6 complete. Step 7 (Expo) partially done.
 
-**Web app:** Full booking flow live end-to-end — BookingCalendar → cart → checkout (Stripe PaymentElement) → post-payment delivery screen → printable boarding passes at `/boarding/[bookingId]`. Webhooks handle `payment_intent.succeeded` (confirm booking) and `payment_intent.canceled` (restore seats). Seat inventory uses `FOR UPDATE` row-lock inside a transaction (race-condition-safe).
+**Web app:** Full booking flow live end-to-end — BookingCalendar → cart → checkout (Stripe PaymentElement) → post-payment delivery screen → printable boarding passes at `/boarding/[bookingId]`. Webhooks handle `payment_intent.succeeded` (confirm booking + send Resend email) and `payment_intent.canceled` (restore seats). Seat inventory uses `FOR UPDATE` row-lock inside a transaction (race-condition-safe). Confirmation email sends via Resend with ticket list, boarding pass link, and "this email is sufficient for boarding" fallback.
 
-**Expo consumer app:** Trips tab complete (month calendar, vessel dots, trip cards, ticket bottom sheet, cart bar). Tickets tab and Account tab are stubs.
+**Expo consumer app:** Trips tab complete (month calendar, vessel dots, trip cards, ticket bottom sheet, cart bar). Tickets tab complete (SQLite wallet, add-by-code+email, offline boarding pass QR at `/boarding/[ticketId]`, brightness boost, cancelled state). Account tab is a stub. **Booking/checkout flow not yet built** — Reserve button is a stub.
+
+**Database:** Migrated from Railway to Neon (Postgres 18). Update `DATABASE_URL` in Vercel when deploying.
 
 **Known gaps blocking production:**
-- Email confirmation not sent (Resend TODO in webhook)
+- Mobile checkout not built (Reserve button stub — highest priority)
 - SMS not sent (Twilio TODO in webhook)
 - `fee_status` never transitions from `held` → `earned` or `reversed` (revenue reporting blocked)
 - Trip cancellation handler not implemented (no sail signal, no `applicationFees.createRefund()`)
 - QR payload is bare UUID — needs HMAC signing before launch
 - Weekend vs. weekday pricing not modelled (incumbent Blue Wave charges differently on weekends — schema change needed)
 
-**Next:** Resend email → fee transitions → mobile tickets wallet (step 7) → admin dashboard (step 9).
+**Next:** Mobile checkout (cart → Stripe Payment Sheet → confirmation) → fee transitions → admin dashboard (step 9).
 
 ## Known Tech Debt (pre-launch, not blocking dev)
 
@@ -33,7 +35,7 @@ A **multi-tenant codebase, single-tenant deployment** platform for party fishing
 
 **MVP client:** Captree / Blue Wave fleet — 4 boats, 2 domains (`your-domain.com` + `your-domain.com`), same operator record.
 
-**Onboarding a new operator = fork repo + configure env vars + deploy to their own Vercel + Railway Postgres + point their domain. ~2-3 hours. No shared infrastructure.**
+**Onboarding a new operator = fork repo + configure env vars + deploy to their own Vercel + Neon Postgres + point their domain. ~2-3 hours. No shared infrastructure.**
 
 ## Planned Monorepo Structure (Turborepo)
 
