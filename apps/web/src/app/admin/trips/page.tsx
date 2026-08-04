@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 
 type TripRow = {
   id: string;
@@ -164,7 +165,13 @@ export default function AdminTripsPage() {
                         </div>
 
                         {/* Actions */}
-                        <div className="flex-shrink-0">
+                        <div className="flex-shrink-0 flex items-center gap-2">
+                          <Link
+                            href={`/admin/trips/${trip.id}`}
+                            className="text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+                          >
+                            Manifest
+                          </Link>
                           {canCancel ? (
                             <button
                               onClick={() =>

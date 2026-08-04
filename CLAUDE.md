@@ -16,19 +16,27 @@ Native module setup resolved: `expo-linking`, `react-native-safe-area-context`, 
 
 **Known gaps blocking production:**
 - SMS not sent (Twilio TODO in webhook)
-- `fee_status` never transitions from `held` → `earned` or `reversed` (revenue reporting blocked)
-- Trip cancellation handler not implemented (no sail signal, no `applicationFees.createRefund()`)
+- `fee_status` never transitions `held` → `earned` — revenue reporting blocked until lazy sail-signal transition is built
 - QR payload is bare UUID — needs HMAC signing before launch
 - Weekend vs. weekday pricing not modelled (incumbent Blue Wave charges differently on weekends — schema change needed)
 - Account tab is a stub (login, order history)
 - Push notifications not wired
 
-**Next:** fee transitions → admin dashboard (step 9) → mate check-in app (step 8).
+**Admin dashboard (step 9) — in progress:**
+- ✅ Staff auth (iron-session + bcrypt, `/admin/login`, `/api/admin/auth/*`)
+- ✅ Trips list (`/admin/trips`) — vessel color, seat progress, status badges, cancel modal
+- ✅ Trip cancellation (`POST /api/admin/trips/[tripId]/cancel`) — full/partial refund, fee reversal, seats restored
+- ✅ Trip manifest (`/admin/trips/[tripId]`) — passenger list, ticket types, check-in status, per-ticket refund
+- ✅ Per-ticket refund (`POST /api/admin/tickets/[ticketId]/refund`) — exact $1.50 fee reversal via `applicationFees.createRefund()`
+- ✅ Webhook stores `applicationFeeId` + `stripeTransferId` from charge (needed for exact fee reversal)
+- Remaining: lazy sail-signal transition + revenue reporting page; per-trip capacity edit
+
+**Next:** lazy `held→earned` transition → revenue reporting → per-trip capacity edit → mate check-in app (step 8).
 
 ## Known Tech Debt (pre-launch, not blocking dev)
 
 - **QR signing** — `tickets.qrPayload` is currently a bare UUID. Must be replaced with an HMAC of the ticket ID using a per-operator secret before launch. A guessable ID lets someone mint a plausible pass. The mate app must validate the signature offline against the cached manifest.
-- **Webhook fee transitions** — `fee_status` is written as `held` at booking time but never transitions to `earned` (trip sailed + grace window cleared) or `reversed` (cancellation). The sail signal + `applicationFees.createRefund()` on cancellation still need to be implemented. Revenue reporting is blocked on this.
+- **Webhook fee transitions** — `fee_status` is written as `held` at booking time. `reversed` is handled correctly (trip cancel + per-ticket admin refund both set `feeStatus: "reversed"` and call `applicationFees.createRefund()`). `earned` still never transitions — needs the lazy sail-signal check (on revenue report render, mark trips where `now > startTime + settleGraceHrs` as `sailed` and flip their tickets to `earned`). Revenue reporting is blocked until this is built.
 - **Weekend/weekday pricing** — implemented via `schedule_prices` table (migration `0002`). Create separate schedules per price tier (e.g. Mon–Fri at $58, Sat–Sun at $62); the booking route checks `schedule_prices` first, falls back to `product_prices`. Seed data not yet updated with Captree's actual weekday/weekend split — needs admin dashboard or manual seed entries.
 - **Holiday pricing** — `holiday_dates` table added (migration `0002`). No booking logic yet; holidays should resolve to the weekend schedule's price. Needs admin UI and booking route update to check trip date against `holiday_dates`.
 

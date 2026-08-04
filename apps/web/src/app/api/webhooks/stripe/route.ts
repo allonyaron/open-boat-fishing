@@ -62,12 +62,28 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
     .set({ status: "confirmed" })
     .where(eq(bookings.id, bookingId));
 
+  // Fetch the charge to capture applicationFeeId and stripeTransferId for exact fee reversal
+  const chargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : null;
+  let applicationFeeId: string | null = null;
+  let stripeTransferId: string | null = null;
+  if (chargeId) {
+    try {
+      const charge = await stripe.charges.retrieve(chargeId);
+      applicationFeeId = typeof charge.application_fee === "string" ? charge.application_fee : null;
+      stripeTransferId = typeof charge.transfer === "string" ? charge.transfer : null;
+    } catch (err) {
+      console.error("Failed to retrieve charge for fee IDs:", err);
+    }
+  }
+
   // Record the payment
   await db.insert(payments).values({
     bookingId,
     operatorId: booking.operatorId,
     stripePaymentIntentId: pi.id,
-    stripeChargeId: typeof pi.latest_charge === "string" ? pi.latest_charge : null,
+    stripeChargeId: chargeId,
+    applicationFeeId,
+    stripeTransferId,
     amountCents: pi.amount,
     applicationFeeCents: booking.platformFeeCents,
     status: pi.status,
