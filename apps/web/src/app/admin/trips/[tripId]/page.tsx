@@ -70,8 +70,13 @@ export default function TripDetailPage() {
   const router = useRouter();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refunding, setRefunding] = useState<string | null>(null); // ticketId being refunded
+  const [refunding, setRefunding] = useState<string | null>(null);
   const [refundError, setRefundError] = useState<string | null>(null);
+  // Capacity edit state
+  const [editingCapacity, setEditingCapacity] = useState(false);
+  const [capacityInput, setCapacityInput] = useState("");
+  const [capacityError, setCapacityError] = useState<string | null>(null);
+  const [savingCapacity, setSavingCapacity] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,6 +100,35 @@ export default function TripDetailPage() {
       setRefundError(body.error ?? "Refund failed");
     }
     setRefunding(null);
+  }
+
+  function startEditCapacity(current: number) {
+    setCapacityInput(String(current));
+    setCapacityError(null);
+    setEditingCapacity(true);
+  }
+
+  async function saveCapacity() {
+    const val = parseInt(capacityInput, 10);
+    if (isNaN(val) || val < 1) {
+      setCapacityError("Enter a whole number ≥ 1");
+      return;
+    }
+    setSavingCapacity(true);
+    setCapacityError(null);
+    const res = await fetch(`/api/admin/trips/${tripId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ capacity: val }),
+    });
+    const body = await res.json();
+    if (res.ok) {
+      setEditingCapacity(false);
+      await load();
+    } else {
+      setCapacityError(body.error ?? "Save failed");
+    }
+    setSavingCapacity(false);
   }
 
   if (loading || !data) {
@@ -126,19 +160,60 @@ export default function TripDetailPage() {
               {fmtDate(trip.departureDate)} · {fmtTime(trip.startTime)} → {fmtTime(trip.endTime)}
               {trip.boardingTime && <span className="ml-2 text-gray-400">Board {trip.boardingTime}</span>}
             </div>
-            <div className="flex items-center gap-4 mt-2 text-sm">
+            <div className="flex items-center gap-4 mt-2 text-sm flex-wrap">
               <span className="text-gray-700">
-                <strong>{activeTickets.length}</strong> / {trip.capacity} seats sold
+                <strong>{activeTickets.length}</strong> / {editingCapacity ? capacityInput || "?" : trip.capacity} seats sold
               </span>
-              <span className="text-gray-500">
-                {checkedInCount} checked in
-              </span>
+              <span className="text-gray-500">{checkedInCount} checked in</span>
               {trip.status === "cancelled" && (
                 <span className="text-red-600 font-medium">
                   Cancelled{trip.cancellationReason ? ` · ${trip.cancellationReason}` : ""}
                 </span>
               )}
             </div>
+
+            {/* Capacity edit */}
+            {trip.status !== "cancelled" && (
+              <div className="mt-3">
+                {editingCapacity ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-xs text-gray-500">Capacity:</label>
+                    <input
+                      type="number"
+                      min={activeTickets.length}
+                      value={capacityInput}
+                      onChange={(e) => { setCapacityInput(e.target.value); setCapacityError(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveCapacity(); if (e.key === "Escape") setEditingCapacity(false); }}
+                      className="w-20 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoFocus
+                    />
+                    <button
+                      onClick={saveCapacity}
+                      disabled={savingCapacity}
+                      className="text-xs bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      {savingCapacity ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      onClick={() => setEditingCapacity(false)}
+                      className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+                    >
+                      Cancel
+                    </button>
+                    {capacityError && (
+                      <span className="text-xs text-red-600">{capacityError}</span>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => startEditCapacity(trip.capacity)}
+                    className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+                  >
+                    Edit capacity ({trip.capacity})
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

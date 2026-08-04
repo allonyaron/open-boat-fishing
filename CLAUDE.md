@@ -31,9 +31,9 @@ Native module setup resolved: `expo-linking`, `react-native-safe-area-context`, 
 - ✅ Webhook stores `applicationFeeId` + `stripeTransferId` from charge (needed for exact fee reversal)
 - ✅ Lazy sail-signal transition (`lib/settle-trips.ts`) — `scheduled→pending_settlement→sailed`, tickets `held→earned`
 - ✅ Revenue reporting page (`/admin/revenue`) — earned/held/reversed summary cards + per-trip breakdown with 30/90/365-day range selector; settlement runs on every page load
-- Remaining: per-trip capacity edit
+- ✅ Per-trip capacity edit (inline on manifest page, validates ≥ tickets sold, shifts seatsRemaining by delta)
 
-**Next:** per-trip capacity edit → mate check-in app (step 8).
+**Next:** mate check-in app (step 8).
 
 ## Known Tech Debt (pre-launch, not blocking dev)
 

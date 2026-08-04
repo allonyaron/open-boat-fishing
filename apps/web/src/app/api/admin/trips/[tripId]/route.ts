@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { trips, vessels, products, bookingItems, bookings, tickets, checkIns } from "@openboat/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 export async function GET(
   req: NextRequest,
@@ -38,7 +38,6 @@ export async function GET(
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  // Load all booking items for this trip
   const itemRows = await db
     .select()
     .from(bookingItems)
@@ -89,4 +88,58 @@ export async function GET(
   });
 
   return NextResponse.json({ trip, bookings: bookingList });
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { tripId: string } }
+) {
+  const auth = await requireAdmin(req);
+  if (auth instanceof NextResponse) return auth;
+  const { session } = auth;
+
+  const { tripId } = params;
+  const body = await req.json().catch(() => ({})) as { capacity?: unknown };
+
+  const newCapacity = Number(body.capacity);
+  if (!Number.isInteger(newCapacity) || newCapacity < 1) {
+    return NextResponse.json({ error: "capacity must be a positive integer" }, { status: 400 });
+  }
+
+  const [trip] = await db
+    .select({ id: trips.id, capacity: trips.capacity, seatsRemaining: trips.seatsRemaining, status: trips.status })
+    .from(trips)
+    .where(and(eq(trips.id, tripId), eq(trips.operatorId, session.operatorId)));
+
+  if (!trip) {
+    return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+  }
+  if (trip.status === "cancelled") {
+    return NextResponse.json({ error: "Cannot edit a cancelled trip" }, { status: 409 });
+  }
+
+  // Count active (non-voided) tickets to enforce the floor
+  const [{ sold }] = await db
+    .select({ sold: sql<number>`cast(count(*) as int)` })
+    .from(tickets)
+    .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
+    .where(and(eq(bookingItems.tripId, tripId), eq(tickets.voided, false)));
+
+  if (newCapacity < sold) {
+    return NextResponse.json(
+      { error: `Cannot set capacity below tickets already sold (${sold})` },
+      { status: 422 }
+    );
+  }
+
+  // seatsRemaining shifts by the same delta as capacity
+  const delta = newCapacity - trip.capacity;
+  const newSeatsRemaining = Math.max(0, trip.seatsRemaining + delta);
+
+  await db
+    .update(trips)
+    .set({ capacity: newCapacity, seatsRemaining: newSeatsRemaining, updatedAt: new Date() })
+    .where(eq(trips.id, tripId));
+
+  return NextResponse.json({ ok: true, capacity: newCapacity, seatsRemaining: newSeatsRemaining });
 }
