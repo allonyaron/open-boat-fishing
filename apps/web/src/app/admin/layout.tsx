@@ -45,6 +45,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <span className="font-semibold text-gray-900">Admin</span>
           <nav className="flex gap-4 text-sm">
             <a href="/admin/trips" className="text-gray-600 hover:text-gray-900">Trips</a>
+            <a href="/admin/revenue" className="text-gray-600 hover:text-gray-900">Revenue</a>
           </nav>
         </div>
         {me && (

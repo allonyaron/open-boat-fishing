@@ -16,7 +16,7 @@ Native module setup resolved: `expo-linking`, `react-native-safe-area-context`, 
 
 **Known gaps blocking production:**
 - SMS not sent (Twilio TODO in webhook)
-- `fee_status` never transitions `held` → `earned` — revenue reporting blocked until lazy sail-signal transition is built
+- `fee_status` `held→earned` transition now implemented (`lib/settle-trips.ts`, runs lazily on revenue page load)
 - QR payload is bare UUID — needs HMAC signing before launch
 - Weekend vs. weekday pricing not modelled (incumbent Blue Wave charges differently on weekends — schema change needed)
 - Account tab is a stub (login, order history)
@@ -29,9 +29,11 @@ Native module setup resolved: `expo-linking`, `react-native-safe-area-context`, 
 - ✅ Trip manifest (`/admin/trips/[tripId]`) — passenger list, ticket types, check-in status, per-ticket refund
 - ✅ Per-ticket refund (`POST /api/admin/tickets/[ticketId]/refund`) — exact $1.50 fee reversal via `applicationFees.createRefund()`
 - ✅ Webhook stores `applicationFeeId` + `stripeTransferId` from charge (needed for exact fee reversal)
-- Remaining: lazy sail-signal transition + revenue reporting page; per-trip capacity edit
+- ✅ Lazy sail-signal transition (`lib/settle-trips.ts`) — `scheduled→pending_settlement→sailed`, tickets `held→earned`
+- ✅ Revenue reporting page (`/admin/revenue`) — earned/held/reversed summary cards + per-trip breakdown with 30/90/365-day range selector; settlement runs on every page load
+- Remaining: per-trip capacity edit
 
-**Next:** lazy `held→earned` transition → revenue reporting → per-trip capacity edit → mate check-in app (step 8).
+**Next:** per-trip capacity edit → mate check-in app (step 8).
 
 ## Known Tech Debt (pre-launch, not blocking dev)
 
