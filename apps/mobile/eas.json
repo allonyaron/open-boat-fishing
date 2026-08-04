@@ -37,6 +37,9 @@
     "mate": {
       "extends": "base",
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_APP_VARIANT": "mate"
+      },
       "android": {
         "buildType": "apk"
       }
