@@ -229,8 +229,9 @@ Two things are actually differentiated. First, **execution**: their production s
 6. ✅ Cart → checkout (Stripe PaymentElement) → post-payment delivery screen → `/boarding/[bookingId]` printable boarding passes
 7. ⚠️ (partial) Expo consumer app scaffolded, EAS configured. Trips tab complete. Tickets tab complete (SQLite wallet, offline QR, brightness boost). Checkout flow complete (cart → Stripe Payment Sheet → confirmation + wallet sync). **Remaining:** push notifications → Account tab → EAS build + store submission.
 8. Expo mate check-in app → manifest + offline cache → QR scanner → name search → manual override → offline sync → TestFlight/internal track
-9. Admin dashboard: trip CRUD → per-trip capacity edit → re-materialize → booking management → revenue reporting → refunds
-10. Captree infra (Vercel + Railway on their accounts) → DNS migration → SEO → load test (k6) → go live
+9. Admin dashboard (web): trip CRUD → per-trip capacity edit → re-materialize → booking management → revenue reporting → refunds. Mobile subset in mate app: trip cancellation (one-tap, highest urgency) + today's manifest.
+10. Fishing reports: captain posts after each trip (web admin + quick-post from mate app mobile). Fields: date/vessel/trip auto-populated, catch summary text, photos, structured fish counts per species. Displayed publicly on the marketing site and in the consumer app to drive bookings.
+11. Captree infra (Vercel + Neon on their accounts) → DNS migration → SEO → load test (k6) → go live
 
 ## Commands
 
