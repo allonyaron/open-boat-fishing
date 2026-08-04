@@ -1,6 +1,10 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 
 type TicketLine = {
   ticketType: string;
@@ -132,7 +136,7 @@ export async function sendBookingConfirmation(p: BookingEmailParams): Promise<vo
   const subject = `Tickets Purchased – Confirmation #${p.confirmationCode}`;
   const html = buildHtml(p);
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: p.fromAddress,
     to: p.to,
     subject,

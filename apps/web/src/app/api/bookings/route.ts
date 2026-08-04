@@ -248,15 +248,16 @@ export async function POST(req: NextRequest) {
   try {
     const connectedAccountId = process.env.STRIPE_CONNECTED_ACCOUNT_ID!;
     paymentIntent = await stripe.paymentIntents.create({
-    amount: totalCents,
-    currency: "usd",
-    transfer_data: { destination: connectedAccountId },
-    application_fee_amount: booking.platformFeeCents,
-    metadata: {
-      bookingId: booking.id,
-      operatorId: operator.id,
-      confirmationCode: booking.confirmationCode,
-    },
+      amount: totalCents,
+      currency: "usd",
+      automatic_payment_methods: { enabled: true },
+      transfer_data: { destination: connectedAccountId },
+      application_fee_amount: booking.platformFeeCents,
+      metadata: {
+        bookingId: booking.id,
+        operatorId: operator.id,
+        confirmationCode: booking.confirmationCode,
+      },
     });
   } catch (err) {
     await db.transaction(async (tx) => {

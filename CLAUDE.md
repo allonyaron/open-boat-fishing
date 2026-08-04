@@ -8,19 +8,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Web app:** Full booking flow live end-to-end — BookingCalendar → cart → checkout (Stripe PaymentElement) → post-payment delivery screen → printable boarding passes at `/boarding/[bookingId]`. Webhooks handle `payment_intent.succeeded` (confirm booking + send Resend email) and `payment_intent.canceled` (restore seats). Seat inventory uses `FOR UPDATE` row-lock inside a transaction (race-condition-safe). Confirmation email sends via Resend with ticket list, boarding pass link, and "this email is sufficient for boarding" fallback.
 
-**Expo consumer app:** Trips tab complete (month calendar, vessel dots, trip cards, ticket bottom sheet, cart bar). Tickets tab complete (SQLite wallet, add-by-code+email, offline boarding pass QR at `/boarding/[ticketId]`, brightness boost, cancelled state). Account tab is a stub. **Booking/checkout flow not yet built** — Reserve button is a stub.
+**Expo consumer app:** Trips tab complete (month calendar, vessel dots, trip cards, ticket bottom sheet, cart bar). Tickets tab complete (SQLite wallet, add-by-code+email, offline boarding pass QR at `/boarding/[ticketId]`, brightness boost, cancelled state). Account tab is a stub. **Checkout flow complete** — Reserve → `/checkout` (order summary + contact form) → Stripe Payment Sheet → confirmation screen + background wallet sync via `GET /api/bookings` polling.
+
+Native module setup resolved: `expo-linking`, `react-native-safe-area-context`, `react-native-gesture-handler`, `react-native-reanimated`, `react-native-screens` all installed at SDK 53-compatible versions. `metro.config.js` has a custom `resolveRequest` to force singleton resolution of these packages (pnpm virtual store otherwise bundles duplicates, causing "Tried to register two views with the same name" crash).
 
 **Database:** Migrated from Railway to Neon (Postgres 18). Update `DATABASE_URL` in Vercel when deploying.
 
 **Known gaps blocking production:**
-- Mobile checkout not built (Reserve button stub — highest priority)
 - SMS not sent (Twilio TODO in webhook)
 - `fee_status` never transitions from `held` → `earned` or `reversed` (revenue reporting blocked)
 - Trip cancellation handler not implemented (no sail signal, no `applicationFees.createRefund()`)
 - QR payload is bare UUID — needs HMAC signing before launch
 - Weekend vs. weekday pricing not modelled (incumbent Blue Wave charges differently on weekends — schema change needed)
+- Account tab is a stub (login, order history)
+- Push notifications not wired
 
-**Next:** Mobile checkout (cart → Stripe Payment Sheet → confirmation) → fee transitions → admin dashboard (step 9).
+**Next:** fee transitions → admin dashboard (step 9) → mate check-in app (step 8).
 
 ## Known Tech Debt (pre-launch, not blocking dev)
 
@@ -224,7 +227,7 @@ Two things are actually differentiated. First, **execution**: their production s
 4. ✅ Mobile-first rebuild of web `BookingCalendar.tsx` — month grid + day list, desktop calendar/list toggle, bottom sheet ticket selector, pinned cart bar
 5. ✅ (partial) `/api/bookings` (transaction-safe, `FOR UPDATE` seat lock, schedule-level pricing, group discounts), `/api/webhooks/stripe` (`payment_intent.succeeded` + `payment_intent.canceled`), Stripe Connect (`application_fee_amount: 150`), ticket issuance. **Remaining:** Resend email, Twilio SMS, `fee_status` transitions (`held → earned/reversed`), trip cancellation handler.
 6. ✅ Cart → checkout (Stripe PaymentElement) → post-payment delivery screen → `/boarding/[bookingId]` printable boarding passes
-7. ⚠️ (partial) Expo consumer app scaffolded, EAS configured. Trips tab complete. **Remaining:** tickets wallet (SQLite cache, offline QR display) → booking/checkout flow → push notifications → EAS build + store submission.
+7. ⚠️ (partial) Expo consumer app scaffolded, EAS configured. Trips tab complete. Tickets tab complete (SQLite wallet, offline QR, brightness boost). Checkout flow complete (cart → Stripe Payment Sheet → confirmation + wallet sync). **Remaining:** push notifications → Account tab → EAS build + store submission.
 8. Expo mate check-in app → manifest + offline cache → QR scanner → name search → manual override → offline sync → TestFlight/internal track
 9. Admin dashboard: trip CRUD → per-trip capacity edit → re-materialize → booking management → revenue reporting → refunds
 10. Captree infra (Vercel + Railway on their accounts) → DNS migration → SEO → load test (k6) → go live
@@ -250,10 +253,12 @@ pnpm --filter @openboat/mobile dev    # Expo dev server (use `-- --clear` to cle
 
 ## Dependency Overrides (pnpm-workspace.yaml)
 
-Two overrides are pinned in `pnpm-workspace.yaml` — do not remove without testing:
+These overrides are pinned — do not remove without testing. All exist to prevent pnpm's non-flat `node_modules` from bundling duplicate copies of packages that register native view managers or hold singleton state.
 
 - `react-native-screens: ~4.11.1` — Expo SDK 53 expects this version. `4.25.x` uses a `CodegenTypes` namespace not exported by `react-native@0.79.6`, causing Metro bundling to fail with "Unknown prop type" errors.
 - `react: 19.0.0` / `react-dom: 19.0.0` — `react-native@0.79.6` bundles `react-native-renderer@19.0.0`; mismatched React versions cause an "Incompatible React versions" runtime error.
+- `react-native-safe-area-context: ~5.4.0` — without this, `@react-navigation/bottom-tabs` pulls in its own copy (5.8.x), Metro bundles both, and the app crashes at startup with "Tried to register two views with the same name RNCSafeAreaProvider".
+- `react-native-gesture-handler: ~2.24.0` — same reason; navigation packages pull a conflicting transitive version.
+- `react-native-reanimated: ~3.17.5` — same reason.
 
-```bash
-```
+The overrides alone are not sufficient — `metro.config.js` also has a custom `resolveRequest` that forces all imports of these packages to resolve from the app's own `node_modules`, regardless of which pnpm store entry is doing the require. Both the override (deduplication) and the resolver (resolution pinning) are needed together.

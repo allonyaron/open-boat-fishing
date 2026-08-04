@@ -11,8 +11,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
+import { MMKV } from 'react-native-mmkv';
 import { Colors } from '@/constants/Colors';
+
+const storage = new MMKV();
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -318,6 +322,7 @@ function CartBar({
 // ─── TripsScreen ─────────────────────────────────────────────────────────────
 
 export default function TripsScreen() {
+  const router = useRouter();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-indexed
@@ -331,6 +336,16 @@ export default function TripsScreen() {
   );
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [cart, setCart] = useState<Record<CartKey, number>>({});
+
+  // Clear cart after a successful checkout
+  useFocusEffect(
+    useCallback(() => {
+      if (storage.getBoolean('cart_paid')) {
+        setCart({});
+        storage.delete('cart_paid');
+      }
+    }, [])
+  );
 
   useEffect(() => {
     const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
@@ -354,6 +369,13 @@ export default function TripsScreen() {
     if (month === 11) { setMonth(0); setYear((y) => y + 1); }
     else setMonth((m) => m + 1);
   }
+
+  const handleReserve = useCallback(() => {
+    const tripIdsInCart = new Set(Object.keys(cart).map((k) => k.split(':')[0]));
+    const cartTrips = trips.filter((t) => tripIdsInCart.has(t.id));
+    storage.set('pending_checkout', JSON.stringify({ cart, cartTrips }));
+    router.push('/checkout');
+  }, [cart, trips, router]);
 
   const handleAdjust = useCallback((tripId: string, ticketType: string, delta: number) => {
     const key: CartKey = `${tripId}:${ticketType}`;
@@ -490,7 +512,7 @@ export default function TripsScreen() {
       )}
 
       {/* Cart bar */}
-      <CartBar cart={cart} trips={trips} onReserve={() => { /* TODO: checkout */ }} />
+      <CartBar cart={cart} trips={trips} onReserve={handleReserve} />
     </SafeAreaView>
   );
 }

@@ -15,7 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Colors } from '@/constants/Colors';
 import {
@@ -265,6 +265,14 @@ export default function TicketsScreen() {
   useEffect(() => {
     loadFromCache().finally(() => setLoading(false));
   }, [loadFromCache]);
+
+  // Reload from SQLite whenever the tab gains focus — covers the case where
+  // the background wallet sync in checkout.tsx completed after the initial mount.
+  useFocusEffect(
+    useCallback(() => {
+      loadFromCache();
+    }, [loadFromCache])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

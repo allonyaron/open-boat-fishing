@@ -127,7 +127,7 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
         };
       });
 
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://your-domain.com";
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
       await sendBookingConfirmation({
         to: booking.customerEmail,
         customerName: booking.customerName,
