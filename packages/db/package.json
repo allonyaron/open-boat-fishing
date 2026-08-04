@@ -13,16 +13,19 @@
     "studio": "drizzle-kit studio",
     "seed": "tsx --env-file .env src/seed.ts",
     "seed-trips": "tsx --env-file .env src/seed-trips-dev.ts",
+    "seed:admin": "tsx --env-file .env src/seed-admin.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.44.1",
     "postgres": "^3.4.7"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
+    "@types/node": "^22.15.29",
     "drizzle-kit": "^0.31.1",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3",
-    "@types/node": "^22.15.29"
+    "typescript": "^5.8.3"
   }
 }
