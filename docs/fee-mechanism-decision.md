@@ -230,6 +230,6 @@ Two notes. **No-show earns the fee** — the passenger didn't cancel, they just 
 
 ## What this unblocks
 
-Resolved. `/api/bookings`, `/api/webhooks/stripe`, the cart total, and the cancellation handler can all now be written against Option A + C.
+Resolved. `/api/bookings`, `/api/webhooks/stripe`, the cart total, and the cancellation handler are all implemented against Option A + C.
 
-The one remaining dependency is the **sail signal** (`trips.status`) — `fee_status` can't flip to `earned` without it. For MVP that's the time-based default described above (departure passed + not cancelled ⇒ sailed), overridable by admin. That's a small piece of work but it's a prerequisite for revenue recognition, not for taking payments — the charge path works without it.
+**Sail signal: ✅ implemented.** `lib/settle-trips.ts` does the two-step lazy transition on every revenue page load: `scheduled → pending_settlement` when departure passes, `pending_settlement → sailed` (+ tickets `held → earned`) when `now > departure + settleGraceHrs`. Trip cancellation and per-ticket admin refunds both call `applicationFees.createRefund()` and set `feeStatus: "reversed"` atomically. Revenue reporting at `/admin/revenue` counts only `WHERE fee_status = 'earned'`.

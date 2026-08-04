@@ -37,8 +37,8 @@ sequenceDiagram
 
     S->>W: POST /api/webhooks/stripe  (payment_intent.succeeded)
     W->>DB: UPDATE booking SET status=confirmed
-    W->>DB: INSERT payments record
-    Note over W: TODO: send email via Resend
+    W->>DB: INSERT payments (with applicationFeeId + stripeTransferId from charge)
+    Note over W: Sends confirmation email via Resend (ticket list + boarding pass link)
     Note over W: TODO: send SMS via Twilio
     W-->>S: 200 OK
 
@@ -142,5 +142,5 @@ stateDiagram-v2
 | `payment_intent.succeeded` | ✅ | Confirm booking, record payment |
 | `payment_intent.canceled` | ✅ | Restore seats, cancel booking |
 | `payment_intent.payment_failed` | ❌ not handled | Customer can retry — no action needed |
-| `application_fee.refunded` | ❌ not handled | Future: update fee_status → reversed |
+| `application_fee.refunded` | ❌ not handled | fee_status → reversed is handled in-process by cancellation + refund routes; no webhook needed |
 | `charge.refunded` | ❌ not handled | Future: trigger for cancellation flow |

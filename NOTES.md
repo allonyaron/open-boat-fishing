@@ -21,7 +21,7 @@ The codebase is written multi-tenant (operators table, operator-scoped queries e
 ## Onboarding a new operator
 
 1. Fork the repo
-2. Create their Vercel + Railway projects on their accounts
+2. Create their Vercel + Neon projects on their accounts
 3. Run Drizzle migrations against their fresh database
 4. Seed their `operators` row + vessels + products
 5. Configure their Stripe Connect account

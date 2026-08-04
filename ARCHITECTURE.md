@@ -1,7 +1,9 @@
 # Fishing Boat Platform — Architecture & Project Plan
 
+> **Historical planning document.** The task checklists and build order below reflect the original plan and are no longer maintained. See `CLAUDE.md` for current project status, build order, and architectural decisions. Factual corrections to the most important divergences are noted inline.
+
 > **MVP target:** Captree / Blue Wave fleet (your-domain.com + your-domain.com)  
-> **Platform goal:** Any fishing boat operator can use the same system. Adding a new customer = fork the repo, configure env vars, deploy to their own Vercel + Railway, point their domain. Same code, fresh database, ~2-3 hours of setup. No new code written.
+> **Platform goal:** Any fishing boat operator can use the same system. Adding a new customer = fork the repo, configure env vars, deploy to their own Vercel + Neon, point their domain. Same code, fresh database, ~2-3 hours of setup. No new code written.
 
 ---
 
@@ -63,13 +65,13 @@ open-boat-fishing/
 | Backend API | Next.js API routes (serverless) | Booking, Stripe webhooks, schedule queries — all Vercel serverless functions |
 | Database | PostgreSQL | Relational integrity for bookings/tickets/payments |
 | ORM | Drizzle ORM | Lightweight, type-safe, migrations-first. Schema in `packages/db`. |
-| Payments | Stripe Connect (Destination Charges) | `application_fee_amount: 250` per ticket ($2.50). Client is Merchant of Record. |
+| Payments | Stripe Connect (Destination Charges) | `application_fee_amount: 150` per ticket ($1.50). Client is Merchant of Record. |
 | Email | Resend | Transactional email, React email templates |
 | SMS | Twilio | QR + confirmation code at booking confirmation |
 | QR codes | `qrcode` npm package | Encodes booking ID, generated server-side |
 | Boarding passes | Printable web page (`/boarding/[ticketId]`) | CSS `@media print`, one ticket per page. Browser "Save as PDF" for downloads. |
 | Hosting — web | Vercel | Next.js native, zero-config. Each client has their own Vercel project on their account. |
-| Hosting — DB | Railway | Managed PostgreSQL only. Each client has their own Railway project on their account. |
+| Hosting — DB | Neon | Managed PostgreSQL (Postgres 18). Each client has their own Neon project on their account. Railway was the original plan; migrated to Neon. |
 | DNS/CDN | Cloudflare | DNS migration, CDN, DDoS protection. Client owns their domain + DNS. |
 
 ---
@@ -186,10 +188,10 @@ Phase 6 — Launch
 
 ## Key Risks
 
-1. **Puppeteer on Railway** — PDF gen needs adequate memory. Size instance to $10-20/mo plan.
+1. ~~**Puppeteer on Railway**~~ — Not applicable. Boarding passes are printable web pages with CSS `@media print`. No Puppeteer, no Railway.
 2. **Expo camera + Bluetooth scanner** — Most BT barcode scanners emulate keyboard input. Test early with Tera HW0002 to confirm it feeds a TextInput correctly.
 3. **Stripe Connect onboarding** — Client must complete Stripe KYC themselves. Build a clear onboarding page; it's the one step you can't do for them.
-4. **Seat inventory race conditions** — Two users buying the last seat simultaneously. Solve with PostgreSQL `FOR UPDATE SKIP LOCKED` row lock on seat decrement, not application-level checks.
+4. **Seat inventory race conditions** — Solved: PostgreSQL `FOR UPDATE SKIP LOCKED` row lock on seat decrement inside a transaction. No application-level checks needed.
 
 ---
 

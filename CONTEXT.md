@@ -51,7 +51,7 @@ One codebase. Each client gets their own Vercel + Railway deployment with their 
 
 ### Developer (me) — Revenue
 
-- **$2.50 flat platform fee** per ticket via Stripe Connect `application_fee_amount`
+- **$1.50 flat platform fee** per ticket via Stripe Connect `application_fee_amount`
 - Fee is passed to the consumer at checkout as a visible booking fee
 - Scales with ticket volume, not ticket price — incentive-aligned with the client
 - Estimated: ~$19,800/season at current Captree volume before growth
@@ -96,7 +96,7 @@ One codebase. Each client gets their own Vercel + Railway deployment with their 
 
 - Client connects their Stripe account via Connect onboarding
 - Client is Merchant of Record on all charges
-- `application_fee_amount` = 250 cents ($2.50) per ticket, collected at checkout
+- `application_fee_amount` = 150 cents ($1.50) per ticket, collected at checkout
 - Use `/v1/payment_intents` with `transfer_data.destination` — NOT the legacy `/v1/charges`
 - Stripe processes at 2.9% + $0.30 per transaction
 
@@ -106,12 +106,12 @@ One codebase. Each client gets their own Vercel + Railway deployment with their 
 - Shared codebase for consumer app + mate check-in app
 - Offline-first for check-in (manifest cached at app open, syncs when connectivity returns)
 
-### Backend: Node.js / Express (or Fastify)
+### Backend: Next.js API Routes (Vercel serverless)
 
-- REST API wrapping the database
-- Stripe webhook handler for payment confirmation → ticket issuance
-- PDF manifest generation (jsPDF or Puppeteer)
-- QR code generation per ticket (booking ID encoded)
+- All backend logic lives in `apps/web/src/app/api/` — no separate server
+- Stripe webhook handler (`payment_intent.succeeded`, `payment_intent.canceled`)
+- Boarding passes are printable web pages at `/boarding/[bookingId]` — no PDF generation
+- QR payload encoded per ticket (bare UUID for now; HMAC signing before launch)
 
 ### Database: PostgreSQL
 
@@ -176,15 +176,13 @@ One codebase. Each client gets their own Vercel + Railway deployment with their 
 
 ---
 
-## Next Steps (in order)
+## Current Status
 
-1. PostgreSQL schema design (all tables + relationships)
-2. Stripe Connect integration (Connect onboarding flow + Destination Charges)
-3. Core booking API (schedule, availability, create booking, issue tickets)
-4. Consumer checkout UI (React Native)
-5. Mate check-in app (React Native, offline-first)
-6. Admin dashboard (trip management, manifest, payouts)
-7. Client proposal document
+Steps 1–6 of the build order are complete. See `CLAUDE.md` for the authoritative current state, remaining gaps, and next steps.
+
+**Completed:** Schema + migrations, seed data, web booking flow (calendar → cart → Stripe PaymentElement → boarding passes), Stripe webhooks, Resend confirmation email, Expo consumer app (Trips + Tickets + Checkout tabs), admin dashboard (auth, trips list, trip cancellation, manifest, per-ticket refund, revenue reporting, capacity edit).
+
+**Next:** Mate check-in app (step 8).
 
 ---
 

@@ -59,7 +59,7 @@ Then seed development data (creates one operator row, 4 vessels, products, price
 DATABASE_URL="postgres://..." pnpm --filter @openboat/db seed
 ```
 
-> For production, replace the seed script with real operator data or use the admin dashboard (Step 9 — not yet built).
+> For production, replace the seed script with real operator data or use the admin dashboard.
 
 ### 2. Stripe
 
@@ -257,8 +257,10 @@ See `CLAUDE.md` for the full build order, data model, and architectural decision
 
 ## Project status
 
-**Complete:** Web booking flow end-to-end, Stripe webhooks, confirmation email (Resend), mobile Trips tab, mobile Tickets tab (offline wallet), mobile checkout (Stripe Payment Sheet).
+**Complete:** Web booking flow end-to-end (calendar → cart → Stripe PaymentElement → boarding passes), Stripe webhooks (`payment_intent.succeeded` + `payment_intent.canceled`), confirmation email via Resend, mobile Trips tab, mobile Tickets tab (offline SQLite wallet, offline QR boarding pass), mobile checkout (Stripe Payment Sheet + wallet sync).
 
-**In progress:** EAS device builds, push notifications, Account tab.
+**Admin dashboard complete:** Staff auth (iron-session + bcrypt), trips list with vessel colors + seat progress, one-tap trip cancellation (full/partial Stripe refund + fee reversal), trip manifest (passenger list, per-ticket refund, check-in status), revenue reporting (earned/held/reversed fees, lazy sail-signal transition), per-trip capacity edit.
 
-**Not started:** Admin dashboard (trip CRUD, cancellation, revenue reporting), mate check-in app.
+**In progress:** EAS device builds, push notifications, Account tab (mobile).
+
+**Not started:** Mate check-in app (offline manifest, QR scanner, name search, offline sync).
