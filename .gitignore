@@ -31,3 +31,12 @@ packages/db/migrations/meta/
 apps/mobile/.expo/
 apps/mobile/ios/
 apps/mobile/android/
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Local DB backups
+*.dump
+
+# Scratch images
+images/tmp/
