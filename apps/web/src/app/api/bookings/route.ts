@@ -7,6 +7,53 @@ import { randomBytes, randomUUID } from "crypto";
 
 const PLATFORM_FEE_CENTS = 150; // $1.50 per ticket
 
+// --- wallet lookup rate limiting ---
+const WINDOW_MS = 15 * 60 * 1000;
+const MAX_ATTEMPTS = 5;
+const MIN_RESPONSE_MS = 150; // floor prevents email-existence timing oracle
+
+const rlStore = new Map<string, { count: number; windowStart: number; lockedUntil?: number }>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rlStore.entries()) {
+    if (now > (entry.lockedUntil ?? 0) && now - entry.windowStart > WINDOW_MS) {
+      rlStore.delete(key);
+    }
+  }
+}, 30 * 60 * 1000).unref();
+
+function rlCheck(key: string): { allowed: boolean; retryAfterMs: number } {
+  const now = Date.now();
+  const entry = rlStore.get(key);
+  if (entry?.lockedUntil && now < entry.lockedUntil) {
+    return { allowed: false, retryAfterMs: entry.lockedUntil - now };
+  }
+  if (!entry || now - entry.windowStart > WINDOW_MS) {
+    rlStore.set(key, { count: 1, windowStart: now });
+    return { allowed: true, retryAfterMs: 0 };
+  }
+  if (entry.count >= MAX_ATTEMPTS) {
+    const lockedUntil = now + WINDOW_MS;
+    rlStore.set(key, { ...entry, lockedUntil });
+    return { allowed: false, retryAfterMs: WINDOW_MS };
+  }
+  entry.count++;
+  return { allowed: true, retryAfterMs: 0 };
+}
+
+function rlReset(key: string) {
+  rlStore.delete(key);
+}
+
+async function enforceMinDelay(startMs: number) {
+  const elapsed = Date.now() - startMs;
+  if (elapsed < MIN_RESPONSE_MS) {
+    await new Promise((r) => setTimeout(r, MIN_RESPONSE_MS - elapsed));
+  }
+}
+// --- end rate limiting ---
+
 function confirmationCode() {
   return randomBytes(3).toString("hex").toUpperCase();
 }
@@ -293,12 +340,32 @@ export async function POST(req: NextRequest) {
 // Returns only confirmed bookings with full trip/vessel/product detail for the
 // mobile SQLite wallet cache.
 export async function GET(req: NextRequest) {
+  const start = Date.now();
+
   const { searchParams } = new URL(req.url);
   const email = searchParams.get("email")?.toLowerCase().trim();
   const code = searchParams.get("code")?.toUpperCase().trim();
 
   if (!email || !code) {
     return NextResponse.json({ error: "Missing email or code" }, { status: 400 });
+  }
+
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const emailKey = `email:${email}`;
+  const ipKey = `ip:${ip}`;
+
+  const emailCheck = rlCheck(emailKey);
+  const ipCheck = rlCheck(ipKey);
+
+  if (!emailCheck.allowed || !ipCheck.allowed) {
+    const retryAfterSec = Math.ceil(
+      Math.max(emailCheck.retryAfterMs, ipCheck.retryAfterMs) / 1000
+    );
+    await enforceMinDelay(start);
+    return NextResponse.json(
+      { error: "Too many attempts. Try again later." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSec) } }
+    );
   }
 
   const [booking] = await db
@@ -313,8 +380,12 @@ export async function GET(req: NextRequest) {
     );
 
   if (!booking) {
+    await enforceMinDelay(start);
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
+
+  rlReset(emailKey);
+  rlReset(ipKey);
 
   const itemRows = await db
     .select()
