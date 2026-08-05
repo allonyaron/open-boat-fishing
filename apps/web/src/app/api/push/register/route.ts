@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Expo } from "expo-server-sdk";
 import { db } from "@/lib/db";
+import { requireCustomer } from "@/lib/customer-auth";
 import { operators, pushTokens } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireCustomer(req);
+  if (auth instanceof NextResponse) return auth;
+  const { customer } = auth;
+
+  // customerEmail and customerId come from the verified token — not trusted from the body.
   const body = await req.json().catch(() => ({})) as {
     expoToken?: string;
-    customerEmail?: string;
-    customerId?: string;
     notifyReminders?: boolean;
     notifyCancellations?: boolean;
     notifyConfirmations?: boolean;
   };
 
-  const { expoToken, customerEmail, customerId } = body;
+  const { expoToken } = body;
 
   if (!expoToken || !Expo.isExpoPushToken(expoToken)) {
     return NextResponse.json({ error: "Invalid Expo push token" }, { status: 400 });
@@ -28,8 +32,8 @@ export async function POST(req: NextRequest) {
     .values({
       operatorId: operator.id,
       expoToken,
-      customerId: customerId ?? null,
-      customerEmail: customerEmail?.toLowerCase().trim() ?? null,
+      customerId: customer.customerId,
+      customerEmail: customer.email,
       notifyReminders: body.notifyReminders ?? true,
       notifyCancellations: body.notifyCancellations ?? true,
       notifyConfirmations: body.notifyConfirmations ?? true,
@@ -37,8 +41,8 @@ export async function POST(req: NextRequest) {
     .onConflictDoUpdate({
       target: [pushTokens.operatorId, pushTokens.expoToken],
       set: {
-        customerId: customerId ?? undefined,
-        customerEmail: customerEmail?.toLowerCase().trim() ?? undefined,
+        customerId: customer.customerId,
+        customerEmail: customer.email,
         active: true,
         ...(body.notifyReminders !== undefined && { notifyReminders: body.notifyReminders }),
         ...(body.notifyCancellations !== undefined && { notifyCancellations: body.notifyCancellations }),
@@ -51,6 +55,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const auth = await requireCustomer(req);
+  if (auth instanceof NextResponse) return auth;
+  const { customer } = auth;
+
   const { searchParams } = req.nextUrl;
   const expoToken = searchParams.get("token");
   if (!expoToken) return NextResponse.json({ error: "Missing token" }, { status: 400 });
@@ -61,7 +69,13 @@ export async function DELETE(req: NextRequest) {
   await db
     .update(pushTokens)
     .set({ active: false, updatedAt: new Date() })
-    .where(and(eq(pushTokens.operatorId, operator.id), eq(pushTokens.expoToken, expoToken)));
+    .where(
+      and(
+        eq(pushTokens.operatorId, operator.id),
+        eq(pushTokens.expoToken, expoToken),
+        eq(pushTokens.customerEmail, customer.email)
+      )
+    );
 
   return NextResponse.json({ ok: true });
 }
