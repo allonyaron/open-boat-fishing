@@ -4,28 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**In progress.** Steps 1–6 complete. Step 7 (Expo) partially done.
+**In progress.** Steps 1–9 complete. Step 10 (fishing reports) is next.
 
-**Web app:** Full booking flow live end-to-end — BookingCalendar → cart → checkout (Stripe PaymentElement) → post-payment delivery screen → printable boarding passes at `/boarding/[bookingId]`. Webhooks handle `payment_intent.succeeded` (confirm booking + send Resend email) and `payment_intent.canceled` (restore seats). Seat inventory uses `FOR UPDATE` row-lock inside a transaction (race-condition-safe). Confirmation email sends via Resend with ticket list, boarding pass link, and "this email is sufficient for boarding" fallback.
+**Web app:** Full booking flow live end-to-end — BookingCalendar → cart → checkout (Stripe PaymentElement) → post-payment delivery screen → printable boarding passes at `/boarding/[bookingId]`. Webhooks handle `payment_intent.succeeded` (confirm booking + send Resend email + send confirmation push) and `payment_intent.canceled` (restore seats). Seat inventory uses `FOR UPDATE` row-lock inside a transaction (race-condition-safe). Confirmation email sends via Resend with ticket list, boarding pass link, and "this email is sufficient for boarding" fallback.
 
-**Expo consumer app:** Trips tab complete (month calendar, vessel dots, trip cards, ticket bottom sheet, cart bar). Tickets tab complete (SQLite wallet, add-by-code+email, offline boarding pass QR at `/boarding/[ticketId]`, brightness boost, cancelled state). Account tab is a stub. **Checkout flow complete** — Reserve → `/checkout` (order summary + contact form) → Stripe Payment Sheet → confirmation screen + background wallet sync via `GET /api/bookings` polling.
+**Expo consumer app (step 7 — complete):** Trips tab (month calendar, vessel dots, trip cards, ticket bottom sheet, cart bar). Tickets tab (SQLite wallet, add-by-code+email, offline boarding pass QR at `/boarding/[ticketId]`, brightness boost, cancelled state). Account tab (email OTP sign-in, booking history, per-type notification preference toggles). Checkout flow (Reserve → `/checkout` → Stripe Payment Sheet → confirmation + wallet sync). Push notifications wired: cancellation push on trip cancel, booking confirmation push on webhook success, 24h reminder via Vercel cron.
+
+**Expo mate check-in app (step 8 — complete):** Separate EAS build profile (`mate`, `EXPO_PUBLIC_APP_VARIANT=mate`). PIN-based staff auth (HMAC-SHA256 token, 24h expiry). Offline-first: trips list + full manifests prefetched into SQLite at login. QR scanner (expo-camera CameraView) + keyboard mode (hidden TextInput for Tera HW0002 Bluetooth scanner). Check-in events queue locally and sync when online (`POST /api/mate/checkins` with ON CONFLICT DO NOTHING idempotency). Manual check-in per ticket. useFocusEffect syncs queue and refreshes counts on every screen focus. Timezone fix: client sends local date as `?date=YYYY-MM-DD` to avoid UTC midnight edge cases.
 
 Native module setup resolved: `expo-linking`, `react-native-safe-area-context`, `react-native-gesture-handler`, `react-native-reanimated`, `react-native-screens` all installed at SDK 53-compatible versions. `metro.config.js` has a custom `resolveRequest` to force singleton resolution of these packages (pnpm virtual store otherwise bundles duplicates, causing "Tried to register two views with the same name" crash).
 
-**Database:** Migrated from Railway to Neon (Postgres 18). Update `DATABASE_URL` in Vercel when deploying.
+**Database (migration 0003):** Added `magic_link_otps` (6-digit OTP for customer sign-in) and `push_tokens` (Expo push tokens with per-device notification prefs) tables. `customers.firstName/lastName` made nullable to support OTP-only sign-in without a name.
 
-**Known gaps blocking production:**
-- SMS not sent (Twilio TODO in webhook)
-- `fee_status` `held→earned` transition now implemented (`lib/settle-trips.ts`, runs lazily on revenue page load)
-- QR payload is bare UUID — needs HMAC signing before launch
-- Weekend vs. weekday pricing not modelled (incumbent Blue Wave charges differently on weekends — schema change needed)
-- Account tab is a stub (login, order history)
-- Push notifications not wired
-
-**Admin dashboard (step 9) — in progress:**
+**Admin dashboard (step 9 — complete):**
 - ✅ Staff auth (iron-session + bcrypt, `/admin/login`, `/api/admin/auth/*`)
 - ✅ Trips list (`/admin/trips`) — vessel color, seat progress, status badges, cancel modal
-- ✅ Trip cancellation (`POST /api/admin/trips/[tripId]/cancel`) — full/partial refund, fee reversal, seats restored
+- ✅ Trip cancellation (`POST /api/admin/trips/[tripId]/cancel`) — full/partial refund, fee reversal, seats restored, cancellation push sent to all passengers
 - ✅ Trip manifest (`/admin/trips/[tripId]`) — passenger list, ticket types, check-in status, per-ticket refund
 - ✅ Per-ticket refund (`POST /api/admin/tickets/[ticketId]/refund`) — exact $1.50 fee reversal via `applicationFees.createRefund()`
 - ✅ Webhook stores `applicationFeeId` + `stripeTransferId` from charge (needed for exact fee reversal)
@@ -33,7 +27,14 @@ Native module setup resolved: `expo-linking`, `react-native-safe-area-context`, 
 - ✅ Revenue reporting page (`/admin/revenue`) — earned/held/reversed summary cards + per-trip breakdown with 30/90/365-day range selector; settlement runs on every page load
 - ✅ Per-trip capacity edit (inline on manifest page, validates ≥ tickets sold, shifts seatsRemaining by delta)
 
-**Next:** mate check-in app (step 8).
+**Known gaps blocking production:**
+- SMS not sent (Twilio TODO in webhook)
+- QR payload is bare UUID — needs HMAC signing before launch
+- Weekend vs. weekday pricing not modelled (incumbent Blue Wave charges differently on weekends — schema change needed)
+- `CRON_SECRET` env var must be added to Vercel before deploying (value in `apps/web/.env.local`; Vercel cron injects it as the Authorization header)
+- EAS build + store submission not done (configure Apple IDs in `eas.json submit.consumer` section, then `eas submit`)
+
+**Next:** step 10 — fishing reports.
 
 ## Known Tech Debt (pre-launch, not blocking dev)
 
@@ -237,9 +238,9 @@ Two things are actually differentiated. First, **execution**: their production s
 4. ✅ Mobile-first rebuild of web `BookingCalendar.tsx` — month grid + day list, desktop calendar/list toggle, bottom sheet ticket selector, pinned cart bar
 5. ✅ (partial) `/api/bookings` (transaction-safe, `FOR UPDATE` seat lock, schedule-level pricing, group discounts), `/api/webhooks/stripe` (`payment_intent.succeeded` + `payment_intent.canceled`), Stripe Connect (`application_fee_amount: 150`), ticket issuance. **Remaining:** Resend email, Twilio SMS, `fee_status` transitions (`held → earned/reversed`), trip cancellation handler.
 6. ✅ Cart → checkout (Stripe PaymentElement) → post-payment delivery screen → `/boarding/[bookingId]` printable boarding passes
-7. ⚠️ (partial) Expo consumer app scaffolded, EAS configured. Trips tab complete. Tickets tab complete (SQLite wallet, offline QR, brightness boost). Checkout flow complete (cart → Stripe Payment Sheet → confirmation + wallet sync). **Remaining:** push notifications → Account tab → EAS build + store submission.
-8. Expo mate check-in app → manifest + offline cache → QR scanner → name search → manual override → offline sync → TestFlight/internal track
-9. Admin dashboard (web): trip CRUD → per-trip capacity edit → re-materialize → booking management → revenue reporting → refunds. Mobile subset in mate app: trip cancellation (one-tap, highest urgency) + today's manifest.
+7. ✅ Expo consumer app — Trips tab, Tickets tab (offline SQLite wallet, offline QR), Checkout (Stripe Payment Sheet + wallet sync), Account tab (OTP sign-in, booking history, notification prefs), push notifications (cancellation + confirmation + 24h reminder cron). **Remaining:** EAS build + store submission (configure `eas.json submit` section).
+8. ✅ Expo mate check-in app — PIN auth (HMAC token), offline manifest (SQLite prefetch at login), QR scanner (expo-camera) + keyboard mode (Tera HW0002), check-in queue with online sync, useFocusEffect count refresh.
+9. ✅ Admin dashboard — staff auth, trips list, one-tap cancellation (push sent), manifest + per-ticket refund, revenue reporting, lazy sail-signal, per-trip capacity edit.
 10. Fishing reports: captain posts after each trip (web admin + quick-post from mate app mobile). Fields: date/vessel/trip auto-populated, catch summary text, photos, structured fish counts per species. Displayed publicly on the marketing site and in the consumer app to drive bookings.
 11. Captree infra (Vercel + Neon on their accounts) → DNS migration → SEO → load test (k6) → go live
 
@@ -253,14 +254,31 @@ pnpm build                        # build all apps
 pnpm typecheck                    # tsc across all packages
 
 # Database (packages/db)
-pnpm db:migrate                   # run Drizzle migrations against DATABASE_URL
+pnpm migrate                      # run Drizzle migrations against DATABASE_URL
 pnpm db:studio                    # open Drizzle Studio (requires DATABASE_URL)
 pnpm --filter @openboat/db generate   # generate migration from schema changes
+
+# Seed scripts (packages/db)
+DATABASE_URL=... tsx src/seed-mate.ts           # create mate@your-domain.com / PIN 1234
+DATABASE_URL=... tsx src/seed-test-trip.ts      # ensure today has a scheduled trip
+DATABASE_URL=... tsx src/seed-test-customers.ts # add 10 bookings (23 tickets) to today's trip
 
 # Individual apps
 pnpm --filter @openboat/web dev
 pnpm --filter @openboat/mobile dev    # Expo dev server (use `-- --clear` to clear Metro cache)
+
+# Run mate app in simulator (set EXPO_PUBLIC_APP_VARIANT=mate in .env.local)
+pnpm --filter @openboat/mobile dev
 ```
+
+## Key env vars (non-obvious)
+
+| Var | Where | Purpose |
+|-----|-------|---------|
+| `SESSION_SECRET` | `apps/web/.env.local` + Vercel | Signs mate tokens and customer tokens (HMAC-SHA256). Must be ≥ 32 chars. |
+| `CRON_SECRET` | `apps/web/.env.local` + Vercel | Authenticates Vercel cron calls to `/api/cron/trip-reminders`. Add to Vercel env before deploying. |
+| `EXPO_PUBLIC_APP_VARIANT` | `apps/mobile/.env.local` | Set to `mate` to run/build the mate check-in app. Leave unset for consumer app. |
+| `EXPO_PUBLIC_API_URL` | `apps/mobile/.env.local` | Override API host. In dev: `http://localhost:3000`. In production: operator's domain. |
 
 ## Dependency Overrides (pnpm-workspace.yaml)
 

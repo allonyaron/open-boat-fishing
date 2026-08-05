@@ -10,11 +10,11 @@ Multi-tenant ticketing and check-in platform for party fishing boat operators. E
 
 | App | Description |
 |-----|-------------|
-| `apps/web` | Next.js 14 — marketing site, booking calendar, checkout, boarding passes, API routes |
-| `apps/mobile` | Expo SDK 53 — consumer booking app (trips calendar, Stripe Payment Sheet, offline tickets wallet) |
+| `apps/web` | Next.js 14 — marketing site, booking calendar, checkout, boarding passes, admin dashboard, API routes |
+| `apps/mobile` | Expo SDK 53 — consumer booking app (trips calendar, Stripe Payment Sheet, offline tickets wallet, Account tab with OTP sign-in) + mate check-in app (same codebase, separate EAS profile) |
 | `packages/db` | Drizzle ORM schema + migrations (shared source of truth) |
 
-A **mate check-in app** (QR scanner, offline manifest) will be built from the same `apps/mobile` codebase using a separate EAS build profile.
+The **mate check-in app** (QR scanner, offline manifest, PIN auth) is built from the same `apps/mobile` codebase using the `mate` EAS build profile (`EXPO_PUBLIC_APP_VARIANT=mate`).
 
 ---
 
@@ -87,6 +87,12 @@ NEXT_PUBLIC_APP_URL=https://yourclient.com   # used in boarding pass links in em
 
 # Email (Resend)
 RESEND_API_KEY=re_...
+
+# Auth (signs mate + customer tokens)
+SESSION_SECRET=<32+ char random hex>   # generate with: openssl rand -hex 32
+
+# Vercel cron auth (required for push notification reminders)
+CRON_SECRET=<32+ char random hex>      # must also be set in Vercel dashboard
 ```
 
 ### 4. Mobile app environment variables
@@ -94,7 +100,7 @@ RESEND_API_KEY=re_...
 Create `apps/mobile/.env.local` for local dev:
 
 ```env
-EXPO_PUBLIC_API_URL=http://localhost:3001
+EXPO_PUBLIC_API_URL=http://localhost:3000
 
 EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
 
@@ -102,6 +108,9 @@ EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
 EXPO_PUBLIC_APPLE_MERCHANT_ID=merchant.com.yourclient.app
 EXPO_PUBLIC_URL_SCHEME=yourclientapp
 EXPO_PUBLIC_MERCHANT_NAME=Your Client Name
+
+# Set to "mate" to run the mate check-in app instead of the consumer app
+# EXPO_PUBLIC_APP_VARIANT=mate
 ```
 
 For EAS builds, set these in `apps/mobile/eas.json` under the appropriate build profile (see [Mobile builds](#mobile-builds) below).
@@ -186,7 +195,7 @@ The mobile app uses [Expo EAS Build](https://docs.expo.dev/build/introduction/).
 | `development` | Dev client build — installs on device, connects to local Metro for fast iteration |
 | `preview` | Internal distribution (TestFlight / direct APK) — for QA and stakeholder review |
 | `consumer` | App Store / Google Play production build |
-| `mate` | Internal distribution — mate check-in app (future) |
+| `mate` | Internal distribution — mate check-in app (TestFlight / internal Play track) |
 
 ### First-time EAS setup
 
@@ -257,10 +266,18 @@ See `CLAUDE.md` for the full build order, data model, and architectural decision
 
 ## Project status
 
-**Complete:** Web booking flow end-to-end (calendar → cart → Stripe PaymentElement → boarding passes), Stripe webhooks (`payment_intent.succeeded` + `payment_intent.canceled`), confirmation email via Resend, mobile Trips tab, mobile Tickets tab (offline SQLite wallet, offline QR boarding pass), mobile checkout (Stripe Payment Sheet + wallet sync).
+**Complete (steps 1–9):**
+- Web booking flow end-to-end (calendar → cart → Stripe PaymentElement → boarding passes)
+- Stripe webhooks (`payment_intent.succeeded` + `payment_intent.canceled`), confirmation email via Resend
+- Admin dashboard: staff auth, trips list, one-tap cancellation (push sent to passengers), manifest + per-ticket refund, revenue reporting, lazy sail-signal transition, per-trip capacity edit
+- Consumer mobile app: Trips tab, Tickets tab (offline SQLite wallet, offline QR), Checkout (Stripe Payment Sheet + wallet sync), Account tab (email OTP sign-in, booking history, notification preference toggles)
+- Push notifications: cancellation push, booking confirmation push, 24h reminder via Vercel cron
+- Mate check-in app: PIN auth, offline manifest (SQLite prefetch at login), QR scanner + keyboard/Bluetooth mode, check-in queue with online sync
 
-**Admin dashboard complete:** Staff auth (iron-session + bcrypt), trips list with vessel colors + seat progress, one-tap trip cancellation (full/partial Stripe refund + fee reversal), trip manifest (passenger list, per-ticket refund, check-in status), revenue reporting (earned/held/reversed fees, lazy sail-signal transition), per-trip capacity edit.
-
-**In progress:** EAS device builds, push notifications, Account tab (mobile).
-
-**Not started:** Mate check-in app (offline manifest, QR scanner, name search, offline sync).
+**Remaining before launch:**
+- EAS build + App Store / Google Play submission (configure `eas.json submit` section)
+- SMS via Twilio (TODO in webhook)
+- QR payload HMAC signing (currently bare UUID)
+- Weekend/weekday pricing (schema exists, seed data not updated)
+- Fishing reports (step 10)
+- Production infra: Vercel + Neon on Captree's accounts, DNS, SEO, load test
