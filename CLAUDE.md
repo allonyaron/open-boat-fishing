@@ -8,6 +8,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Web app:** Full booking flow live end-to-end — BookingCalendar → cart → checkout (Stripe PaymentElement) → post-payment delivery screen → printable boarding passes at `/boarding/[bookingId]`. Webhooks handle `payment_intent.succeeded` (confirm booking + send Resend email + send confirmation push) and `payment_intent.canceled` (restore seats). Seat inventory uses `FOR UPDATE` row-lock inside a transaction (race-condition-safe). Confirmation email sends via Resend with ticket list, boarding pass link, and "this email is sufficient for boarding" fallback.
 
+**Security hardening (2026-08-05):**
+- ✅ Rate limiting on `GET /api/bookings` wallet lookup — 5 attempts/15 min per email and IP, 15-min lockout, 150ms response floor on misses (prevents brute-force of 16.7M-combination confirmation code and email-existence timing oracle)
+- ✅ Auth on `POST/DELETE /api/push/register` — both handlers now require `requireCustomer` Bearer token; `customerEmail`/`customerId` sourced from verified token, not request body; DELETE scoped to token owner's email
+- ✅ Orphaned pending booking cleanup — `GET /api/cron/expire-pending-bookings` runs every 10 min; cancels bookings stuck in `pending` >30 min with no payment row, cancels any open Stripe PaymentIntent, restores seats via `FOR UPDATE` re-check inside transaction (closes crash window between DB commit and PaymentIntent creation)
+- ✅ Webhook idempotency — both `payment_intent.succeeded` and `payment_intent.canceled` handlers now use `SELECT … FOR UPDATE` inside their transactions so concurrent Stripe retries can't double-send emails/pushes or double-restore seats
+- ✅ Webhook response timing — `sendBookingConfirmation()` extracted to helper and called via `waitUntil()` (from `@vercel/functions`); push also wrapped in `waitUntil()`; Stripe gets a 2xx immediately, background work completes after response
+
 **Expo consumer app (step 7 — complete):** Trips tab (month calendar, vessel dots, trip cards, ticket bottom sheet, cart bar). Tickets tab (SQLite wallet, add-by-code+email, offline boarding pass QR at `/boarding/[ticketId]`, brightness boost, cancelled state). Account tab (email OTP sign-in, booking history, per-type notification preference toggles). Checkout flow (Reserve → `/checkout` → Stripe Payment Sheet → confirmation + wallet sync). Push notifications wired: cancellation push on trip cancel, booking confirmation push on webhook success, 24h reminder via Vercel cron.
 
 **Expo mate check-in app (step 8 — complete):** Separate EAS build profile (`mate`, `EXPO_PUBLIC_APP_VARIANT=mate`). PIN-based staff auth (HMAC-SHA256 token, 24h expiry). Offline-first: trips list + full manifests prefetched into SQLite at login. QR scanner (expo-camera CameraView) + keyboard mode (hidden TextInput for Tera HW0002 Bluetooth scanner). Check-in events queue locally and sync when online (`POST /api/mate/checkins` with ON CONFLICT DO NOTHING idempotency). Manual check-in per ticket. useFocusEffect syncs queue and refreshes counts on every screen focus. Timezone fix: client sends local date as `?date=YYYY-MM-DD` to avoid UTC midnight edge cases.
@@ -31,8 +38,9 @@ Native module setup resolved: `expo-linking`, `react-native-safe-area-context`, 
 - SMS not sent (Twilio TODO in webhook)
 - QR payload is bare UUID — needs HMAC signing before launch
 - Weekend vs. weekday pricing not modelled (incumbent Blue Wave charges differently on weekends — schema change needed)
-- `CRON_SECRET` env var must be added to Vercel before deploying (value in `apps/web/.env.local`; Vercel cron injects it as the Authorization header)
+- `CRON_SECRET` env var must be added to Vercel before deploying (value in `apps/web/.env.local`; Vercel cron injects it as the Authorization header for both `/api/cron/trip-reminders` and `/api/cron/expire-pending-bookings`)
 - EAS build + store submission not done (configure Apple IDs in `eas.json submit.consumer` section, then `eas submit`)
+- `expire-pending-bookings` cron runs every 10 minutes — requires Vercel Pro. On Hobby plan, change schedule to `0 * * * *` (hourly) and widen `STALE_MINUTES` to 90 in the route
 
 **Next:** step 10 — fishing reports.
 
@@ -132,7 +140,7 @@ scheduled ──(departure passes)──▶ pending_settlement
            fee_status → earned                      fee_status → reversed
 ```
 
-Fees stay `held` through the grace window (`operators.settle_grace_hrs`, default 48h), so a late cancellation is an ordinary reversal instead of unwinding a revenue recognition that shouldn't have happened. Aging can be a cron or a lazy check on read — lazy is simpler and there's no cron in the stack.
+Fees stay `held` through the grace window (`operators.settle_grace_hrs`, default 48h), so a late cancellation is an ordinary reversal instead of unwinding a revenue recognition that shouldn't have happened. Aging can be a cron or a lazy check on read — lazy is simpler. (There are now two Vercel crons: `trip-reminders` hourly and `expire-pending-bookings` every 10 min.)
 
 **Cancelling a trip is one atomic transaction:** refund every ticket, reverse every fee, set `status`/`cancelled_at`, fire notifications. If a cancellation ever arrives after `sailed` was set, that's a true unwind — log it as an exception, not a normal path.
 
@@ -276,7 +284,7 @@ pnpm --filter @openboat/mobile dev
 | Var | Where | Purpose |
 |-----|-------|---------|
 | `SESSION_SECRET` | `apps/web/.env.local` + Vercel | Signs mate tokens and customer tokens (HMAC-SHA256). Must be ≥ 32 chars. |
-| `CRON_SECRET` | `apps/web/.env.local` + Vercel | Authenticates Vercel cron calls to `/api/cron/trip-reminders`. Add to Vercel env before deploying. |
+| `CRON_SECRET` | `apps/web/.env.local` + Vercel | Authenticates Vercel cron calls to `/api/cron/trip-reminders` and `/api/cron/expire-pending-bookings`. Add to Vercel env before deploying. |
 | `EXPO_PUBLIC_APP_VARIANT` | `apps/mobile/.env.local` | Set to `mate` to run/build the mate check-in app. Leave unset for consumer app. |
 | `EXPO_PUBLIC_API_URL` | `apps/mobile/.env.local` | Override API host. In dev: `http://localhost:3000`. In production: operator's domain. |
 
