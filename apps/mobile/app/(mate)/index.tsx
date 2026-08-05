@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { useMateAuth } from '@/lib/mate-auth-context';
 import {
@@ -121,24 +121,19 @@ export default function MateTripsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  if (!token) return <Redirect href="/(mate)/login" />;
-
   const loadFromCache = useCallback(async () => {
     const cached = await getCachedTrips();
     setTrips(cached);
   }, []);
 
-  // Sync any outstanding check-in queue entries to the server.
   const syncQueue = useCallback(async () => {
+    if (!token) return;
     const unsynced = await getUnsyncedCheckIns();
     if (unsynced.length === 0) return;
     try {
       const res = await fetch(`${API_URL}/api/mate/checkins`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ events: unsynced }),
       });
       if (res.ok) {
@@ -152,7 +147,6 @@ export default function MateTripsScreen() {
             } else if (r.error === 'ticket_not_found' || r.error === 'ticket_voided') {
               await markCheckInError(r.localId, r.error);
             }
-            // network errors: leave in queue for next sync
           })
         );
       }
@@ -162,16 +156,17 @@ export default function MateTripsScreen() {
   }, [token]);
 
   const fetchFromApi = useCallback(async () => {
+    if (!token) return;
     try {
-      const res = await fetch(`${API_URL}/api/mate/trips`, {
+      const localDate = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+      const res = await fetch(`${API_URL}/api/mate/trips?date=${localDate}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json() as MateTrip[];
         await cacheTrips(data);
         setTrips(data);
-
-        // Refresh all manifests in the background
+        // Refresh manifests in the background so offline cache stays current
         await Promise.allSettled(
           data.map(async (trip) => {
             const mRes = await fetch(
@@ -190,10 +185,18 @@ export default function MateTripsScreen() {
     }
   }, [token]);
 
+  // Initial load from SQLite cache
   useEffect(() => {
     loadFromCache().finally(() => setLoading(false));
-    syncQueue();
-  }, [loadFromCache, syncQueue]);
+  }, [loadFromCache]);
+
+  // On every focus (including returning from manifest): sync queue then refresh counts
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      syncQueue().then(fetchFromApi);
+    }, [token, syncQueue, fetchFromApi])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -205,6 +208,9 @@ export default function MateTripsScreen() {
   const handleLogout = useCallback(async () => {
     await logout();
   }, [logout]);
+
+  // Auth guard — all hooks must be above this line
+  if (!token) return <Redirect href="/(mate)/login" />;
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',

@@ -220,8 +220,8 @@ export const customers = pgTable("customers", {
   id: uuid("id").primaryKey().defaultRandom(),
   operatorId: uuid("operator_id").notNull().references(() => operators.id),
   email: text("email").notNull(),
-  firstName: text("first_name").notNull(),
-  lastName: text("last_name").notNull(),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
   phone: text("phone"),
   passwordHash: text("password_hash"),               // null = guest checkout
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -354,6 +354,39 @@ export const domains = pgTable("domains", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ─── Magic Link OTPs ──────────────────────────────────────────────────────────
+// 6-digit one-time codes for email-based customer sign-in. Expires in 15 min.
+
+export const magicLinkOtps = pgTable("magic_link_otps", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  operatorId: uuid("operator_id").notNull().references(() => operators.id),
+  email: text("email").notNull(),
+  otpHash: text("otp_hash").notNull(),               // bcrypt hash of the 6-digit code
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Push Tokens ──────────────────────────────────────────────────────────────
+// Expo push tokens for customer devices. Customer email is populated at checkout
+// or sign-in so cancellation/reminder pushes can target the right devices.
+
+export const pushTokens = pgTable("push_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  operatorId: uuid("operator_id").notNull().references(() => operators.id),
+  expoToken: text("expo_token").notNull(),
+  customerId: uuid("customer_id").references(() => customers.id),
+  customerEmail: text("customer_email"),             // denormalized for guest lookup
+  active: boolean("active").notNull().default(true),
+  notifyReminders: boolean("notify_reminders").notNull().default(true),
+  notifyCancellations: boolean("notify_cancellations").notNull().default(true),
+  notifyConfirmations: boolean("notify_confirmations").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  unique().on(t.operatorId, t.expoToken),
+]);
+
 // ─── Relations ────────────────────────────────────────────────────────────────
 
 export const operatorsRelations = relations(operators, ({ many }) => ({
@@ -366,6 +399,7 @@ export const operatorsRelations = relations(operators, ({ many }) => ({
   bookings: many(bookings),
   domains: many(domains),
   holidayDates: many(holidayDates),
+  pushTokens: many(pushTokens),
 }));
 
 export const vesselsRelations = relations(vessels, ({ one, many }) => ({
@@ -465,4 +499,13 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
 
 export const domainsRelations = relations(domains, ({ one }) => ({
   operator: one(operators, { fields: [domains.operatorId], references: [operators.id] }),
+}));
+
+export const magicLinkOtpsRelations = relations(magicLinkOtps, ({ one }) => ({
+  operator: one(operators, { fields: [magicLinkOtps.operatorId], references: [operators.id] }),
+}));
+
+export const pushTokensRelations = relations(pushTokens, ({ one }) => ({
+  operator: one(operators, { fields: [pushTokens.operatorId], references: [operators.id] }),
+  customer: one(customers, { fields: [pushTokens.customerId], references: [customers.id] }),
 }));

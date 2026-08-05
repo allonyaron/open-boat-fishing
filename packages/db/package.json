@@ -14,6 +14,7 @@
     "seed": "tsx --env-file .env src/seed.ts",
     "seed-trips": "tsx --env-file .env src/seed-trips-dev.ts",
     "seed:admin": "tsx --env-file .env src/seed-admin.ts",
+    "seed:mate": "tsx --env-file .env src/seed-mate.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

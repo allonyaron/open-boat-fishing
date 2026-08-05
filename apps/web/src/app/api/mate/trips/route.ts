@@ -9,7 +9,10 @@ export async function GET(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const { staff } = auth;
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Client passes its local date so we don't compute "today" in UTC on the
+  // server (which would be wrong for East Coast operators after 8 PM ET).
+  const today =
+    req.nextUrl.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
 
   const tripRows = await db
     .select({

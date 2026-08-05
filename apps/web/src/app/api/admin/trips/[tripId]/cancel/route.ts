@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { requireAdmin } from "@/lib/session";
-import { trips, bookingItems, bookings, tickets } from "@openboat/db";
+import { sendPushToEmails } from "@/lib/push";
+import { trips, bookingItems, bookings, tickets, vessels, products } from "@openboat/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 export async function POST(
@@ -147,6 +148,30 @@ export async function POST(
     .select({ count: sql<number>`count(*)` })
     .from(tickets)
     .where(and(inArray(tickets.bookingItemId, ticketItemIds), eq(tickets.voided, true)));
+
+  // Fire cancellation push notifications (best-effort, non-blocking)
+  const passengerEmails = affectedBookings.map((b) => b.customerEmail).filter(Boolean) as string[];
+  if (passengerEmails.length > 0) {
+    const [tripDetail] = await db
+      .select({ vesselName: vessels.name, productName: products.displayName })
+      .from(trips)
+      .innerJoin(vessels, eq(trips.vesselId, vessels.id))
+      .innerJoin(products, eq(trips.productId, products.id))
+      .where(eq(trips.id, tripId));
+
+    sendPushToEmails(
+      session.operatorId,
+      passengerEmails,
+      {
+        title: "Trip Cancelled",
+        body: tripDetail
+          ? `Your ${tripDetail.vesselName} ${tripDetail.productName} has been cancelled. A full refund is on the way.`
+          : "Your trip has been cancelled. A full refund is on the way.",
+        data: { type: "trip_cancelled", tripId },
+      },
+      "cancellations"
+    ).catch((err) => console.error("Push error on cancellation:", err));
+  }
 
   return NextResponse.json({
     ok: true,

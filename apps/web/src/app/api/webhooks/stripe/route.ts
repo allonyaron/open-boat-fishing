@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { sendBookingConfirmation } from "@/lib/email";
+import { sendPushToEmails } from "@/lib/push";
 import { bookings, bookingItems, tickets, payments, trips, operators, vessels, products } from "@openboat/db";
 import { eq, inArray, sql } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -158,6 +159,20 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
   } catch (emailErr) {
     // Email failure must not fail the webhook — booking is already confirmed
     console.error("Failed to send confirmation email:", emailErr);
+  }
+
+  // Send booking confirmation push (best-effort)
+  if (booking.customerEmail) {
+    sendPushToEmails(
+      booking.operatorId,
+      [booking.customerEmail],
+      {
+        title: "Booking Confirmed!",
+        body: `Your trip is booked. Confirmation: ${booking.confirmationCode}`,
+        data: { type: "booking_confirmed", bookingId },
+      },
+      "confirmations"
+    ).catch((err) => console.error("Push error on confirmation:", err));
   }
 
   // TODO: Send SMS via Twilio

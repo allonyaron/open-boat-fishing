@@ -72,7 +72,8 @@ export default function MateLoginScreen() {
       // Prefetch today's trips and all their manifests into SQLite.
       // This is what makes the app work offline at the dock.
       setStatus('Loading today\'s trips...');
-      const tripsRes = await fetch(`${API_URL}/api/mate/trips`, {
+      const localDate = new Date().toLocaleDateString('en-CA');
+      const tripsRes = await fetch(`${API_URL}/api/mate/trips?date=${localDate}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (tripsRes.ok) {
@@ -123,7 +124,7 @@ export default function MateLoginScreen() {
                 style={s.input}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="mate@openboatfishing.com"
+                placeholder="mate@your-domain.com"
                 placeholderTextColor={Colors.inkSubtle}
                 autoCapitalize="none"
                 autoCorrect={false}

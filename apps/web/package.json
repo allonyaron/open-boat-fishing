@@ -17,6 +17,7 @@
     "@stripe/stripe-js": "^9.9.0",
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.44.7",
+    "expo-server-sdk": "^7.0.0",
     "iron-session": "^8.0.4",
     "next": "14.2.30",
     "react": "^18.3.1",

@@ -132,6 +132,30 @@ function buildHtml(p: BookingEmailParams): string {
 </html>`;
 }
 
+export async function sendOtpEmail(params: {
+  to: string;
+  otp: string;
+  operatorName: string;
+  fromAddress: string;
+}): Promise<void> {
+  const { error } = await getResend().emails.send({
+    from: params.fromAddress,
+    to: params.to,
+    subject: `Your sign-in code: ${params.otp}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+        <h2 style="margin-bottom:8px">${params.operatorName}</h2>
+        <p style="color:#555;margin-bottom:24px">Use this code to sign in to your account:</p>
+        <div style="font-size:40px;font-weight:800;letter-spacing:12px;color:#0E7C7B;text-align:center;padding:24px;background:#f5f5f5;border-radius:12px;margin-bottom:24px">
+          ${params.otp}
+        </div>
+        <p style="color:#888;font-size:13px">This code expires in 15 minutes and can only be used once.</p>
+      </div>
+    `,
+  });
+  if (error) throw new Error(`Resend OTP error: ${error.message}`);
+}
+
 export async function sendBookingConfirmation(p: BookingEmailParams): Promise<void> {
   const subject = `Tickets Purchased – Confirmation #${p.confirmationCode}`;
   const html = buildHtml(p);
