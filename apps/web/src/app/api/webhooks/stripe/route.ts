@@ -187,7 +187,7 @@ async function handlePaymentIntentCanceled(pi: Stripe.PaymentIntent) {
   if (!bookingId) return;
 
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
-  if (!booking || booking.status === "confirmed") return;
+  if (!booking || booking.status === "confirmed" || booking.status === "cancelled") return;
 
   const itemRows = await db
     .select({ id: bookingItems.id, tripId: bookingItems.tripId })
