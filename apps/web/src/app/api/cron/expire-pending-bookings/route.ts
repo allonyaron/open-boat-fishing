@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
     try {
       // Cancel the Stripe Payment Intent if one was created, to prevent a late
       // payment from going through after we've already restored the seats.
+      // Kept outside the transaction — external API calls should not hold a DB connection open.
       if (booking.stripePaymentIntentId) {
         try {
           const pi = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
@@ -64,12 +65,26 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const itemRows = await db
-        .select({ id: bookingItems.id, tripId: bookingItems.tripId })
-        .from(bookingItems)
-        .where(eq(bookingItems.bookingId, booking.id));
+      const result = await db.transaction(async (tx) => {
+        // Re-fetch with FOR UPDATE to close the race window between the initial
+        // stale-booking SELECT (outside this transaction) and now. If the webhook
+        // handler processed this booking in the interim, its status will no longer
+        // be "pending" and we skip rather than double-restoring seats.
+        const [fresh] = await tx
+          .select({ status: bookings.status })
+          .from(bookings)
+          .where(eq(bookings.id, booking.id))
+          .for("update");
 
-      await db.transaction(async (tx) => {
+        if (!fresh || fresh.status !== "pending") {
+          return { skipped: true };
+        }
+
+        const itemRows = await tx
+          .select({ id: bookingItems.id, tripId: bookingItems.tripId })
+          .from(bookingItems)
+          .where(eq(bookingItems.bookingId, booking.id));
+
         // Restore seats using the same relative-increment pattern as the
         // Payment Intent failure rollback in POST /api/bookings
         for (const item of itemRows) {
@@ -90,7 +105,14 @@ export async function GET(req: NextRequest) {
           .update(bookings)
           .set({ status: "cancelled", updatedAt: new Date() })
           .where(eq(bookings.id, booking.id));
+
+        return { skipped: false };
       });
+
+      if (result.skipped) {
+        console.log(`Skipped booking ${booking.id} — already handled by another process`);
+        continue;
+      }
 
       console.log(`Expired stale pending booking ${booking.confirmationCode} (${booking.id})`);
       cancelled++;
