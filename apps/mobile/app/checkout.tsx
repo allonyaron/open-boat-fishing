@@ -14,12 +14,9 @@ import {
 import { useRouter } from 'expo-router';
 import { useStripe } from '@stripe/stripe-react-native';
 import { MMKV } from 'react-native-mmkv';
-import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { Colors } from '@/constants/Colors';
 import { upsertBooking } from '@/lib/wallet';
-
-const PUSH_TOKEN_KEY = 'expo_push_token';
 
 // ─── Types (mirrors trips.tsx) ────────────────────────────────────────────────
 
@@ -255,16 +252,6 @@ export default function CheckoutScreen() {
       // Payment succeeded — clear the pending cart
       checkoutStorage.set('cart_paid', true);
       checkoutStorage.delete('pending_checkout');
-
-      // Associate push token with this customer email so they receive pushes
-      SecureStore.getItemAsync(PUSH_TOKEN_KEY).then((expoPushToken) => {
-        if (!expoPushToken) return;
-        fetch(`${API_URL}/api/push/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ expoToken: expoPushToken, customerEmail: cleanEmail }),
-        }).catch(() => {});
-      });
 
       setConfirmed({ code: confirmationCode, email: cleanEmail });
 

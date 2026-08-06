@@ -232,7 +232,7 @@ function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
 
 // ─── NotificationSettings ─────────────────────────────────────────────────────
 
-function NotificationSettings({ pushToken }: { pushToken: string | null }) {
+function NotificationSettings({ pushToken, token }: { pushToken: string | null; token: string | null }) {
   const defaultPrefs: NotificationPrefs = { notifyReminders: true, notifyCancellations: true, notifyConfirmations: true };
   const [prefs, setPrefs] = useState<NotificationPrefs>(defaultPrefs);
   const [saving, setSaving] = useState(false);
@@ -251,12 +251,12 @@ function NotificationSettings({ pushToken }: { pushToken: string | null }) {
     const next = { ...prefs, [key]: value };
     setPrefs(next);
     await SecureStore.setItemAsync(PREFS_KEY, JSON.stringify(next));
-    if (!pushToken) return;
+    if (!pushToken || !token) return;
     setSaving(true);
     try {
       await fetch(`${API_URL}/api/push/register`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ expoToken: pushToken, ...next }),
       });
     } catch {}
@@ -310,18 +310,12 @@ export default function AccountScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [pushToken, setPushToken] = useState<string | null>(null);
 
-  // Register push token on mount
+  // Acquire push token on mount; registration with the server happens on sign-in
   useEffect(() => {
     registerForPushNotifications().then(async (expoPushToken) => {
       if (!expoPushToken) return;
       setPushToken(expoPushToken);
       await SecureStore.setItemAsync(PUSH_TOKEN_KEY, expoPushToken);
-      // Register anonymously so cancellation pushes work even without sign-in
-      fetch(`${API_URL}/api/push/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expoToken: expoPushToken }),
-      }).catch(() => {});
     });
   }, []);
 
@@ -355,18 +349,12 @@ export default function AccountScreen() {
   const handleSignedIn = async (newToken: string) => {
     await saveCustomerToken(newToken);
     setAuth(newToken);
-    // Associate push token with this customer's email
     if (pushToken) {
-      const payload = JSON.parse(
-        Buffer.from(newToken.split('.')[0].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString()
-      ) as { email?: string };
-      if (payload.email) {
-        fetch(`${API_URL}/api/push/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ expoToken: pushToken, customerEmail: payload.email }),
-        }).catch(() => {});
-      }
+      fetch(`${API_URL}/api/push/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${newToken}` },
+        body: JSON.stringify({ expoToken: pushToken }),
+      }).catch(() => {});
     }
   };
 
@@ -393,7 +381,7 @@ export default function AccountScreen() {
             <Text style={s.headerTitle}>Account</Text>
           </View>
           <SignInForm onSignedIn={handleSignedIn} />
-          <NotificationSettings pushToken={pushToken} />
+          <NotificationSettings pushToken={pushToken} token={token} />
         </ScrollView>
       </SafeAreaView>
     );
@@ -431,7 +419,7 @@ export default function AccountScreen() {
           bookings.map((booking) => <BookingCard key={booking.id} booking={booking} />)
         )}
 
-        <NotificationSettings pushToken={pushToken} />
+        <NotificationSettings pushToken={pushToken} token={token} />
       </ScrollView>
     </SafeAreaView>
   );
