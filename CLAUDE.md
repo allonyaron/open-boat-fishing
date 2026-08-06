@@ -277,6 +277,11 @@ pnpm --filter @openboat/mobile dev    # Expo dev server (use `-- --clear` to cle
 
 # Run mate app in simulator (set EXPO_PUBLIC_APP_VARIANT=mate in .env.local)
 pnpm --filter @openboat/mobile dev
+
+# Playwright screenshot tests (requires dev server running on :3000)
+node_modules/.bin/playwright test                    # run all; post-payment tests skip if no seed
+DATABASE_URL=... tsx packages/db/src/seed-test-customers.ts  # seed fixture booking first for steps 08-09
+# Screenshots land in screenshots/desktop/ and screenshots/mobile/ (committed to repo)
 ```
 
 ## Key env vars (non-obvious)
