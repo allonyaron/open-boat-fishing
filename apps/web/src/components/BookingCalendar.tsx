@@ -68,6 +68,13 @@ function dollars(cents: number) {
   const n = cents / 100;
   return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
 }
+function fmtDuration(startIso: string, endIso: string) {
+  const diffMs = new Date(endIso).getTime() - new Date(startIso).getTime();
+  const totalMins = Math.round(diffMs / 60000);
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return mins === 0 ? `${hrs} hr` : `${hrs} hr ${mins} min`;
+}
 
 // ─── Stepper ──────────────────────────────────────────────────────────────────
 
@@ -89,7 +96,23 @@ function Stepper({ value, onChange, max }: { value: number; onChange: (n: number
 
 function TripRow({ trip, cartQty, onSelect }: { trip: Trip; cartQty: number; onSelect: () => void }) {
   const soldOut = trip.seatsRemaining === 0;
-  const lowStock = !soldOut && trip.product.showRemaining && trip.seatsRemaining <= 10;
+  const seats = trip.seatsRemaining;
+  const threshold40 = Math.round(trip.capacity * 0.4);
+  const fromPrice = trip.product.prices.length > 0
+    ? Math.min(...trip.product.prices.map((p) => p.priceCents))
+    : null;
+
+  let badge: React.ReactNode = null;
+  if (soldOut) {
+    badge = <span className="text-[11px] font-semibold text-warning bg-warning-bg px-2 py-0.5 rounded-pill">Sold out</span>;
+  } else if (seats <= 3) {
+    badge = <span className="text-[11px] font-semibold text-warning bg-warning-bg px-2 py-0.5 rounded-pill">{seats} left</span>;
+  } else if (seats <= threshold40) {
+    badge = <span className="text-[11px] font-semibold text-faint bg-fill px-2 py-0.5 rounded-pill">{seats} seats left</span>;
+  } else {
+    badge = <span className="text-[11px] font-semibold text-success bg-success-bg px-2 py-0.5 rounded-pill">{seats} seats left</span>;
+  }
+
   return (
     <button type="button" onClick={onSelect} disabled={soldOut}
       className={`w-full text-left flex items-center gap-3 p-4 bg-white rounded-[16px] border transition-all ${
@@ -101,14 +124,16 @@ function TripRow({ trip, cartQty, onSelect }: { trip: Trip; cartQty: number; onS
       <div className="flex-1 min-w-0">
         <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-teal mb-0.5">{trip.product.category}</div>
         <div className="font-grotesk text-[15px] font-semibold text-ink truncate">{trip.product.displayName}</div>
-        <div className="text-[13px] text-muted mt-0.5">{trip.vessel.name} · {fmtTime(trip.startTime)} – {fmtTime(trip.endTime)}</div>
+        <div className="text-[13px] text-muted mt-0.5">
+          {trip.vessel.name} · {fmtTime(trip.startTime)} – {fmtTime(trip.endTime)} · {fmtDuration(trip.startTime, trip.endTime)}
+        </div>
+        {fromPrice !== null && (
+          <div className="text-[13px] text-ink font-semibold mt-0.5">from {dollars(fromPrice)}</div>
+        )}
       </div>
       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
         {cartQty > 0 && <span className="text-[11px] font-bold text-teal bg-teal-tint px-2 py-0.5 rounded-pill">{cartQty} in cart</span>}
-        {soldOut ? <span className="text-[11px] font-semibold text-warning bg-warning-bg px-2 py-0.5 rounded-pill">Sold out</span>
-        : lowStock ? <span className="text-[11px] font-semibold text-warning bg-warning-bg px-2 py-0.5 rounded-pill">{trip.seatsRemaining} left</span>
-        : trip.product.showRemaining ? <span className="text-[11px] font-semibold text-success bg-success-bg px-2 py-0.5 rounded-pill">{trip.seatsRemaining} avail.</span>
-        : null}
+        {badge}
         <ChevronRight />
       </div>
     </button>
@@ -189,11 +214,11 @@ function MonthGrid({
 // ─── Ticket Sheet (bottom sheet, mobile + desktop) ────────────────────────────
 
 function TicketSheet({
-  trip, adultQty, childQty, onAdult, onChild, onClose, onAdd,
+  trip, adultQty, childQty, onAdult, onChild, onClose, onAdd, termsUrl,
 }: {
   trip: Trip; adultQty: number; childQty: number;
   onAdult: (n: number) => void; onChild: (n: number) => void;
-  onClose: () => void; onAdd: () => void;
+  onClose: () => void; onAdd: () => void; termsUrl: string | null;
 }) {
   const adultPrice = trip.product.prices.find((p) => p.ticketType === "adult");
   const childPrice = trip.product.prices.find((p) => p.ticketType === "child");
@@ -224,10 +249,14 @@ function TicketSheet({
               <span className="text-[12px] font-bold uppercase tracking-wide text-faint">{trip.vessel.name}</span>
             </div>
             <div className="font-grotesk text-[20px] font-semibold text-ink">{trip.product.displayName}</div>
-            <div className="text-[13px] text-muted mt-1">{fmtTime(trip.startTime)} – {fmtTime(trip.endTime)}</div>
-            {trip.product.showRemaining && (
-              <div className="text-[12px] text-success font-semibold mt-1.5">{trip.seatsRemaining} tickets available</div>
-            )}
+            <div className="text-[13px] text-muted mt-1">
+              {fmtTime(trip.startTime)} – {fmtTime(trip.endTime)} · {fmtDuration(trip.startTime, trip.endTime)}
+            </div>
+            <div className="text-[12px] text-success font-semibold mt-1.5">{trip.seatsRemaining} tickets available</div>
+            <div className="text-[12px] text-muted mt-1.5">
+              Weather cancellations receive a full refund.{" "}
+              {termsUrl && <a href={termsUrl} target="_blank" rel="noopener noreferrer" className="underline text-teal">View policy</a>}
+            </div>
           </div>
           <div className="py-4 space-y-5 pb-2">
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-faint">Tickets</div>
@@ -335,7 +364,7 @@ function SidebarCartFooter({ totalCents, totalTickets, onCheckout }: { totalCent
       </div>
       <button type="button" onClick={onCheckout}
         className="w-full py-4 rounded-btn bg-teal text-white font-grotesk text-[15px] font-semibold hover:bg-teal-hover transition-colors flex items-center justify-center gap-2">
-        Reserve <ArrowRight />
+        Checkout <ArrowRight />
       </button>
     </div>
   );
@@ -353,7 +382,7 @@ function CartBar({ totalCents, ticketCount, onCheckout }: { totalCents: number; 
       </div>
       <button type="button" onClick={onCheckout}
         className="flex items-center gap-2 px-6 py-3.5 rounded-btn bg-teal text-white font-grotesk text-[15px] font-semibold hover:bg-teal-hover transition-colors">
-        Reserve <ArrowRight />
+        Checkout <ArrowRight />
       </button>
     </div>
   );
@@ -361,7 +390,7 @@ function CartBar({ totalCents, ticketCount, onCheckout }: { totalCents: number; 
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export function BookingCalendar({ initialTrips, initialMonth, operatorName }: { initialTrips: Trip[]; initialMonth: string; operatorName: string }) {
+export function BookingCalendar({ initialTrips, initialMonth, operatorName, termsUrl }: { initialTrips: Trip[]; initialMonth: string; operatorName: string; termsUrl: string | null }) {
   const [month, setMonth] = useState(initialMonth);
   const [trips, setTrips] = useState<Trip[]>(initialTrips);
   const [loading, setLoading] = useState(false);
@@ -457,7 +486,7 @@ export function BookingCalendar({ initialTrips, initialMonth, operatorName }: { 
 
   function openSheet(trip: Trip) {
     setSheetTripId(trip.id);
-    setSheetAdult(getQty(trip.id, "adult"));
+    setSheetAdult(getQty(trip.id, "adult") || 1);
     setSheetChild(getQty(trip.id, "child"));
   }
   function commitSheet() {
@@ -531,7 +560,7 @@ export function BookingCalendar({ initialTrips, initialMonth, operatorName }: { 
         {/* Left: list or calendar */}
         <div className={`flex-1 overflow-y-auto transition-opacity ${loading ? "opacity-40 pointer-events-none" : ""}`}>
           {viewMode === "list" ? (
-            <div className="max-w-2xl mx-auto px-4 py-5 pb-32 md:pb-8">
+            <div className="max-w-2xl mx-auto px-4 py-5 pb-40 md:pb-8">
               {dates.length === 0 ? (
                 <EmptyState />
               ) : (
@@ -583,6 +612,7 @@ export function BookingCalendar({ initialTrips, initialMonth, operatorName }: { 
           onChild={setSheetChild}
           onClose={() => setSheetTripId(null)}
           onAdd={commitSheet}
+          termsUrl={termsUrl}
         />
       )}
 

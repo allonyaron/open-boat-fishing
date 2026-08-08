@@ -55,6 +55,9 @@ export const operators = pgTable("operators", {
   emailDomain: text("email_domain").notNull(),        // e.g. oceansidecharters.example.com
   twilioFromNumber: text("twilio_from_number"),
   termsUrl: text("terms_url"),
+  phone: text("phone"),
+  dockAddress: text("dock_address"),
+  dockMapsUrl: text("dock_maps_url"),
   feeBearer: feeBearerEnum("fee_bearer").notNull().default("passenger"),
   feeDisplay: feeDisplayEnum("fee_display").notNull().default("itemized"),
   cancelWindowHrs: integer("cancel_window_hrs").notNull().default(48),
@@ -267,6 +270,8 @@ export const bookings = pgTable("bookings", {
   customerEmail: text("customer_email").notNull(),
   customerPhone: text("customer_phone"),
   notes: text("notes"),
+  termsVersion: text("terms_version"),
+  termsAcceptedAt: timestamp("terms_accepted_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [

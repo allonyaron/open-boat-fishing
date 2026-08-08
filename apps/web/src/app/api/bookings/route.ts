@@ -220,6 +220,8 @@ export async function POST(req: NextRequest) {
           customerName,
           customerEmail,
           customerPhone,
+          termsVersion: operator.termsUrl ?? "unversioned",
+          termsAcceptedAt: new Date(),
         })
         .returning();
 

@@ -58,6 +58,12 @@ export function CheckoutForm({
         </div>
       )}
 
+      <p className="text-xs text-faint text-center">
+        Purchasing tickets means you accept the{" "}
+        <a href="/terms" className="underline text-teal">terms and conditions</a>.
+        Payments processed securely by Stripe.
+      </p>
+
       <button
         type="submit"
         disabled={!stripe || processing}
@@ -65,12 +71,6 @@ export function CheckoutForm({
       >
         {processing ? "Processing…" : `Pay $${(totalCents / 100).toFixed(2)}`}
       </button>
-
-      <p className="text-xs text-faint text-center">
-        Purchasing tickets means you accept the{" "}
-        <a href="/terms" className="underline text-teal">terms and conditions</a>.
-        Payments processed securely by Stripe.
-      </p>
     </form>
   );
 }

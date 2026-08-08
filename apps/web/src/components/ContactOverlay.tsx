@@ -57,15 +57,17 @@ export function ContactOverlay({
           </div>
           <div className="space-y-3">
             {[
-              { label: "Full name", value: name, setter: setName, type: "text", placeholder: "Jane Smith", required: true },
-              { label: "Email", value: email, setter: setEmail, type: "email", placeholder: "jane@example.com", required: true },
-              { label: "Mobile (for text updates)", value: phone, setter: setPhone, type: "tel", placeholder: "(555) 000-0000", required: false },
-            ].map(({ label, value, setter, type, placeholder, required }) => (
+              { label: "Full name", value: name, setter: setName, type: "text", autoComplete: "name", inputMode: undefined, placeholder: "Jane Smith", required: true },
+              { label: "Email", value: email, setter: setEmail, type: "email", autoComplete: "email", inputMode: undefined, placeholder: "jane@example.com", required: true },
+              { label: "Mobile (for text updates)", value: phone, setter: setPhone, type: "tel", autoComplete: "tel", inputMode: "numeric" as const, placeholder: "(555) 000-0000", required: false },
+            ].map(({ label, value, setter, type, autoComplete, inputMode, placeholder, required }) => (
               <div key={label}>
                 <label className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5">{label}</label>
                 <input
                   required={required}
                   type={type}
+                  autoComplete={autoComplete}
+                  inputMode={inputMode}
                   value={value}
                   onChange={(e) => setter(e.target.value)}
                   placeholder={placeholder}
@@ -74,16 +76,16 @@ export function ContactOverlay({
               </div>
             ))}
           </div>
-          <button
-            type="submit"
-            className="mt-5 w-full py-4 rounded-btn font-grotesk text-[15px] font-semibold bg-teal text-white hover:bg-teal-hover transition-colors flex items-center justify-center gap-2"
-          >
-            Continue to payment <ArrowRight />
-          </button>
-          <p className="text-[11px] text-faint text-center mt-3">
+          <p className="text-[11px] text-faint text-center mt-5">
             Purchasing tickets means you accept the{" "}
             <a href="/terms" className="underline text-teal">terms and conditions</a>.
           </p>
+          <button
+            type="submit"
+            className="mt-3 w-full py-4 rounded-btn font-grotesk text-[15px] font-semibold bg-teal text-white hover:bg-teal-hover transition-colors flex items-center justify-center gap-2"
+          >
+            Continue to payment <ArrowRight />
+          </button>
         </form>
       </div>
     </>

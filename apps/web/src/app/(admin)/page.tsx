@@ -14,9 +14,10 @@ export default async function HomePage() {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
   const [res, operatorRow] = await Promise.all([
     fetch(`${baseUrl}/api/trips?month=${month}`, { cache: "no-store" }),
-    db.select({ name: operators.name }).from(operators).limit(1),
+    db.select({ name: operators.name, termsUrl: operators.termsUrl }).from(operators).limit(1),
   ]);
   const trips = await res.json();
   const operatorName = operatorRow[0]?.name ?? "Fishing Charter";
-  return <BookingCalendar initialTrips={trips} initialMonth={month} operatorName={operatorName} />;
+  const termsUrl = operatorRow[0]?.termsUrl ?? null;
+  return <BookingCalendar initialTrips={trips} initialMonth={month} operatorName={operatorName} termsUrl={termsUrl} />;
 }

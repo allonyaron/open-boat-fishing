@@ -16,7 +16,10 @@ export default async function BoardingPassPage({
 
   if (!booking) notFound();
 
-  const [operator] = await db.select({ name: operators.name }).from(operators).limit(1);
+  const [operator] = await db
+    .select({ name: operators.name, phone: operators.phone, dockAddress: operators.dockAddress, dockMapsUrl: operators.dockMapsUrl, termsUrl: operators.termsUrl })
+    .from(operators)
+    .limit(1);
   const operatorName = operator?.name ?? "Fishing Charter";
 
   const ticketRows = await db
@@ -30,6 +33,7 @@ export default async function BoardingPassPage({
       departureDate: trips.departureDate,
       startTime: trips.startTime,
       endTime: trips.endTime,
+      boardingTime: trips.boardingTime,
       tripStatus: trips.status,
       vesselName: vessels.name,
       vesselColor: vessels.color,
@@ -60,6 +64,14 @@ export default async function BoardingPassPage({
 
   function capitalize(s: string) {
     return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function fmtBoardingTime(t: string | null) {
+    if (!t) return null;
+    const [h, m] = t.split(":").map(Number);
+    const suffix = h >= 12 ? "PM" : "AM";
+    const hour = h % 12 || 12;
+    return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
   }
 
   const qrBaseUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=`;
@@ -143,7 +155,26 @@ export default async function BoardingPassPage({
                   <div className="ticket-section-label">RETURN</div>
                   <div className="ticket-value">{fmtTime(ticket.endTime)}</div>
                 </div>
+                {fmtBoardingTime(ticket.boardingTime) && (
+                  <div>
+                    <div className="ticket-section-label">BE AT THE BOAT BY</div>
+                    <div className="ticket-value">{fmtBoardingTime(ticket.boardingTime)}</div>
+                  </div>
+                )}
               </div>
+
+              {operator?.dockAddress && (
+                <div className="ticket-row">
+                  <div>
+                    <div className="ticket-section-label">DOCK LOCATION</div>
+                    <div className="ticket-value">
+                      {operator.dockMapsUrl
+                        ? <a href={operator.dockMapsUrl} style={{ color: "#0E7C7B", textDecoration: "underline" }}>{operator.dockAddress}</a>
+                        : operator.dockAddress}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="ticket-row">
                 <div>
@@ -160,6 +191,8 @@ export default async function BoardingPassPage({
               <div className="ticket-notice">
                 This ticket is sufficient for boarding. Show at the gangway.
                 If you have trouble printing, your confirmation email is also accepted.
+                {operator?.phone && <> Questions? Call <strong>{operator.phone}</strong>.</>}
+                {operator?.termsUrl && <> <a href={operator.termsUrl} style={{ color: "#0E7C7B" }}>Weather &amp; cancellation policy</a>.</>}
               </div>
             </div>
           </div>
