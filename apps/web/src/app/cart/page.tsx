@@ -1,9 +1,5 @@
-import { db } from "@/lib/db";
-import { operators } from "@openboat/db";
-import { CartClient } from "./CartClient";
+import { redirect } from "next/navigation";
 
-export default async function CartPage() {
-  const [operator] = await db.select({ name: operators.name }).from(operators).limit(1);
-  const operatorName = operator?.name ?? "Fishing Charter";
-  return <CartClient operatorName={operatorName} />;
+export default function CartPage() {
+  redirect("/checkout");
 }

@@ -19,7 +19,7 @@ type TicketLine = {
 
 type BookingEmailParams = {
   to: string;
-  customerName: string;
+  customerName: string | null;
   confirmationCode: string;
   bookingId: string;
   totalCents: number;
@@ -81,7 +81,7 @@ function buildHtml(p: BookingEmailParams): string {
         <tr>
           <td style="padding:28px 32px;">
             <p style="margin:0 0 20px;font-size:15px;color:#374151;">
-              Hi ${p.customerName}, your tickets are confirmed!
+              Hi${p.customerName ? ` ${p.customerName}` : ""}, your tickets are confirmed!
             </p>
 
             <!-- Ticket list -->

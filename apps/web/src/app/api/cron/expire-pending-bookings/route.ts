@@ -2,15 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { bookings, bookingItems, tickets, payments, trips } from "@openboat/db";
-import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-const STALE_MINUTES = 30;
+// Fallback for legacy pending bookings created before holdExpiresAt was added.
+const LEGACY_STALE_MINUTES = 30;
 
 // Vercel cron: runs every 10 minutes via vercel.json.
-// Finds pending bookings older than 30 minutes with no completed payment and
-// cancels them, restoring held seats. Targets two failure modes:
+// Cancels pending bookings whose holdExpiresAt has passed (or, for legacy rows
+// without holdExpiresAt, that are older than 30 minutes) with no completed payment.
+// Targets two failure modes:
 //   1. No PI ever created (server crash between DB commit and stripe.paymentIntents.create)
 //   2. PI created but customer abandoned; webhook hasn't fired yet
 export async function GET(req: NextRequest) {
@@ -19,7 +21,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const cutoff = new Date(Date.now() - STALE_MINUTES * 60 * 1000);
+  const legacyCutoff = new Date(Date.now() - LEGACY_STALE_MINUTES * 60 * 1000);
+  const now = new Date();
 
   // LEFT JOIN payments + isNull filter = "no payment row exists for this booking"
   const staleBookings = await db
@@ -33,8 +36,19 @@ export async function GET(req: NextRequest) {
     .where(
       and(
         eq(bookings.status, "pending"),
-        lt(bookings.createdAt, cutoff),
-        isNull(payments.bookingId)
+        isNull(payments.bookingId),
+        or(
+          // New path: booking has an explicit expiry and it has passed
+          and(
+            sql`${bookings.holdExpiresAt} is not null`,
+            lt(bookings.holdExpiresAt, now)
+          ),
+          // Legacy path: no expiry set, fall back to 30-min window
+          and(
+            sql`${bookings.holdExpiresAt} is null`,
+            lt(bookings.createdAt, legacyCutoff)
+          )
+        )
       )
     );
 

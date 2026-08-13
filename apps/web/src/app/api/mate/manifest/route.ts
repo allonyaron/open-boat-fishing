@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
         });
       return { ...b, tickets: ticketList };
     })
-    .sort((a, b) => a.customerName.localeCompare(b.customerName));
+    .sort((a, b) => (a.customerName ?? "").localeCompare(b.customerName ?? ""));
 
   return NextResponse.json({ trip, bookings: bookingList });
 }

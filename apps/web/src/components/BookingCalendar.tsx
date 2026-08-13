@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import posthog from "posthog-js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -404,6 +405,7 @@ export function BookingCalendar({ initialTrips, initialMonth, operatorName, term
   // Default to calendar view on desktop after hydration
   useEffect(() => {
     if (window.innerWidth >= 768) setViewMode("calendar");
+    posthog.capture("list_view");
   }, []);
 
   // Restore cart from localStorage after hydration
@@ -488,6 +490,13 @@ export function BookingCalendar({ initialTrips, initialMonth, operatorName, term
     setSheetTripId(trip.id);
     setSheetAdult(getQty(trip.id, "adult") || 1);
     setSheetChild(getQty(trip.id, "child"));
+    posthog.capture("sheet_open", {
+      trip_id: trip.id,
+      departure_date: trip.departureDate,
+      vessel: trip.vessel.name,
+      product: trip.product.displayName,
+      seats_remaining: trip.seatsRemaining,
+    });
   }
   function commitSheet() {
     if (!sheetTripId) return;
@@ -499,7 +508,7 @@ export function BookingCalendar({ initialTrips, initialMonth, operatorName, term
   }
 
   function goToCart() {
-    window.location.href = "/cart";
+    window.location.href = "/checkout";
   }
 
   const byDate = trips.reduce<Record<string, Trip[]>>((acc, t) => {

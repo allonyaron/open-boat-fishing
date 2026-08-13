@@ -266,12 +266,13 @@ export const bookings = pgTable("bookings", {
   totalCents: integer("total_cents").notNull(),
   platformFeeCents: integer("platform_fee_cents").notNull(),       // $1.50 × ticket count
   groupDiscountCents: integer("group_discount_cents").notNull().default(0),
-  customerName: text("customer_name").notNull(),
+  customerName: text("customer_name"),
   customerEmail: text("customer_email").notNull(),
   customerPhone: text("customer_phone"),
   notes: text("notes"),
   termsVersion: text("terms_version"),
   termsAcceptedAt: timestamp("terms_accepted_at"),
+  holdExpiresAt: timestamp("hold_expires_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [

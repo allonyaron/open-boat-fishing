@@ -3,6 +3,7 @@ import { Space_Grotesk, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { db } from "@/lib/db";
 import { operators } from "@openboat/db";
+import { PostHogProvider } from "@/components/PostHogProvider";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -32,7 +33,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${spaceGrotesk.variable} ${plusJakarta.variable}`}>
-      <body className="font-jakarta">{children}</body>
+      <body className="font-jakarta">
+        <PostHogProvider>{children}</PostHogProvider>
+      </body>
     </html>
   );
 }

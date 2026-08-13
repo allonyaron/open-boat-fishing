@@ -67,12 +67,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { cart, customerName, customerEmail, customerPhone } = body as {
     cart: CartItem[];
-    customerName: string;
+    customerName?: string | null;
     customerEmail: string;
     customerPhone?: string;
   };
 
-  if (!cart?.length || !customerName || !customerEmail) {
+  if (!cart?.length || !customerEmail) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -104,9 +104,10 @@ export async function POST(req: NextRequest) {
   let totalCents: number;
   let ticketCount: number;
   let groupDiscountCents: number;
+  let holdExpiresAt: Date;
 
   try {
-    ({ booking, totalCents, ticketCount, groupDiscountCents } = await db.transaction(async (tx) => {
+    ({ booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt } = await db.transaction(async (tx) => {
       const tripRows = await tx
         .select()
         .from(trips)
@@ -208,6 +209,16 @@ export async function POST(req: NextRequest) {
           .where(eq(trips.id, tripId));
       }
 
+      // Hold window: 10 min when any trip is near-full (<4 seats or <15% capacity),
+      // 60 min otherwise (long enough that no countdown is shown).
+      const nearFull = tripRows.some((trip) => {
+        const requested = seatRequestsByTrip[trip.id] ?? 0;
+        const afterDecrement = (trip.seatsRemaining ?? 0) - requested;
+        return afterDecrement < 4 || afterDecrement / trip.capacity < 0.15;
+      });
+      const holdMinutes = nearFull ? 10 : 60;
+      const holdExpiresAt = new Date(Date.now() + holdMinutes * 60 * 1000);
+
       const [booking] = await tx
         .insert(bookings)
         .values({
@@ -217,11 +228,12 @@ export async function POST(req: NextRequest) {
           totalCents,
           platformFeeCents,
           groupDiscountCents,
-          customerName,
+          customerName: customerName ?? null,
           customerEmail,
           customerPhone,
           termsVersion: operator.termsUrl ?? "unversioned",
           termsAcceptedAt: new Date(),
+          holdExpiresAt,
         })
         .returning();
 
@@ -281,7 +293,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      return { booking, totalCents, ticketCount, groupDiscountCents };
+      return { booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt };
     }));
   } catch (err: unknown) {
     const status = (err as { httpStatus?: number }).httpStatus;
@@ -334,6 +346,7 @@ export async function POST(req: NextRequest) {
     totalCents,
     ticketCount,
     groupDiscountCents,
+    holdExpiresAt: holdExpiresAt.toISOString(),
   });
 }
 

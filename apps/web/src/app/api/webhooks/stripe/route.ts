@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { sendBookingConfirmation } from "@/lib/email";
 import { sendPushToEmails } from "@/lib/push";
+import { getPostHogServer } from "@/lib/posthog";
 import { bookings, bookingItems, tickets, payments, trips, operators, vessels, products } from "@openboat/db";
 import { eq, inArray, sql } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -131,6 +132,34 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
 
   // TODO: Send SMS via Twilio
   console.log(`Booking confirmed: ${booking.confirmationCode} (${bookingId})`);
+
+  waitUntil(
+    (async () => {
+      try {
+        const ph = getPostHogServer();
+        const ticketRows = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(tickets)
+          .where(eq(tickets.bookingId, bookingId));
+        const ticketCount = Number(ticketRows[0]?.count ?? 0);
+        ph.capture({
+          distinctId: booking.customerEmail ?? bookingId,
+          event: "payment_success",
+          properties: {
+            booking_id: bookingId,
+            confirmation_code: booking.confirmationCode,
+            total_cents: pi.amount,
+            ticket_count: ticketCount,
+            payment_method_types: pi.payment_method_types,
+            operator_id: booking.operatorId,
+          },
+        });
+        await ph.shutdown();
+      } catch (err) {
+        console.error("PostHog capture error:", err);
+      }
+    })()
+  );
 }
 
 async function sendConfirmationEmail(
