@@ -75,6 +75,7 @@ export const vessels = pgTable("vessels", {
   slug: text("slug").notNull(),
   color: text("color").notNull(),                    // hex, e.g. "#1D4ED8" (blue for Blue Wave)
   capacity: integer("capacity").notNull(),
+  certificateCapacity: integer("certificate_capacity"),   // legal max; null = not configured
   description: text("description"),
   active: boolean("active").notNull().default(true),
   // Group discount: null = disabled. When a single booking has >= threshold
@@ -327,6 +328,21 @@ export const checkIns = pgTable("check_ins", {
 }, (t) => [
   unique().on(t.ticketId),                           // one check-in per ticket
   index("check_ins_trip_idx").on(t.tripId),
+]);
+
+// ─── Capacity Changes ─────────────────────────────────────────────────────────
+// Audit log of captain-initiated capacity adjustments on a trip.
+
+export const capacityChanges = pgTable("capacity_changes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tripId: uuid("trip_id").notNull().references(() => trips.id),
+  operatorId: uuid("operator_id").notNull().references(() => operators.id),
+  staffId: uuid("staff_id").references(() => staff.id),
+  previousCapacity: integer("previous_capacity").notNull(),
+  newCapacity: integer("new_capacity").notNull(),
+  changedAt: timestamp("changed_at").notNull().defaultNow(),
+}, (t) => [
+  index("capacity_changes_trip_idx").on(t.tripId),
 ]);
 
 // ─── Payments ─────────────────────────────────────────────────────────────────

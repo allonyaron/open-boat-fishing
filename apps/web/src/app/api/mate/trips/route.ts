@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
       capacity: trips.capacity,
       seatsRemaining: trips.seatsRemaining,
       status: trips.status,
-      vessel: { id: vessels.id, name: vessels.name, color: vessels.color },
+      vessel: { id: vessels.id, name: vessels.name, color: vessels.color, certificateCapacity: vessels.certificateCapacity },
       product: { id: products.id, displayName: products.displayName, category: products.category },
       ticketsSold: sql<number>`(
         select count(*) from ${tickets} t

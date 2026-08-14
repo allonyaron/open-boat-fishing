@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -183,6 +184,7 @@ export default function ManifestScreen() {
   const [keyboardInput, setKeyboardInput] = useState('');
   const keyboardRef = useRef<TextInput>(null);
   const scanLocked = useRef(false);
+  const [capacityUpdating, setCapacityUpdating] = useState(false);
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
@@ -283,7 +285,7 @@ export default function ManifestScreen() {
         setScanResult({
           kind: 'already_checked_in',
           message: `Already checked in${ticket.checkedInAt ? ` at ${fmtTime(ticket.checkedInAt)}` : ''}`,
-          name: booking.customerName,
+          name: booking.customerName ?? undefined,
         });
         return;
       }
@@ -306,7 +308,7 @@ export default function ManifestScreen() {
         setScanResult({
           kind: 'success',
           message: `${ticketLabel(ticket.ticketType)} — CHECKED IN`,
-          name: booking.customerName,
+          name: booking.customerName ?? undefined,
         });
       }
     },
@@ -385,6 +387,61 @@ export default function ManifestScreen() {
     setKeyboardInput('');
   }, []);
 
+  // ─── Capacity adjustment ──────────────────────────────────────────────────
+
+  const adjustCapacity = useCallback(async (delta: 1 | -1) => {
+    if (!manifest || !tripId || !token || capacityUpdating) return;
+    const newCapacity = manifest.trip.capacity + delta;
+    setCapacityUpdating(true);
+    // Optimistic update
+    setManifest((prev) =>
+      prev ? {
+        ...prev,
+        trip: {
+          ...prev.trip,
+          capacity: newCapacity,
+          seatsRemaining: Math.max(0, prev.trip.seatsRemaining + delta),
+        },
+      } : prev
+    );
+    try {
+      const res = await fetch(`${API_URL}/api/mate/trips/${tripId}/capacity`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ capacity: newCapacity }),
+      });
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        Alert.alert('Cannot adjust capacity', data.error ?? 'Unknown error');
+        // Revert optimistic update
+        setManifest((prev) =>
+          prev ? {
+            ...prev,
+            trip: {
+              ...prev.trip,
+              capacity: manifest.trip.capacity,
+              seatsRemaining: manifest.trip.seatsRemaining,
+            },
+          } : prev
+        );
+      }
+    } catch {
+      Alert.alert('Offline', 'Capacity change requires a network connection.');
+      setManifest((prev) =>
+        prev ? {
+          ...prev,
+          trip: {
+            ...prev.trip,
+            capacity: manifest.trip.capacity,
+            seatsRemaining: manifest.trip.seatsRemaining,
+          },
+        } : prev
+      );
+    } finally {
+      setCapacityUpdating(false);
+    }
+  }, [manifest, tripId, token, capacityUpdating]);
+
   // ─── Filter passengers ────────────────────────────────────────────────────
 
   const filteredBookings = useMemo(() => {
@@ -393,7 +450,7 @@ export default function ManifestScreen() {
     const q = search.toLowerCase();
     return manifest.bookings.filter(
       (b) =>
-        b.customerName.toLowerCase().includes(q) ||
+        (b.customerName ?? '').toLowerCase().includes(q) ||
         b.confirmationCode.toLowerCase().includes(q)
     );
   }, [manifest, search]);
@@ -438,6 +495,36 @@ export default function ManifestScreen() {
           {totalChecked}/{totalTickets} checked in
         </Text>
       </View>
+
+      {/* ── Capacity controls (only when certificateCapacity is configured) ── */}
+      {manifest.trip.vessel.certificateCapacity !== null && (
+        <View style={s.capacityBar}>
+          <View style={s.capacityInfo}>
+            <Text style={s.capacityLabel}>Capacity</Text>
+            <Text style={s.capacityNumbers}>
+              {manifest.trip.capacity} listed · {manifest.trip.vessel.certificateCapacity} certified
+            </Text>
+          </View>
+          <View style={s.capacityBtns}>
+            <TouchableOpacity
+              style={[s.capBtn, (manifest.trip.capacity <= totalTickets || capacityUpdating) && s.capBtnDisabled]}
+              onPress={() => adjustCapacity(-1)}
+              disabled={manifest.trip.capacity <= totalTickets || capacityUpdating}
+              activeOpacity={0.7}
+            >
+              <Text style={s.capBtnText}>−</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.capBtn, (manifest.trip.capacity >= manifest.trip.vessel.certificateCapacity || capacityUpdating) && s.capBtnDisabled]}
+              onPress={() => adjustCapacity(1)}
+              disabled={manifest.trip.capacity >= manifest.trip.vessel.certificateCapacity || capacityUpdating}
+              activeOpacity={0.7}
+            >
+              <Text style={s.capBtnText}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* ── Search bar + scan buttons ── */}
       <View style={s.controls}>
@@ -575,6 +662,32 @@ const s = StyleSheet.create({
   },
   tripBarText: { fontSize: 14, fontWeight: '600', color: Colors.ink, flex: 1 },
   tripBarCount: { fontSize: 14, fontWeight: '700', color: Colors.teal },
+
+  capacityBar: {
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  capacityInfo: { flex: 1 },
+  capacityLabel: { fontSize: 11, fontWeight: '700', color: Colors.inkSubtle, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  capacityNumbers: { fontSize: 14, fontWeight: '600', color: Colors.ink },
+  capacityBtns: { flexDirection: 'row', gap: 8 },
+  capBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: Colors.teal,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  capBtnDisabled: { borderColor: Colors.border, opacity: 0.4 },
+  capBtnText: { fontSize: 20, fontWeight: '700', color: Colors.teal, lineHeight: 24 },
 
   controls: {
     backgroundColor: Colors.surface,

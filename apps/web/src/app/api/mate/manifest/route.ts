@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireMate } from "@/lib/mate-auth";
 import { trips, vessels, products, bookings, bookingItems, tickets, checkIns } from "@openboat/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   const auth = await requireMate(req);
@@ -24,8 +24,13 @@ export async function GET(req: NextRequest) {
       capacity: trips.capacity,
       seatsRemaining: trips.seatsRemaining,
       status: trips.status,
-      vessel: { id: vessels.id, name: vessels.name, color: vessels.color },
+      vessel: { id: vessels.id, name: vessels.name, color: vessels.color, certificateCapacity: vessels.certificateCapacity },
       product: { id: products.id, displayName: products.displayName, category: products.category },
+      ticketsSold: sql<number>`(
+        select count(*) from ${tickets} t
+        join ${bookingItems} bi on bi.id = t.booking_item_id
+        where bi.trip_id = ${trips.id} and t.voided = false
+      )`.as("tickets_sold"),
     })
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))

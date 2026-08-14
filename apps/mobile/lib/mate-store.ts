@@ -11,7 +11,7 @@ export type MateTrip = {
   capacity: number;
   seatsRemaining: number;
   status: string;
-  vessel: { id: string; name: string; color: string };
+  vessel: { id: string; name: string; color: string; certificateCapacity: number | null };
   product: { id: string; displayName: string; category: string };
   ticketsSold: number;
   checkedIn: number;
@@ -31,7 +31,7 @@ export type MateTicket = {
 export type MateBooking = {
   id: string;
   confirmationCode: string;
-  customerName: string;
+  customerName: string | null;
   customerEmail: string;
   customerPhone: string | null;
   status: string;
