@@ -15,7 +15,7 @@ import * as bcrypt from "bcryptjs";
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error("DATABASE_URL is not set");
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "admin@your-domain.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "admin@example.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "changeme";
 const ADMIN_NAME = process.env.ADMIN_NAME ?? "Admin";
 

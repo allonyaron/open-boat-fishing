@@ -160,7 +160,7 @@ The aging can be a cron job or a lazy check on read (any query touching a `pendi
 
 **Revenue recognition is delayed by the grace period.** Fees earn 48h after the boat sails, not at departure. That's the cost of correctness and it's cheap.
 
-**Customers get refunded after they've already been stood up.** Someone drives to Captree, the boat isn't going, they drive home, and the refund lands whenever the captain gets around to recording it. That's a customer-experience failure the schema cannot fix. What can: make "cancel this trip" a one-tap action *at the dock* in both the mate app and the admin dashboard, and fire a push the instant it's recorded. The friction of recording a cancellation is exactly why it happens late — remove the friction rather than modeling around it.
+**Customers get refunded after they've already been stood up.** Someone drives to the dock, the boat isn't going, they drive home, and the refund lands whenever the captain gets around to recording it. That's a customer-experience failure the schema cannot fix. What can: make "cancel this trip" a one-tap action *at the dock* in both the mate app and the admin dashboard, and fire a push the instant it's recorded. The friction of recording a cancellation is exactly why it happens late — remove the friction rather than modeling around it.
 
 ### Cancellation is one transaction
 
@@ -223,7 +223,7 @@ Two notes. **No-show earns the fee** — the passenger didn't cancel, they just 
 2. ~~Free cancellation window~~ — **decided: 48h customer self-cancel cutoff; captain refund unlimited.**
 3. ~~Does the operator's refund policy differ from ours?~~ — **decided: no. Always reverse the fee on any cancellation.** The operator's ticket-refund choice inside 48h is his own; our fee reverses regardless.
 4. ~~Who marks a trip sailed at launch?~~ — **decided: time-based default with a 48h settlement grace window** (`operators.settle_grace_hrs`), because the captain is assumed *not* to record weather cancellations promptly. Migrate to mate-app close-out when that ships.
-5. **Fee on a $760 trip?** Flat $1.50 is 1.9% of a Helen H tuna trip and 3.2% of a Captree sea bass ticket. Fine for one operator; revisit if the segment widens.
+5. **Fee on a $760 trip?** Flat $1.50 is 1.9% of a deep-water tuna trip and ~3% of a standard sea bass ticket. Fine for one operator; revisit if the segment widens.
 6. **Manifest headcount under collapsed ticket types.** If Coast Guard or insurance requires children broken out even when priced identically, the collapse rule (audit §6) is wrong. Unverified — captain question.
 
 ---

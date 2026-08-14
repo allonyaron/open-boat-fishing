@@ -2,8 +2,6 @@
 
 Multi-tenant ticketing and check-in platform for party fishing boat operators. Each operator gets their own isolated deployment (Vercel + Neon Postgres) from this shared codebase.
 
-**MVP client:** Captree / Blue Wave fleet — 4 boats, 2 domains.
-
 ---
 
 ## What's in the box
@@ -122,14 +120,14 @@ Edit `apps/mobile/app.json` to match the operator:
 ```json
 {
   "expo": {
-    "name": "OpenBoat Fishing",
-    "slug": "openboat-fishing",
-    "scheme": "openboatfishing",
+    "name": "Your Operator Name",
+    "slug": "your-operator-slug",
+    "scheme": "youroperatorapp",
     "ios": {
-      "bundleIdentifier": "com.openboat.fishing"
+      "bundleIdentifier": "com.youroperator.fishing"
     },
     "android": {
-      "package": "com.openboat.fishing"
+      "package": "com.youroperator.fishing"
     }
   }
 }
@@ -280,4 +278,4 @@ See `CLAUDE.md` for the full build order, data model, and architectural decision
 - QR payload HMAC signing (currently bare UUID)
 - Weekend/weekday pricing (schema exists, seed data not updated)
 - Fishing reports (step 10)
-- Production infra: Vercel + Neon on Captree's accounts, DNS, SEO, load test
+- Production infra: Vercel + Neon, DNS, SEO, load test

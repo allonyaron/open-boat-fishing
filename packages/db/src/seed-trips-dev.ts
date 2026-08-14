@@ -18,8 +18,8 @@ const CAPACITY     = 29;
 const VESSEL_SCHEDULE: Record<string, { days: number[]; departureHourUtc: number; returnHourUtc: number }> = {
   "blue-wave":         { days: [2, 4, 6, 0], departureHourUtc: 11, returnHourUtc: 16 }, // 7AM–12PM ET
   "blue-wave-express": { days: [1, 3, 5, 6], departureHourUtc: 23, returnHourUtc: 4  }, // 7PM–12AM ET (next day)
-  "harbor-princess":  { days: [0, 6],       departureHourUtc: 10, returnHourUtc: 18 }, // 6AM–2PM ET
-  "harbor-star":     { days: [0, 6],       departureHourUtc: 12, returnHourUtc: 20 }, // 8AM–4PM ET
+  "harbor-princess":   { days: [0, 6],       departureHourUtc: 10, returnHourUtc: 18 }, // 6AM–2PM ET
+  "harbor-star":       { days: [0, 6],       departureHourUtc: 12, returnHourUtc: 20 }, // 8AM–4PM ET
 };
 
 function datesInRange(start: string, end: string, days: number[]): string[] {

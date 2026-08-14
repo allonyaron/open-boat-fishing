@@ -51,8 +51,8 @@ export const operators = pgTable("operators", {
   slug: text("slug").notNull().unique(),
   stripeAccountId: text("stripe_account_id"),        // Stripe Connect account
   stripeOnboardingComplete: boolean("stripe_onboarding_complete").notNull().default(false),
-  emailFrom: text("email_from").notNull(),            // e.g. office@oceansidecharters.example.com
-  emailDomain: text("email_domain").notNull(),        // e.g. oceansidecharters.example.com
+  emailFrom: text("email_from").notNull(),            // e.g. office@youroperator.com
+  emailDomain: text("email_domain").notNull(),        // e.g. youroperator.com
   twilioFromNumber: text("twilio_from_number"),
   termsUrl: text("terms_url"),
   phone: text("phone"),
@@ -73,7 +73,7 @@ export const vessels = pgTable("vessels", {
   operatorId: uuid("operator_id").notNull().references(() => operators.id),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
-  color: text("color").notNull(),                    // hex, e.g. "#1D4ED8" (blue for Blue Wave)
+  color: text("color").notNull(),                    // hex, e.g. "#1D4ED8"
   capacity: integer("capacity").notNull(),
   certificateCapacity: integer("certificate_capacity"),   // legal max; null = not configured
   description: text("description"),
@@ -365,13 +365,13 @@ export const payments = pgTable("payments", {
 });
 
 // ─── Domains ──────────────────────────────────────────────────────────────────
-// Domain → operator_id mapping. Captree has two domains (your-domain.com +
-// your-domain.com) both pointing at the same operator record.
+// Domain → operator_id mapping. An operator may have multiple domains
+// (e.g. two websites) all pointing at the same operator record.
 
 export const domains = pgTable("domains", {
   id: uuid("id").primaryKey().defaultRandom(),
   operatorId: uuid("operator_id").notNull().references(() => operators.id),
-  domain: text("domain").notNull().unique(),         // e.g. "your-domain.com"
+  domain: text("domain").notNull().unique(),         // e.g. "youroperator.com"
   primary: boolean("primary").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

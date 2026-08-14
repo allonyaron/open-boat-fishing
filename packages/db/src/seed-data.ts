@@ -38,24 +38,21 @@ export type DomainSeed = {
   primary: boolean;
 };
 
-// ─── OpenBoat Fishing — your-domain.com / your-domain.com ─────────────────────
+// ─── Demo Operator — replace with real operator details before deploying ───────
 
 export const operatorData: OperatorSeed = {
-  name: "OpenBoat Fishing",
-  slug: "captree",
+  name: "Oceanside Charters",
+  slug: "oceanside",
   emailFrom: "office@oceansidecharters.example.com",
   emailDomain: "oceansidecharters.example.com",
 };
 
 export const domainData: DomainSeed[] = [
-  { domain: "your-domain.com",         primary: true  },
-  { domain: "your-domain.com", primary: false },
+  { domain: "oceansidecharters.example.com", primary: true  },
 ];
 
-// Colors and capacities sourced from the incumbent /boats API endpoint.
-// Products sourced from incumbent /info/DSLVFD8QBSNR8/ (publish=true only).
-// Prices sourced from incumbent /tickets endpoint (adult/child in dollars).
-// Products with no price: incumbent used custom price keys — set via admin dashboard.
+// Fleet data — replace names, slugs, colors, capacities, and products with
+// your operator's actual boats and trip types before deploying.
 
 export const fleetData: VesselSeed[] = [
   {
@@ -146,7 +143,7 @@ export const fleetData: VesselSeed[] = [
       { displayName: "Full Day Ocean Fluke",                    category: "Sea Bass / Fluke", showRemaining: false, adult: 105, child: 105 },
       { displayName: "Full Day Wrecks",                         category: "Sea Bass / Ling",  showRemaining: false, adult: 85,  child: 85  },
       { displayName: "Sea Bass / Fluke",                        category: "Sea Bass / Fluke", showRemaining: false, adult: 62,  child: 40  },
-      { displayName: "Pride Striper Jigging",                   category: "Striped Bass",     showRemaining: false                         },
+      { displayName: "Star Striper Jigging",                    category: "Striped Bass",     showRemaining: false                         },
       { displayName: "Trophy Striper Hunt",                     category: "Striped Bass",     showRemaining: false, adult: 67,  child: 67  },
       { displayName: "Two Day Tilefish & Tuna",                 category: "Tilefish",         showRemaining: true,  adult: 700, child: 700 },
     ],

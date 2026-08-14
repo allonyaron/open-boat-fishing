@@ -124,7 +124,7 @@ export default function MateLoginScreen() {
                 style={s.input}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="mate@your-domain.com"
+                placeholder="mate@example.com"
                 placeholderTextColor={Colors.inkSubtle}
                 autoCapitalize="none"
                 autoCorrect={false}
