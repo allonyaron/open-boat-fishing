@@ -13,65 +13,46 @@ sequenceDiagram
     API->>API: requireAdmin - verify session cookie
     API->>PG: SELECT trip WHERE id + operatorId
     PG-->>API: trip row
-    alt already cancelled
-        API-->>A: 409 Trip is already cancelled
-    end
-
+    Note over API: Returns 409 if trip already cancelled
     API->>PG: SELECT bookingItems WHERE tripId
     PG-->>API: all items on this trip
     API->>PG: SELECT bookings + all their bookingItems
     PG-->>API: affected bookings + full item lists
-
-    Note over API: Calculate refund plan per booking
-    Note over API: full refund if all items are on this trip
-    Note over API: partial refund if booking spans other trips
+    Note over API: Full refund if all booking items are on this trip
+    Note over API: Partial refund if booking spans other trips
 
     loop each confirmed booking
         API->>S: refunds.create (payment_intent, reverse_transfer, refund_application_fee)
-        Note over API,S: partial refund includes amount param
-        Note over API,S: full refund omits amount - Stripe refunds all
         S-->>API: refund object
-        alt Stripe refund failed
-            API-->>A: 502 - cancellation aborted, check Stripe dashboard
-        end
     end
+    Note over API,S: If any Stripe refund fails - abort and return 502, no DB writes
 
-    Note over API,PG: All Stripe refunds succeeded - commit DB changes
     API->>PG: BEGIN TRANSACTION
-    API->>PG: UPDATE trips SET status=cancelled, cancelledAt, cancellationReason
-    API->>PG: UPDATE tickets SET voided=true, feeStatus=reversed
-    API->>PG: UPDATE bookings SET status=cancelled (fully-refunded bookings only)
-    API->>PG: UPDATE trips SET seatsRemaining=capacity (reset)
+    API->>PG: UPDATE trips SET status=cancelled + cancelledAt + reason
+    API->>PG: UPDATE tickets SET voided=true + feeStatus=reversed
+    API->>PG: UPDATE bookings SET status=cancelled (fully-refunded only)
+    API->>PG: UPDATE trips SET seatsRemaining=capacity
     API->>PG: COMMIT
 
-    API->>N: sendPushToEmails - Trip Cancelled (best-effort, non-blocking)
+    API-->>N: sendPushToEmails - Trip Cancelled (best-effort)
     N-->>A: push delivered to affected passengers
-    API-->>A: ok + bookingsCancelled + ticketsVoided count
+    API-->>A: ok + bookingsCancelled + ticketsVoided
 
     Note over A,N: PER-TICKET REFUND - admin refunds one ticket
     A->>API: POST /api/admin/tickets/ticketId/refund
     API->>API: requireAdmin - verify session cookie
     API->>PG: SELECT ticket + bookingItem + booking + payment
     PG-->>API: joined row
-    alt ticket already voided
-        API-->>A: 409 Ticket already refunded
-    end
-    alt booking not confirmed
-        API-->>A: 409 Booking is not in a refundable state
-    end
+    Note over API: Returns 409 if ticket already voided or booking not confirmed
 
     API->>S: refunds.create (payment_intent, amount=priceCents, reverse_transfer)
     S-->>API: refund object
-    alt applicationFeeId known
-        API->>S: applicationFees.createRefund (amount=feeAmountCents)
-        S-->>API: fee refund object
-    end
-    alt Stripe refund failed
-        API-->>A: 502 Stripe refund failed
-    end
+    API->>S: applicationFees.createRefund if applicationFeeId known
+    S-->>API: fee refund object
+    Note over API,S: If Stripe refund fails - return 502, no DB writes
 
     API->>PG: BEGIN TRANSACTION
-    API->>PG: UPDATE tickets SET voided=true, feeStatus=reversed
+    API->>PG: UPDATE tickets SET voided=true + feeStatus=reversed
     API->>PG: UPDATE trips SET seatsRemaining += 1
     API->>PG: COMMIT
     API-->>A: ok + ticketId + refundedCents

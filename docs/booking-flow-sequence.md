@@ -40,6 +40,7 @@ sequenceDiagram
 
     API->>S: Create PaymentIntent (Destination Charge)
     S-->>API: client_secret
+    Note over API: If Stripe fails here - restore seats + cancel booking
     API->>DB: UPDATE booking SET stripePaymentIntentId
     API-->>UI: clientSecret + bookingId + holdExpiresAt
 
@@ -47,40 +48,30 @@ sequenceDiagram
     C->>S: Enter card, confirm payment
     S-->>C: Redirect to /booking/delivery
 
-    rect rgb(235, 245, 255)
-        Note over C,N: Payment confirmation - async webhook
-        S->>API: POST /api/webhooks/stripe (payment_intent.succeeded)
-        API->>S: constructEvent - verify signature
-        API->>S: Retrieve charge for applicationFeeId + transferId
+    Note over C,N: PAYMENT CONFIRMATION - async webhook
+    S->>API: POST /api/webhooks/stripe (payment_intent.succeeded)
+    API->>S: constructEvent - verify signature
+    API->>S: Retrieve charge for applicationFeeId + transferId
+    API->>DB: BEGIN TRANSACTION
+    API->>DB: SELECT booking FOR UPDATE
+    DB-->>API: booking (idempotency guard - skip if already confirmed)
+    API->>DB: UPDATE booking SET status=confirmed
+    API->>DB: INSERT payment record
+    API->>DB: COMMIT
+    API-->>N: sendBookingConfirmation email (waitUntil)
+    API-->>N: sendPushToEmails (waitUntil)
+    API-->>N: PostHog payment_success event (waitUntil)
+    N-->>C: Confirmation email + push notification
+    API-->>S: 200 OK
 
-        API->>DB: BEGIN TRANSACTION
-        API->>DB: SELECT booking FOR UPDATE
-        DB-->>API: booking (idempotency guard - skip if already confirmed)
-        API->>DB: UPDATE booking SET status=confirmed
-        API->>DB: INSERT payment record
-        API->>DB: COMMIT
-
-        API-->>N: sendBookingConfirmation email (waitUntil)
-        API-->>N: sendPushToEmails (waitUntil)
-        API-->>N: PostHog payment_success event (waitUntil)
-        N-->>C: Confirmation email + push notification
-        API-->>S: 200 OK
-    end
-
-    rect rgb(255, 243, 243)
-        Note over C,N: Abandonment and error paths
-        Note over API: Stripe PI creation fails - restore seats + cancel booking
-
-        S->>API: payment_intent.canceled webhook
-        API->>DB: BEGIN TRANSACTION
-        API->>DB: SELECT booking FOR UPDATE
-        API->>DB: UPDATE trips SET seatsRemaining += N
-        API->>DB: UPDATE booking SET status=cancelled
-        API->>DB: COMMIT
-
-        Note over API: Cron expire-pending-bookings runs every 10 min
-        Note over API: Uses same seat-restore logic
-    end
+    Note over C,N: ABANDONMENT - payment_intent.canceled webhook
+    S->>API: payment_intent.canceled
+    API->>DB: BEGIN TRANSACTION
+    API->>DB: SELECT booking FOR UPDATE
+    API->>DB: UPDATE trips SET seatsRemaining += N
+    API->>DB: UPDATE booking SET status=cancelled
+    API->>DB: COMMIT
+    Note over API: Cron expire-pending-bookings runs every 10 min with same logic
 ```
 
 ## Key invariants
