@@ -60,10 +60,10 @@ sequenceDiagram
         API->>DB: INSERT payment record
         API->>DB: COMMIT
 
-        API--)N: sendBookingConfirmation email (waitUntil)
-        API--)N: sendPushToEmails (waitUntil)
-        API--)N: PostHog payment_success event (waitUntil)
-        N--)C: Confirmation email + push notification
+        API-->>N: sendBookingConfirmation email (waitUntil)
+        API-->>N: sendPushToEmails (waitUntil)
+        API-->>N: PostHog payment_success event (waitUntil)
+        N-->>C: Confirmation email + push notification
         API-->>S: 200 OK
     end
 
