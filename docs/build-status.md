@@ -58,6 +58,32 @@ Added `magic_link_otps` (6-digit OTP for customer sign-in) and `push_tokens` (Ex
 
 ---
 
+## Fishing Reports (Step 10 — complete)
+
+Captain posts a report after each trip. One report per trip (unique constraint on `trip_id`). Only postable when trip status is `sailed` or `pending_settlement`.
+
+**Schema (migration 0007):** `fishing_reports` table — `catch_summary` (text), `fish_counts` (jsonb `[{species, count}]`), `photo_urls` (text[]), FKs to trips/vessels/staff/operators, indexes on `operator_id` and `vessel_id`.
+
+**API routes:**
+- `POST/GET /api/mate/trips/[tripId]/report` — JWT Bearer auth (mate + admin); upserts on the `trip_id` unique constraint so re-posting updates rather than errors
+- `POST/GET /api/admin/trips/[tripId]/report` — iron-session auth for the web dashboard; same upsert logic
+- `GET /api/reports` — public, paginated (cursor on `created_at`), optional `vesselId` filter
+- `GET /api/reports/[reportId]` — public detail
+- `POST /api/reports/upload` — Vercel Blob client-side `handleUpload` for web admin photo uploads
+- `POST /api/reports/upload-photo` — server-side Blob `put()` accepting raw image body for native (mate) app uploads
+
+**Web admin:** Report form added to the trip detail page (`/admin/trips/[tripId]`). Catch summary textarea, fish count pairs (add/remove), photo upload via Vercel Blob with thumbnail grid. Loads existing report on mount; submit either creates or updates. Requires `BLOB_READ_WRITE_TOKEN` env var.
+
+**Marketing site (SSR + ISR):** `/fishing-reports` (list, 20/page) and `/fishing-reports/[reportId]` (detail). `revalidate = 300` (5 min ISR). `generateMetadata` on detail page builds title from vessel + date + fish counts and sets `og:image` from first photo.
+
+**Mate app:** Post-trip report screen at `/(mate)/report/[tripId]`. Same form as web — catch summary, fish count pairs, photo picker via `expo-image-picker` (library access, multi-select, 0.8 quality). Photos upload to `/api/reports/upload-photo` as raw body with `Content-Type` and `X-Filename` headers. "Post Report" button appears on the manifest screen header when `trip.status === 'sailed' || 'pending_settlement'`.
+
+**Consumer app:** Reports tab added (4th tab, fish icon). Paginated `FlatList` with pull-to-refresh and infinite scroll. Detail screen at `/report/[reportId]` with fish count cards, captain's report text, photo grid.
+
+**Known gaps:** `BLOB_READ_WRITE_TOKEN` must be added to Vercel env before photo upload works in production.
+
+---
+
 ## Booking Flow Backlog — Deferred (post-Batch 3)
 
 These items were scoped during the booking-flow UX review but deferred beyond Batch 3 (items 14–18).

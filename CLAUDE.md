@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Steps 1–9 complete. Step 10 (fishing reports) is next.**
+**Steps 1–10 complete. Step 11 (production infra) is next.**
 
 See `docs/build-status.md` for the full per-step build narrative.
 
