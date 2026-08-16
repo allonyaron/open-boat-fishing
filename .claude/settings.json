@@ -8,6 +8,6 @@
       "Bash(npm view *)",
       "Bash(xcrun simctl list *)"
     ],
-    "ask": ["Bash(rm *)", "Bash(mv *)when you buil"]
+    "ask": ["Bash(rm *)", "Bash(mv *)", "Bash(git push *)"]
   }
 }
