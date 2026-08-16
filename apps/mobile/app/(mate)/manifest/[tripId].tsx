@@ -18,7 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import Constants from 'expo-constants';
 import { useMateAuth } from '@/lib/mate-auth-context';
@@ -174,6 +174,7 @@ export default function ManifestScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const { token } = useMateAuth();
   const navigation = useNavigation();
+  const router = useRouter();
 
   const [manifest, setManifest] = useState<MateManifest | null>(null);
   const [localCheckedIn, setLocalCheckedIn] = useState<Set<string>>(new Set());
@@ -488,12 +489,24 @@ export default function ManifestScreen() {
     <SafeAreaView style={s.safe}>
       {/* ── Trip summary bar ── */}
       <View style={[s.tripBar, { borderLeftColor: manifest.trip.vessel.color }]}>
-        <Text style={s.tripBarText}>
-          {manifest.trip.vessel.name} · {manifest.trip.product.displayName}
-        </Text>
-        <Text style={s.tripBarCount}>
-          {totalChecked}/{totalTickets} checked in
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={s.tripBarText}>
+            {manifest.trip.vessel.name} · {manifest.trip.product.displayName}
+          </Text>
+          <Text style={s.tripBarCount}>
+            {totalChecked}/{totalTickets} checked in
+          </Text>
+        </View>
+        {(manifest.trip.status === 'sailed' || manifest.trip.status === 'pending_settlement') && (
+          <TouchableOpacity
+            style={s.reportBtn}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            onPress={() => router.push({ pathname: '/(mate)/report/[tripId]' as any, params: { tripId: tripId! } })}
+            activeOpacity={0.8}
+          >
+            <Text style={s.reportBtnText}>Post Report</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* ── Capacity controls (only when certificateCapacity is configured) ── */}
@@ -660,8 +673,16 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  tripBarText: { fontSize: 14, fontWeight: '600', color: Colors.ink, flex: 1 },
+  tripBarText: { fontSize: 14, fontWeight: '600', color: Colors.ink },
   tripBarCount: { fontSize: 14, fontWeight: '700', color: Colors.teal },
+  reportBtn: {
+    backgroundColor: Colors.teal,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginLeft: 10,
+  },
+  reportBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   capacityBar: {
     backgroundColor: Colors.surface,

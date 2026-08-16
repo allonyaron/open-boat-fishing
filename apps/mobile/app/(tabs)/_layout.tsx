@@ -18,6 +18,11 @@ function PersonIcon({ color }: { color: string }) {
   return <Text style={{ color, fontSize: 22 }}>👤</Text>;
 }
 
+function FishIcon({ color }: { color: string }) {
+  const { Text } = require('react-native');
+  return <Text style={{ color, fontSize: 22 }}>🐟</Text>;
+}
+
 export default function TabLayout() {
   return (
     <Tabs
@@ -62,6 +67,13 @@ export default function TabLayout() {
         options={{
           title: 'Account',
           tabBarIcon: ({ color }) => <PersonIcon color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="reports"
+        options={{
+          title: 'Reports',
+          tabBarIcon: ({ color }) => <FishIcon color={color} />,
         }}
       />
     </Tabs>

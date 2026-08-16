@@ -58,6 +58,9 @@ importers:
       expo-device:
         specifier: ~7.1.4
         version: 7.1.4(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0)))(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))
+      expo-image-picker:
+        specifier: ^57.0.10
+        version: 57.0.10(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0)))(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))
       expo-linking:
         specifier: ^7.1.7
         version: 7.1.7(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0)))(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
@@ -128,6 +131,9 @@ importers:
       '@stripe/stripe-js':
         specifier: ^9.9.0
         version: 9.10.0
+      '@vercel/blob':
+        specifier: ^2.8.0
+        version: 2.8.0
       '@vercel/functions':
         specifier: ^3.7.7
         version: 3.7.7(ws@8.21.1)
@@ -1704,6 +1710,10 @@ packages:
     peerDependencies:
       '@urql/core': ^5.0.0
 
+  '@vercel/blob@2.8.0':
+    resolution: {integrity: sha512-Nu+HWKpkgovCh/ezlG7wCVwF7RErTzLzZMbGKFBdGBCbTKyK+s5VXPLl+0+TpNEQPH8AVaGzOpIsXUOtkqylCQ==}
+    engines: {node: '>=20.0.0'}
+
   '@vercel/cli-config@0.2.2':
     resolution: {integrity: sha512-kAy35eymNzRBfmcqEViVQge0KJ59FYEKsPqGNCSJQ7M9HTuFGWd3qPcZos1A5cZpAWRBdiYe82Bcz9P7pIZvUQ==}
 
@@ -1811,6 +1821,9 @@ packages:
 
   async-limiter@1.0.1:
     resolution: {integrity: sha512-csOlWGAcRFJaI6m+F2WKdnMKr4HhdhFVBk0H/QbJFMCr+uO2kwohwXQPxw/9OCxp05r5ghVBFSyioixx3gfkNQ==}
+
+  async-retry@1.3.3:
+    resolution: {integrity: sha512-wfr/jstw9xNi/0teMHrRW7dsz3Lt5ARhYNZ2ewpadnhaIp5mbALhOAP+EAdsC7t4Z6wqsDVv9+W6gm1Dk9mEyw==}
 
   autoprefixer@10.5.4:
     resolution: {integrity: sha512-MaU0U/za7N3r6brxD4YB/l4NSrFzLPlANv6wEuQVaIPlD3L4W9rFcQPbL/EilY9BHhHvhfcz3gInDLrEtWT4EA==}
@@ -2524,6 +2537,16 @@ packages:
       expo: '*'
       react: 19.0.0
 
+  expo-image-loader@57.0.1:
+    resolution: {integrity: sha512-uhrZKLT/cTl2mXyR28kPpVkS5O+PK9N1QA/07IFM4f5T4g0lTW1JHT3NEWwEEsGFldPmVX4j7LwUVVZxE+woug==}
+    peerDependencies:
+      expo: '*'
+
+  expo-image-picker@57.0.10:
+    resolution: {integrity: sha512-Zr00cd4RuUJlke8yN8/lKdl55UauoacF45j86zJa6oxJoe+wjlt9kkf0aGxQeoPW1JILT5Ikr3Os4+a9ROJYEw==}
+    peerDependencies:
+      expo: '*'
+
   expo-json-utils@57.0.1:
     resolution: {integrity: sha512-cgTe1NqzQdYs/WN+3nIY5IZg8s0pb0xaTUbhYvxQDn137GbwRfHoGM2se3m3Vsl4Qu+B9G4RPEK5WJDEU2Do7g==}
 
@@ -2885,6 +2908,10 @@ packages:
     resolution: {integrity: sha512-ZMERYes6pDydyuGidse7OsHxtbI7WVeUEozgR/g7rd0xUimYNlvZRE/K2MgZTjWy725IfelLeVcEM97mmtRGXw==}
     engines: {node: '>=8'}
 
+  is-buffer@2.0.5:
+    resolution: {integrity: sha512-i2R6zNFDwgEHJyQUtJEk0XFi1i0dPFn/oqjK3/vPCcDeJvW5NQ83V8QbicfF1SupOaB0h8ntgBC2YiE7dfyctQ==}
+    engines: {node: '>=4'}
+
   is-callable@1.2.7:
     resolution: {integrity: sha512-1BC0BVFhS/p0qtw6enp8e+8OD0UrK0oFLztSjNzhcKA3WDuJxxAPXzPuPtKkjEY9UUoEWlX/8fgKeu2S8i9JTA==}
     engines: {node: '>= 0.4'}
@@ -2921,6 +2948,9 @@ packages:
   is-nan@1.3.2:
     resolution: {integrity: sha512-E+zBKpQ2t6MEo1VsonYmluk9NxGrbzpeeLC2xIViuO2EjU2xsXsBPwTr3Ykv9l08UYEVEdWeRZNouaZqF6RN0w==}
     engines: {node: '>= 0.4'}
+
+  is-node-process@1.2.0:
+    resolution: {integrity: sha512-Vg4o6/fqPxIjtxgUH5QLJhwZ7gW5diGCVlXpuUfELC62CuxM1iHcRe51f2W1FDy04Ai4KJkagKjx3XaqyfRKXw==}
 
   is-number@7.0.0:
     resolution: {integrity: sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==}
@@ -3861,6 +3891,10 @@ packages:
     resolution: {integrity: sha512-9LkiTwjUh6rT555DtE9rTX+BKByPfrMzEAtnlEtdEwr3Nkffwiihqe2bWADg+OQRjt9gl6ICdmB/ZFDCGAtSow==}
     engines: {node: '>= 4'}
 
+  retry@0.13.1:
+    resolution: {integrity: sha512-XQBQ3I8W1Cge0Seh+6gjj03LbmRFWuoszgK9ooCpwYIrhhoO80pfq4cUkU5DkknwfOfFteRwlZ56PYOGYyFWdg==}
+    engines: {node: '>= 4'}
+
   reusify@1.1.0:
     resolution: {integrity: sha512-g6QUff04oZpHs0eG5p83rFLhHeV00ug/Yf9nZM6fLeUrPguBTkTQOdpAWWspMh55TZfVQDPaN3NQJfbVRAxdIw==}
     engines: {iojs: '>=1.0.0', node: '>=0.10.0'}
@@ -4152,6 +4186,10 @@ packages:
 
   throat@5.0.0:
     resolution: {integrity: sha512-fcwX4mndzpLQKBS1DVYhGAcYaYt7vsHNIvQV+WXMvnow5cgjPphq5CaayLaGsjRdSCKZFNGt7/GYAuXaNOiYCA==}
+
+  throttleit@2.1.0:
+    resolution: {integrity: sha512-nt6AMGKW1p/70DF/hGBdJB57B8Tspmbp5gfJ8ilhLnt7kkr2ye7hzD6NVG8GGErk2HWF34igrL2CXmNIkzKqKw==}
+    engines: {node: '>=18'}
 
   tinyglobby@0.2.17:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
@@ -6070,6 +6108,15 @@ snapshots:
       '@urql/core': 5.2.0
       wonka: 6.3.6
 
+  '@vercel/blob@2.8.0':
+    dependencies:
+      '@vercel/oidc': 3.8.2
+      async-retry: 1.3.3
+      is-buffer: 2.0.5
+      is-node-process: 1.2.0
+      throttleit: 2.1.0
+      undici: 6.27.0
+
   '@vercel/cli-config@0.2.2':
     dependencies:
       xdg-app-paths: 5.5.1
@@ -6158,6 +6205,10 @@ snapshots:
       util: 0.12.5
 
   async-limiter@1.0.1: {}
+
+  async-retry@1.3.3:
+    dependencies:
+      retry: 0.13.1
 
   autoprefixer@10.5.4(postcss@8.5.19):
     dependencies:
@@ -6931,6 +6982,15 @@ snapshots:
       fontfaceobserver: 2.3.0
       react: 19.0.0
 
+  expo-image-loader@57.0.1(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0)))(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)):
+    dependencies:
+      expo: 53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0)))(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+
+  expo-image-picker@57.0.10(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0)))(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)):
+    dependencies:
+      expo: 53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0)))(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+      expo-image-loader: 57.0.1(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0)))(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))
+
   expo-json-utils@57.0.1: {}
 
   expo-keep-awake@14.1.4(expo@53.0.27(@babel/core@7.29.7)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.0.0)))(react-native@0.79.6(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.0.0))(react@19.0.0))(react@19.0.0):
@@ -7372,6 +7432,8 @@ snapshots:
     dependencies:
       binary-extensions: 2.3.0
 
+  is-buffer@2.0.5: {}
+
   is-callable@1.2.7: {}
 
   is-core-module@2.16.2:
@@ -7402,6 +7464,8 @@ snapshots:
     dependencies:
       call-bind: 1.0.9
       define-properties: 1.2.1
+
+  is-node-process@1.2.0: {}
 
   is-number@7.0.0: {}
 
@@ -8497,6 +8561,8 @@ snapshots:
 
   retry@0.12.0: {}
 
+  retry@0.13.1: {}
+
   reusify@1.1.0: {}
 
   rimraf@3.0.2:
@@ -8792,6 +8858,8 @@ snapshots:
       any-promise: 1.3.0
 
   throat@5.0.0: {}
+
+  throttleit@2.1.0: {}
 
   tinyglobby@0.2.17:
     dependencies:

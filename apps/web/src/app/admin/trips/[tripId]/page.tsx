@@ -1,8 +1,21 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { upload } from "@vercel/blob/client";
+import Image from "next/image";
+
+type FishCount = { species: string; count: number };
+
+type FishingReport = {
+  id: string;
+  catchSummary: string | null;
+  fishCounts: FishCount[];
+  photoUrls: string[];
+  createdAt: string;
+  updatedAt: string;
+};
 
 type TicketRow = {
   id: string;
@@ -77,6 +90,17 @@ export default function TripDetailPage() {
   const [capacityInput, setCapacityInput] = useState("");
   const [capacityError, setCapacityError] = useState<string | null>(null);
   const [savingCapacity, setSavingCapacity] = useState(false);
+  // Fishing report state
+  const [report, setReport] = useState<FishingReport | null>(null);
+  const [reportLoaded, setReportLoaded] = useState(false);
+  const [catchSummary, setCatchSummary] = useState("");
+  const [fishCounts, setFishCounts] = useState<FishCount[]>([]);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [savingReport, setSavingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportSaved, setReportSaved] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,7 +110,24 @@ export default function TripDetailPage() {
     setLoading(false);
   }, [tripId, router]);
 
+  const loadReport = useCallback(async () => {
+    const res = await fetch(`/api/admin/trips/${tripId}/report`);
+    if (res.ok) {
+      const r: FishingReport = await res.json();
+      setReport(r);
+      setCatchSummary(r.catchSummary ?? "");
+      setFishCounts(r.fishCounts ?? []);
+      setPhotoUrls(r.photoUrls ?? []);
+    }
+    setReportLoaded(true);
+  }, [tripId]);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (data && (data.trip.status === "sailed" || data.trip.status === "pending_settlement")) {
+      loadReport();
+    }
+  }, [data, loadReport]);
 
   async function refundTicket(ticketId: string) {
     if (!confirm("Refund this ticket? This cannot be undone.")) return;
@@ -129,6 +170,60 @@ export default function TripDetailPage() {
       setCapacityError(body.error ?? "Save failed");
     }
     setSavingCapacity(false);
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setUploadingPhotos(true);
+    setReportError(null);
+    try {
+      const uploaded = await Promise.all(
+        files.map((file) =>
+          upload(`reports/${tripId}/${Date.now()}-${file.name}`, file, {
+            access: "public",
+            handleUploadUrl: "/api/reports/upload",
+          })
+        )
+      );
+      setPhotoUrls((prev) => [...prev, ...uploaded.map((u) => u.url)]);
+    } catch {
+      setReportError("Photo upload failed — check BLOB_READ_WRITE_TOKEN env var");
+    }
+    setUploadingPhotos(false);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  }
+
+  async function saveReport() {
+    setSavingReport(true);
+    setReportError(null);
+    setReportSaved(false);
+    const res = await fetch(`/api/admin/trips/${tripId}/report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ catchSummary: catchSummary || undefined, fishCounts, photoUrls }),
+    });
+    const body = await res.json();
+    if (res.ok) {
+      setReport(body);
+      setReportSaved(true);
+      setTimeout(() => setReportSaved(false), 3000);
+    } else {
+      setReportError(body.error ?? "Failed to save report");
+    }
+    setSavingReport(false);
+  }
+
+  function addFishCount() {
+    setFishCounts((prev) => [...prev, { species: "", count: 0 }]);
+  }
+
+  function updateFishCount(index: number, field: keyof FishCount, value: string | number) {
+    setFishCounts((prev) => prev.map((fc, i) => i === index ? { ...fc, [field]: value } : fc));
+  }
+
+  function removeFishCount(index: number) {
+    setFishCounts((prev) => prev.filter((_, i) => i !== index));
   }
 
   if (loading || !data) {
@@ -223,6 +318,121 @@ export default function TripDetailPage() {
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
           {refundError}
           <button onClick={() => setRefundError(null)} className="ml-4 text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
+
+      {/* Fishing Report */}
+      {(trip.status === "sailed" || trip.status === "pending_settlement") && reportLoaded && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <h2 className="text-base font-semibold text-gray-900 mb-4">
+            Fishing Report{report ? " · Posted" : ""}
+          </h2>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Catch Summary</label>
+              <textarea
+                value={catchSummary}
+                onChange={(e) => setCatchSummary(e.target.value)}
+                placeholder="Describe today's catch…"
+                rows={3}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-gray-600">Fish Counts</label>
+                <button
+                  onClick={addFishCount}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  + Add species
+                </button>
+              </div>
+              {fishCounts.length === 0 && (
+                <p className="text-xs text-gray-400 italic">No fish counts added</p>
+              )}
+              <div className="space-y-2">
+                {fishCounts.map((fc, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={fc.species}
+                      onChange={(e) => updateFishCount(i, "species", e.target.value)}
+                      placeholder="Species"
+                      className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={fc.count}
+                      onChange={(e) => updateFishCount(i, "count", parseInt(e.target.value, 10) || 0)}
+                      className="w-20 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={() => removeFishCount(i)}
+                      className="text-xs text-gray-400 hover:text-red-600 px-1"
+                      aria-label="Remove"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-gray-600">Photos</label>
+                <button
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={uploadingPhotos}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                >
+                  {uploadingPhotos ? "Uploading…" : "+ Add photos"}
+                </button>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/heic"
+                  multiple
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                />
+              </div>
+              {photoUrls.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {photoUrls.map((url, i) => (
+                    <div key={i} className="relative group">
+                      <div className="relative w-20 h-20 rounded-lg overflow-hidden bg-gray-100">
+                        <Image src={url} alt={`Photo ${i + 1}`} fill className="object-cover" sizes="80px" />
+                      </div>
+                      <button
+                        onClick={() => setPhotoUrls((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label="Remove photo"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                onClick={saveReport}
+                disabled={savingReport || uploadingPhotos}
+                className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {savingReport ? "Saving…" : report ? "Update Report" : "Post Report"}
+              </button>
+              {reportSaved && <span className="text-sm text-green-600 font-medium">Saved</span>}
+              {reportError && <span className="text-sm text-red-600">{reportError}</span>}
+            </div>
+          </div>
         </div>
       )}
 

@@ -345,6 +345,26 @@ export const capacityChanges = pgTable("capacity_changes", {
   index("capacity_changes_trip_idx").on(t.tripId),
 ]);
 
+// ─── Fishing Reports ──────────────────────────────────────────────────────────
+// Captain posts after each trip. One report per trip (unique on trip_id).
+// photoUrls stored as Vercel Blob URLs. fishCounts is free-text species counts.
+
+export const fishingReports = pgTable("fishing_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  operatorId: uuid("operator_id").notNull().references(() => operators.id),
+  tripId: uuid("trip_id").notNull().references(() => trips.id).unique(),
+  vesselId: uuid("vessel_id").notNull().references(() => vessels.id),
+  staffId: uuid("staff_id").references(() => staff.id),
+  catchSummary: text("catch_summary"),
+  fishCounts: jsonb("fish_counts").$type<{ species: string; count: number }[]>().notNull().default([]),
+  photoUrls: text("photo_urls").array().notNull().default([]),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  index("fishing_reports_operator_idx").on(t.operatorId),
+  index("fishing_reports_vessel_idx").on(t.vesselId),
+]);
+
 // ─── Payments ─────────────────────────────────────────────────────────────────
 // Stripe payment record. Written after payment_intent.succeeded webhook.
 
@@ -422,6 +442,7 @@ export const operatorsRelations = relations(operators, ({ many }) => ({
   domains: many(domains),
   holidayDates: many(holidayDates),
   pushTokens: many(pushTokens),
+  fishingReports: many(fishingReports),
 }));
 
 export const vesselsRelations = relations(vessels, ({ one, many }) => ({
@@ -429,6 +450,7 @@ export const vesselsRelations = relations(vessels, ({ one, many }) => ({
   products: many(products),
   trips: many(trips),
   staff: many(staff),
+  fishingReports: many(fishingReports),
 }));
 
 export const productsRelations = relations(products, ({ one, many }) => ({
@@ -467,6 +489,7 @@ export const tripsRelations = relations(trips, ({ one, many }) => ({
   overrides: many(tripOverrides),
   bookingItems: many(bookingItems),
   checkIns: many(checkIns),
+  fishingReport: one(fishingReports, { fields: [trips.id], references: [fishingReports.tripId] }),
 }));
 
 export const tripOverridesRelations = relations(tripOverrides, ({ one }) => ({
@@ -483,6 +506,7 @@ export const staffRelations = relations(staff, ({ one, many }) => ({
   operator: one(operators, { fields: [staff.operatorId], references: [operators.id] }),
   vessel: one(vessels, { fields: [staff.vesselId], references: [vessels.id] }),
   checkIns: many(checkIns),
+  fishingReports: many(fishingReports),
 }));
 
 export const bookingsRelations = relations(bookings, ({ one, many }) => ({
@@ -530,4 +554,11 @@ export const magicLinkOtpsRelations = relations(magicLinkOtps, ({ one }) => ({
 export const pushTokensRelations = relations(pushTokens, ({ one }) => ({
   operator: one(operators, { fields: [pushTokens.operatorId], references: [operators.id] }),
   customer: one(customers, { fields: [pushTokens.customerId], references: [customers.id] }),
+}));
+
+export const fishingReportsRelations = relations(fishingReports, ({ one }) => ({
+  operator: one(operators, { fields: [fishingReports.operatorId], references: [operators.id] }),
+  trip: one(trips, { fields: [fishingReports.tripId], references: [trips.id] }),
+  vessel: one(vessels, { fields: [fishingReports.vesselId], references: [vessels.id] }),
+  staff: one(staff, { fields: [fishingReports.staffId], references: [staff.id] }),
 }));
