@@ -14,31 +14,20 @@ import {
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import Constants from "expo-constants";
+import { API_URL } from "@/lib/api";
+import { fmtTime } from "@openboat/utils";
 import { useMateAuth } from "@/lib/mate-auth-context";
 import {
   cacheManifest,
   getCachedManifest,
   getLocalCheckedInTickets,
-  getUnsyncedCheckIns,
-  markCheckInError,
-  markCheckInSynced,
   queueCheckIn,
+  syncCheckIns,
   type MateBooking,
   type MateManifest,
   type MateTicket,
 } from "@/lib/mate-store";
 import { Colors } from "@/constants/Colors";
-
-function getApiUrl(): string {
-  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
-  if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
-    if (host) return `http://${host}:3000`;
-  }
-  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
-}
-const API_URL = getApiUrl();
 
 function uuid(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -46,15 +35,6 @@ function uuid(): string {
     const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
-}
-
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  const h = d.getHours();
-  const m = d.getMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 function ticketLabel(type: string): string {
@@ -208,35 +188,7 @@ export default function ManifestScreen() {
     if (!tripId || !token) return;
 
     // 1. Flush unsynced queue
-    const unsynced = await getUnsyncedCheckIns();
-    if (unsynced.length > 0) {
-      try {
-        const res = await fetch(`${API_URL}/api/mate/checkins`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ events: unsynced }),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as {
-            results: { localId: string; ok: boolean; error?: string }[];
-          };
-          await Promise.all(
-            data.results.map(async (r) => {
-              if (r.ok) {
-                await markCheckInSynced(r.localId);
-              } else if (r.error === "ticket_not_found" || r.error === "ticket_voided") {
-                await markCheckInError(r.localId, r.error);
-              }
-            }),
-          );
-        }
-      } catch {
-        // offline — leave in queue
-      }
-    }
+    await syncCheckIns(token, API_URL);
 
     // 2. Refresh manifest from server
     try {

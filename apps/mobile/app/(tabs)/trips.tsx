@@ -12,7 +12,8 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import Constants from "expo-constants";
+import { API_URL } from "@/lib/api";
+import { fmtTime } from "@openboat/utils";
 import { MMKV } from "react-native-mmkv";
 import { Colors } from "@/constants/Colors";
 
@@ -38,32 +39,6 @@ type Trip = {
 };
 
 type CartKey = string; // "tripId:ticketType"
-
-// ─── API URL ─────────────────────────────────────────────────────────────────
-// In dev, auto-detect the Metro host so physical devices resolve the same machine.
-// Set EXPO_PUBLIC_API_URL in .env.local to override (required for production EAS builds).
-
-function getApiUrl(): string {
-  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
-  if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
-    if (host) return `http://${host}:3000`;
-  }
-  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
-}
-
-const API_URL = getApiUrl();
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  const h = d.getHours();
-  const m = d.getMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-}
 
 function fmtCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;

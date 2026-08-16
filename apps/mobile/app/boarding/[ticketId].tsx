@@ -3,6 +3,7 @@ import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, View } f
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import * as Brightness from "expo-brightness";
 import QRCode from "react-native-qrcode-svg";
+import { fmtTime } from "@openboat/utils";
 import { Colors } from "@/constants/Colors";
 import {
   type WalletBooking,
@@ -12,15 +13,6 @@ import {
 } from "@/lib/wallet";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  const h = d.getHours();
-  const m = d.getMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-}
 
 function fmtDateLong(dateStr: string): string {
   return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {

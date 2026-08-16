@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import Constants from "expo-constants";
+import { API_URL } from "@/lib/api";
 import { useMateAuth } from "@/lib/mate-auth-context";
 import { Colors } from "@/constants/Colors";
 
@@ -28,16 +28,6 @@ type Report = {
   fishCounts: FishCount[];
   photoUrls: string[];
 };
-
-function getApiUrl(): string {
-  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
-  if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
-    if (host) return `http://${host}:3000`;
-  }
-  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
-}
-const API_URL = getApiUrl();
 
 export default function TripReportScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();

@@ -16,7 +16,8 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import Constants from "expo-constants";
+import { API_URL } from "@/lib/api";
+import { fmtTime } from "@openboat/utils";
 import { Colors } from "@/constants/Colors";
 import {
   type WalletBooking,
@@ -25,29 +26,6 @@ import {
   getAllBookings,
   upsertBooking,
 } from "@/lib/wallet";
-
-// ─── API URL ─────────────────────────────────────────────────────────────────
-
-function getApiUrl(): string {
-  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
-  if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
-    if (host) return `http://${host}:3000`;
-  }
-  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
-}
-const API_URL = getApiUrl();
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  const h = d.getHours();
-  const m = d.getMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-}
 
 function fmtDate(dateStr: string): string {
   return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {

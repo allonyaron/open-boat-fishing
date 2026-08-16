@@ -11,21 +11,11 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import Constants from "expo-constants";
+import { API_URL } from "@/lib/api";
 import { saveMateToken } from "@/lib/mate-auth";
 import { useMateAuth } from "@/lib/mate-auth-context";
 import { cacheManifest, cacheTrips, type MateManifest, type MateTrip } from "@/lib/mate-store";
 import { Colors } from "@/constants/Colors";
-
-function getApiUrl(): string {
-  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
-  if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
-    if (host) return `http://${host}:3000`;
-  }
-  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
-}
-const API_URL = getApiUrl();
 
 export default function MateLoginScreen() {
   const router = useRouter();

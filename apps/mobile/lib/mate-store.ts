@@ -190,6 +190,48 @@ export async function markCheckInError(localId: string, error: string): Promise<
   ]);
 }
 
+// ─── Check-in sync ───────────────────────────────────────────────────────────
+
+export async function syncCheckIns(
+  token: string,
+  apiUrl: string,
+  opts: {
+    getUnsynced?: () => Promise<CheckInQueueEntry[]>;
+    markSynced?: (id: string) => Promise<void>;
+    markError?: (id: string, error: string) => Promise<void>;
+  } = {},
+): Promise<void> {
+  const getUnsynced = opts.getUnsynced ?? getUnsyncedCheckIns;
+  const markSynced = opts.markSynced ?? markCheckInSynced;
+  const markError = opts.markError ?? markCheckInError;
+
+  const unsynced = await getUnsynced();
+  if (unsynced.length === 0) return;
+  try {
+    const res = await fetch(`${apiUrl}/api/mate/checkins`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ events: unsynced }),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as {
+        results: { localId: string; ok: boolean; error?: string }[];
+      };
+      await Promise.all(
+        data.results.map(async (r) => {
+          if (r.ok) {
+            await markSynced(r.localId);
+          } else if (r.error === "ticket_not_found" || r.error === "ticket_voided") {
+            await markError(r.localId, r.error);
+          }
+        }),
+      );
+    }
+  } catch {
+    // offline — leave in queue
+  }
+}
+
 export async function getLocalCheckedInTickets(tripId: string): Promise<Set<string>> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ ticket_id: string }>(

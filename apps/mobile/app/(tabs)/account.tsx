@@ -15,7 +15,8 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect } from "expo-router";
-import Constants from "expo-constants";
+import { API_URL } from "@/lib/api";
+import { fmtTime } from "@openboat/utils";
 import * as SecureStore from "expo-secure-store";
 import { Colors } from "@/constants/Colors";
 import { useCustomerAuth } from "@/lib/customer-auth-context";
@@ -24,16 +25,6 @@ import { registerForPushNotifications, type NotificationPrefs } from "@/lib/push
 
 const PUSH_TOKEN_KEY = "expo_push_token";
 const PREFS_KEY = "notification_prefs";
-
-function getApiUrl(): string {
-  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
-  if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
-    if (host) return `http://${host}:3000`;
-  }
-  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
-}
-const API_URL = getApiUrl();
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,14 +66,7 @@ function fmtDate(iso: string) {
   });
 }
 
-function fmtTime(iso: string) {
-  const d = new Date(iso);
-  const h = d.getHours(),
-    m = d.getMinutes(),
-    ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-}
+// fmtTime imported from @openboat/utils
 
 function statusColor(s: string) {
   if (s === "cancelled") return Colors.error;
