@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const { staff } = auth;
 
-  const body = await req.json().catch(() => ({})) as { events?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { events?: unknown };
   if (!Array.isArray(body.events) || body.events.length === 0) {
     return NextResponse.json({ results: [] });
   }
@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
         and(
           eq(tickets.id, ticketId),
           eq(bookingItems.tripId, tripId),
-          eq(tickets.operatorId, staff.operatorId)
-        )
+          eq(tickets.operatorId, staff.operatorId),
+        ),
       );
 
     if (!ticket) {

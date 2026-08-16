@@ -3,7 +3,7 @@
 **Status:** ✅ **RESOLVED — Option A + C's bookkeeping.** Payment code is unblocked. See "DECIDED" below.
 **Decides:** how the $1.50 gets from a passenger's card into our account, given we only earn it if the boat sails.
 
-*Options A, B, and C are retained below as the record of why. The decision is A + C.*
+_Options A, B, and C are retained below as the record of why. The decision is A + C._
 
 ---
 
@@ -31,6 +31,7 @@ A folded, operator-absorbed fee and an itemized, passenger-paid fee can settle i
 Keep destination charges. Take $1.50 at charge time. On cancellation, call `Stripe.applicationFees.createRefund()` alongside the customer refund.
 
 **Flow:**
+
 ```
 Booking  → PaymentIntent(amount: total, application_fee_amount: 150 × tickets,
                          transfer_data.destination: operator_acct)
@@ -40,11 +41,13 @@ Sail     → nothing to do; fee already collected
 ```
 
 **For:**
+
 - Least code. Stripe does the split.
 - Money arrives immediately; no invoicing system, no collections risk.
 - Reconciliation is Stripe-native — the fee shows on every charge.
 
 **Against:**
+
 - **We collect a fee we haven't earned on 100% of bookings.** Every cancellation is a reversal. Given a weather-dependent business in the Northeast, this is not an edge case; it's a weekly occurrence.
 - Reversals are extra API calls that can fail independently of the customer refund, producing drift between what we hold and what we're owed.
 - Partial-cancellation cases get fiddly: a booking spans multiple trips (multi-trip cart), one trip cancels, we must reverse exactly that trip's tickets' fees, not the whole booking's.
@@ -57,6 +60,7 @@ Sail     → nothing to do; fee already collected
 Drop `application_fee_amount`. The entire charge goes to the operator. We track sailed tickets in our own database and bill the operator monthly.
 
 **Flow:**
+
 ```
 Booking  → PaymentIntent(amount: total, transfer_data.destination: operator_acct)
          → operator receives everything; we take nothing
@@ -66,6 +70,7 @@ Month-end→ SUM(sailed tickets) × $1.50 → invoice operator
 ```
 
 **For:**
+
 - **Matches the promise exactly.** We never hold money we haven't earned. "You only pay for trips that sail" is literally true, not true-after-a-reversal.
 - No reversal logic anywhere. Cancellation is just a refund.
 - Fee-display combinations don't touch settlement at all — folded, itemized, absorbed, all settle the same.
@@ -73,6 +78,7 @@ Month-end→ SUM(sailed tickets) × $1.50 → invoice operator
 - Clean story for disputes: the charge is entirely the operator's.
 
 **Against:**
+
 - **Requires building a billing system.** Invoice generation, delivery, payment collection, dunning. This is real work and it's work that produces no customer-facing value.
 - **Collections risk.** The operator has already received the money. We're now a creditor. A captain having a bad season can simply not pay.
 - Requires a reliable "did this trip sail?" signal — see below.
@@ -84,7 +90,7 @@ Month-end→ SUM(sailed tickets) × $1.50 → invoice operator
 
 Take `application_fee_amount` at charge time but treat it as **held, not earned**. Recognize revenue on sail; auto-reverse on cancellation via the same webhook that processes the refund.
 
-This is Option A with better bookkeeping, not a third mechanism. Worth naming because it's what Option A *should* look like if chosen: the difference is an internal `fee_status` (`held` → `earned` | `reversed`) so our own reporting never counts unearned fees as revenue.
+This is Option A with better bookkeeping, not a third mechanism. Worth naming because it's what Option A _should_ look like if chosen: the difference is an internal `fee_status` (`held` → `earned` | `reversed`) so our own reporting never counts unearned fees as revenue.
 
 ---
 
@@ -97,22 +103,24 @@ Take `application_fee_amount: 150` at charge time via destination charges. Rever
 ### What this means concretely
 
 From Option A — the money mechanism:
+
 - `application_fee_amount: 150` on every PaymentIntent, via `transfer_data.destination`
 - Cancellation handler calls `applicationFees.createRefund()` alongside the customer refund, in the same transaction
 - Partial cancellations (multi-trip cart, one trip dies) reverse only that trip's tickets' fees
 
 From C — the bookkeeping layer:
+
 - `tickets.fee_status` tracks `held` → `earned` | `reversed`
 - Written `held` at charge time; flipped to `earned` when the trip is marked sailed; `reversed` on cancellation
 - Reporting counts revenue only `WHERE fee_status = 'earned'`
 
-C is not a separate mechanism. Money moves identically with or without it — Stripe does the same thing either way. C is two columns and a discipline about what we call revenue. Without it, a July Stripe balance containing $1.50 for every ticket sold through September reads as revenue, when much of it belongs to trips that haven't sailed and some of which will cancel. `fee_status` is also the audit trail: Stripe's balance and our earned-revenue number will disagree constantly *by design*, and this column is what explains the gap.
+C is not a separate mechanism. Money moves identically with or without it — Stripe does the same thing either way. C is two columns and a discipline about what we call revenue. Without it, a July Stripe balance containing $1.50 for every ticket sold through September reads as revenue, when much of it belongs to trips that haven't sailed and some of which will cancel. `fee_status` is also the audit trail: Stripe's balance and our earned-revenue number will disagree constantly _by design_, and this column is what explains the gap.
 
 ### Why, honestly
 
 Option B is the more correct model — it matches the promise exactly, has no reversal logic, and mirrors GoFish. The always-reverse cancellation policy makes B's case stronger than it was when this doc was drafted: there is now no cancellation path that avoids a reversal under A, so A is "collect on every ticket, hand back on every cancellation," not "occasional exception handling."
 
-A won anyway, on one consideration: **B makes us a creditor to a seasonal fishing business.** The operator holds all the money and we invoice monthly. With one client we know personally, fine. With ten, that's a collections function we didn't plan to build, in a business where a bad August is a normal event. A's reversal churn is a *code* problem. B's collections risk is a *business* problem. We're better equipped for the first.
+A won anyway, on one consideration: **B makes us a creditor to a seasonal fishing business.** The operator holds all the money and we invoice monthly. With one client we know personally, fine. With ten, that's a collections function we didn't plan to build, in a business where a bad August is a normal event. A's reversal churn is a _code_ problem. B's collections risk is a _business_ problem. We're better equipped for the first.
 
 ### What would flip this
 
@@ -135,9 +143,9 @@ This is the load-bearing dependency for `fee_status`, and it doesn't exist yet.
 
 ### The lag exists because the captain records cancellations late
 
-**Assume he won't record weather cancellations promptly.** Trips will be cancelled *after* their departure time has passed, and refunds will go out then. This is the expected case, not an edge case.
+**Assume he won't record weather cancellations promptly.** Trips will be cancelled _after_ their departure time has passed, and refunds will go out then. This is the expected case, not an edge case.
 
-That breaks a naive time-based rule. If `departure passed + not cancelled ⇒ sailed` fires the moment the clock rolls over, a trip cancelled three hours later has already flipped `fee_status` to `earned` and been counted as revenue. The late cancellation then has to *unwind* a recognition that should never have happened.
+That breaks a naive time-based rule. If `departure passed + not cancelled ⇒ sailed` fires the moment the clock rolls over, a trip cancelled three hours later has already flipped `fee_status` to `earned` and been counted as revenue. The late cancellation then has to _unwind_ a recognition that should never have happened.
 
 So the transition isn't at departure — it's at **departure + grace period**:
 
@@ -160,7 +168,7 @@ The aging can be a cron job or a lazy check on read (any query touching a `pendi
 
 **Revenue recognition is delayed by the grace period.** Fees earn 48h after the boat sails, not at departure. That's the cost of correctness and it's cheap.
 
-**Customers get refunded after they've already been stood up.** Someone drives to the dock, the boat isn't going, they drive home, and the refund lands whenever the captain gets around to recording it. That's a customer-experience failure the schema cannot fix. What can: make "cancel this trip" a one-tap action *at the dock* in both the mate app and the admin dashboard, and fire a push the instant it's recorded. The friction of recording a cancellation is exactly why it happens late — remove the friction rather than modeling around it.
+**Customers get refunded after they've already been stood up.** Someone drives to the dock, the boat isn't going, they drive home, and the refund lands whenever the captain gets around to recording it. That's a customer-experience failure the schema cannot fix. What can: make "cancel this trip" a one-tap action _at the dock_ in both the mate app and the admin dashboard, and fire a push the instant it's recorded. The friction of recording a cancellation is exactly why it happens late — remove the friction rather than modeling around it.
 
 ### Cancellation is one transaction
 
@@ -195,23 +203,23 @@ operators
 
 ## Cancellation matrix
 
-**Policy decided:** customers may self-cancel up to **48 hours** before departure. Inside 48 hours the self-service path is closed — but the captain can refund manually at any time, for any reason. These are two different powers, not one rule with an exception: the 48h cutoff governs the *customer's button*; the captain's refund has no time limit at all.
+**Policy decided:** customers may self-cancel up to **48 hours** before departure. Inside 48 hours the self-service path is closed — but the captain can refund manually at any time, for any reason. These are two different powers, not one rule with an exception: the 48h cutoff governs the _customer's button_; the captain's refund has no time limit at all.
 
 **Fee rule decided: always reverse on cancellation.** Automatic, captain-discretionary, or weather — if the passenger doesn't sail, we don't earn. No asterisk on "you only pay for people who actually sail."
 
-| Scenario | Customer refund | Fee | Operator |
-|---|---|---|---|
-| Weather cancellation, before departure | Full | Reversed | Keeps nothing |
-| **Weather cancellation, recorded late** (within grace window) | Full | Reversed | Keeps nothing |
-| Customer self-cancels, >48h out | Full | Reversed | Keeps nothing |
-| Customer requests <48h, captain declines | None | **Earned** | Keeps ticket revenue |
-| Captain refunds at discretion, <48h | Per his call | Reversed | Per his call |
-| No-show | None | **Earned** | Keeps ticket revenue |
-| Trip sails | — | Earned (after grace) | Keeps ticket revenue |
+| Scenario                                                      | Customer refund | Fee                  | Operator             |
+| ------------------------------------------------------------- | --------------- | -------------------- | -------------------- |
+| Weather cancellation, before departure                        | Full            | Reversed             | Keeps nothing        |
+| **Weather cancellation, recorded late** (within grace window) | Full            | Reversed             | Keeps nothing        |
+| Customer self-cancels, >48h out                               | Full            | Reversed             | Keeps nothing        |
+| Customer requests <48h, captain declines                      | None            | **Earned**           | Keeps ticket revenue |
+| Captain refunds at discretion, <48h                           | Per his call    | Reversed             | Per his call         |
+| No-show                                                       | None            | **Earned**           | Keeps ticket revenue |
+| Trip sails                                                    | —               | Earned (after grace) | Keeps ticket revenue |
 
 The late-weather row is the expected case, not an exception — see the settlement lag section. Because fees stay `held` through the grace window, a late cancellation reverses normally; nothing has to be unwound.
 
-Two notes. **No-show earns the fee** — the passenger didn't cancel, they just didn't show. The rule is "reverse on *cancellation*," not "reverse on empty seat." And the accepted tradeoff on always-reverse: a captain who refunds generously inside 48 hours costs us $1.50 each time, with nothing in the system discouraging it. At one operator's volume that's noise; revisit only if it becomes a pattern across many.
+Two notes. **No-show earns the fee** — the passenger didn't cancel, they just didn't show. The rule is "reverse on _cancellation_," not "reverse on empty seat." And the accepted tradeoff on always-reverse: a captain who refunds generously inside 48 hours costs us $1.50 each time, with nothing in the system discouraging it. At one operator's volume that's noise; revisit only if it becomes a pattern across many.
 
 **Folded pricing exception:** if `fee_display = 'folded'`, always refund the full displayed amount. Never claw a hidden fee out of a price the customer believes is just the ticket.
 
@@ -222,7 +230,7 @@ Two notes. **No-show earns the fee** — the passenger didn't cancel, they just 
 1. ~~A or B?~~ — **decided: A + C's bookkeeping.** See the DECIDED section above.
 2. ~~Free cancellation window~~ — **decided: 48h customer self-cancel cutoff; captain refund unlimited.**
 3. ~~Does the operator's refund policy differ from ours?~~ — **decided: no. Always reverse the fee on any cancellation.** The operator's ticket-refund choice inside 48h is his own; our fee reverses regardless.
-4. ~~Who marks a trip sailed at launch?~~ — **decided: time-based default with a 48h settlement grace window** (`operators.settle_grace_hrs`), because the captain is assumed *not* to record weather cancellations promptly. Migrate to mate-app close-out when that ships.
+4. ~~Who marks a trip sailed at launch?~~ — **decided: time-based default with a 48h settlement grace window** (`operators.settle_grace_hrs`), because the captain is assumed _not_ to record weather cancellations promptly. Migrate to mate-app close-out when that ships.
 5. **Fee on a $760 trip?** Flat $1.50 is 1.9% of a deep-water tuna trip and ~3% of a standard sea bass ticket. Fine for one operator; revisit if the segment widens.
 6. **Manifest headcount under collapsed ticket types.** If Coast Guard or insurance requires children broken out even when priced identically, the collapse rule (audit §6) is wrong. Unverified — captain question.
 

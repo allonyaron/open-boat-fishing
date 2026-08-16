@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -9,34 +9,29 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import Constants from 'expo-constants';
-import { saveMateToken } from '@/lib/mate-auth';
-import { useMateAuth } from '@/lib/mate-auth-context';
-import {
-  cacheManifest,
-  cacheTrips,
-  type MateManifest,
-  type MateTrip,
-} from '@/lib/mate-store';
-import { Colors } from '@/constants/Colors';
+} from "react-native";
+import { useRouter } from "expo-router";
+import Constants from "expo-constants";
+import { saveMateToken } from "@/lib/mate-auth";
+import { useMateAuth } from "@/lib/mate-auth-context";
+import { cacheManifest, cacheTrips, type MateManifest, type MateTrip } from "@/lib/mate-store";
+import { Colors } from "@/constants/Colors";
 
 function getApiUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(':')[0];
+    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
     if (host) return `http://${host}:3000`;
   }
-  throw new Error('EXPO_PUBLIC_API_URL must be set for production builds');
+  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
 }
 const API_URL = getApiUrl();
 
 export default function MateLoginScreen() {
   const router = useRouter();
   const { setAuth } = useMateAuth();
-  const [email, setEmail] = useState('');
-  const [pin, setPin] = useState('');
+  const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -45,22 +40,22 @@ export default function MateLoginScreen() {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPin = pin.trim();
     if (!cleanEmail || !cleanPin) {
-      setError('Enter your email and PIN.');
+      setError("Enter your email and PIN.");
       return;
     }
     setLoading(true);
     setError(null);
-    setStatus('Signing in...');
+    setStatus("Signing in...");
 
     try {
       const res = await fetch(`${API_URL}/api/mate/auth`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanEmail, pin: cleanPin }),
       });
-      const data = await res.json() as Record<string, unknown>;
+      const data = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
-        setError((data.error as string | undefined) ?? 'Login failed.');
+        setError((data.error as string | undefined) ?? "Login failed.");
         setLoading(false);
         setStatus(null);
         return;
@@ -71,34 +66,33 @@ export default function MateLoginScreen() {
 
       // Prefetch today's trips and all their manifests into SQLite.
       // This is what makes the app work offline at the dock.
-      setStatus('Loading today\'s trips...');
-      const localDate = new Date().toLocaleDateString('en-CA');
+      setStatus("Loading today's trips...");
+      const localDate = new Date().toLocaleDateString("en-CA");
       const tripsRes = await fetch(`${API_URL}/api/mate/trips?date=${localDate}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (tripsRes.ok) {
-        const trips = await tripsRes.json() as MateTrip[];
+        const trips = (await tripsRes.json()) as MateTrip[];
         await cacheTrips(trips);
 
-        setStatus(`Loading ${trips.length} manifest${trips.length === 1 ? '' : 's'}...`);
+        setStatus(`Loading ${trips.length} manifest${trips.length === 1 ? "" : "s"}...`);
         await Promise.allSettled(
           trips.map(async (trip) => {
-            const mRes = await fetch(
-              `${API_URL}/api/mate/manifest?tripId=${trip.id}`,
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
+            const mRes = await fetch(`${API_URL}/api/mate/manifest?tripId=${trip.id}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
             if (mRes.ok) {
-              const manifest = await mRes.json() as MateManifest;
+              const manifest = (await mRes.json()) as MateManifest;
               await cacheManifest(trip.id, manifest);
             }
-          })
+          }),
         );
       }
 
       setAuth(token);
-      router.replace('/(mate)');
+      router.replace("/(mate)");
     } catch {
-      setError('Could not connect. Check your network and try again.');
+      setError("Could not connect. Check your network and try again.");
       setLoading(false);
       setStatus(null);
     }
@@ -106,10 +100,7 @@ export default function MateLoginScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={s.kav}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={s.kav}>
         <View style={s.inner}>
           <View style={s.logo}>
             <Text style={s.logoIcon}>⚓</Text>
@@ -162,7 +153,7 @@ export default function MateLoginScreen() {
               {loading ? (
                 <View style={s.btnRow}>
                   <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
-                  <Text style={s.btnText}>{status ?? 'Loading...'}</Text>
+                  <Text style={s.btnText}>{status ?? "Loading..."}</Text>
                 </View>
               ) : (
                 <Text style={s.btnText}>Sign In</Text>
@@ -186,10 +177,10 @@ const s = StyleSheet.create({
   inner: {
     flex: 1,
     paddingHorizontal: 28,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   logo: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 40,
   },
   logoIcon: {
@@ -198,13 +189,13 @@ const s = StyleSheet.create({
   },
   logoTitle: {
     fontSize: 28,
-    fontWeight: '800',
-    color: '#fff',
+    fontWeight: "800",
+    color: "#fff",
     letterSpacing: -0.5,
   },
   logoSub: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
+    color: "rgba(255,255,255,0.7)",
     marginTop: 4,
   },
   form: {
@@ -218,10 +209,10 @@ const s = StyleSheet.create({
   },
   label: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.inkMuted,
     letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     marginBottom: 6,
   },
   input: {
@@ -244,20 +235,20 @@ const s = StyleSheet.create({
     height: 52,
     backgroundColor: Colors.teal,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 4,
   },
   btnLoading: {
     opacity: 0.8,
   },
   btnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   btnText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 });

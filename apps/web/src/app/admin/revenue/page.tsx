@@ -54,7 +54,11 @@ function fmtDate(date: string) {
 }
 
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 function toDateParam(days: number) {
@@ -67,16 +71,24 @@ export default function RevenuePage() {
   const [loading, setLoading] = useState(true);
   const [rangeDays, setRangeDays] = useState(90);
 
-  const load = useCallback(async (days: number) => {
-    setLoading(true);
-    const from = toDateParam(days);
-    const res = await fetch(`/api/admin/revenue?from=${from}`);
-    if (res.status === 401) { router.push("/admin/login"); return; }
-    if (res.ok) setData(await res.json());
-    setLoading(false);
-  }, [router]);
+  const load = useCallback(
+    async (days: number) => {
+      setLoading(true);
+      const from = toDateParam(days);
+      const res = await fetch(`/api/admin/revenue?from=${from}`);
+      if (res.status === 401) {
+        router.push("/admin/login");
+        return;
+      }
+      if (res.ok) setData(await res.json());
+      setLoading(false);
+    },
+    [router],
+  );
 
-  useEffect(() => { load(rangeDays); }, [load, rangeDays]);
+  useEffect(() => {
+    load(rangeDays);
+  }, [load, rangeDays]);
 
   const totals = data?.totals;
   const tripRows = data?.trips ?? [];
@@ -133,7 +145,8 @@ export default function RevenuePage() {
       {/* Note: Stripe's balance will differ from earned by held + reversed amounts */}
       {totals && totals.heldCents > 0 && (
         <p className="text-xs text-gray-400 -mt-6 mb-6 text-right">
-          Stripe balance includes {dollars(totals.heldCents)} held that hasn't cleared the settlement grace window yet.
+          Stripe balance includes {dollars(totals.heldCents)} held that hasn't cleared the
+          settlement grace window yet.
         </p>
       )}
 
@@ -141,7 +154,9 @@ export default function RevenuePage() {
       {loading ? (
         <div className="text-center text-gray-400 py-16">Loading…</div>
       ) : tripRows.length === 0 ? (
-        <div className="text-center text-gray-400 py-16">No trips with ticket sales in this period</div>
+        <div className="text-center text-gray-400 py-16">
+          No trips with ticket sales in this period
+        </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <table className="w-full text-sm">
@@ -166,7 +181,9 @@ export default function RevenuePage() {
                       <div>
                         <div className="font-medium text-gray-900">
                           {row.vesselName}
-                          <span className="font-normal text-gray-400 ml-1">· {row.productName}</span>
+                          <span className="font-normal text-gray-400 ml-1">
+                            · {row.productName}
+                          </span>
                         </div>
                         <div className="text-xs text-gray-400">
                           {fmtDate(row.departureDate)} {fmtTime(row.startTime)}
@@ -178,7 +195,9 @@ export default function RevenuePage() {
                     {row.earnedCents > 0 ? (
                       <span className="text-green-700 font-medium">
                         {dollars(row.earnedCents)}
-                        <span className="text-green-400 font-normal text-xs ml-1">×{row.earnedCount}</span>
+                        <span className="text-green-400 font-normal text-xs ml-1">
+                          ×{row.earnedCount}
+                        </span>
                       </span>
                     ) : (
                       <span className="text-gray-300">—</span>
@@ -188,7 +207,9 @@ export default function RevenuePage() {
                     {row.heldCents > 0 ? (
                       <span className="text-yellow-600 font-medium">
                         {dollars(row.heldCents)}
-                        <span className="text-yellow-400 font-normal text-xs ml-1">×{row.heldCount}</span>
+                        <span className="text-yellow-400 font-normal text-xs ml-1">
+                          ×{row.heldCount}
+                        </span>
                       </span>
                     ) : (
                       <span className="text-gray-300">—</span>
@@ -198,7 +219,9 @@ export default function RevenuePage() {
                     {row.reversedCents > 0 ? (
                       <span className="text-red-600 font-medium">
                         −{dollars(row.reversedCents)}
-                        <span className="text-red-400 font-normal text-xs ml-1">×{row.reversedCount}</span>
+                        <span className="text-red-400 font-normal text-xs ml-1">
+                          ×{row.reversedCount}
+                        </span>
                       </span>
                     ) : (
                       <span className="text-gray-300">—</span>
@@ -215,9 +238,15 @@ export default function RevenuePage() {
               <tfoot>
                 <tr className="border-t-2 border-gray-200 bg-gray-50 font-medium">
                   <td className="px-4 py-3 text-gray-700">Total</td>
-                  <td className="px-4 py-3 text-right text-green-700">{dollars(totals.earnedCents)}</td>
-                  <td className="px-4 py-3 text-right text-yellow-600">{dollars(totals.heldCents)}</td>
-                  <td className="px-4 py-3 text-right text-red-600">−{dollars(totals.reversedCents)}</td>
+                  <td className="px-4 py-3 text-right text-green-700">
+                    {dollars(totals.earnedCents)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-yellow-600">
+                    {dollars(totals.heldCents)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-red-600">
+                    −{dollars(totals.reversedCents)}
+                  </td>
                   <td className="px-4 py-3" />
                 </tr>
               </tfoot>
@@ -230,7 +259,12 @@ export default function RevenuePage() {
 }
 
 function SummaryCard({
-  label, description, cents, count, color, loading,
+  label,
+  description,
+  cents,
+  count,
+  color,
+  loading,
 }: {
   label: string;
   description: string;
@@ -240,9 +274,17 @@ function SummaryCard({
   loading: boolean;
 }) {
   const colors = {
-    green:  { card: "border-green-100 bg-green-50",  amount: "text-green-800", sub: "text-green-500" },
-    yellow: { card: "border-yellow-100 bg-yellow-50", amount: "text-yellow-800", sub: "text-yellow-500" },
-    red:    { card: "border-red-100 bg-red-50",       amount: "text-red-800",   sub: "text-red-500" },
+    green: {
+      card: "border-green-100 bg-green-50",
+      amount: "text-green-800",
+      sub: "text-green-500",
+    },
+    yellow: {
+      card: "border-yellow-100 bg-yellow-50",
+      amount: "text-yellow-800",
+      sub: "text-yellow-500",
+    },
+    red: { card: "border-red-100 bg-red-50", amount: "text-red-800", sub: "text-red-500" },
   }[color];
 
   return (
@@ -274,7 +316,9 @@ const STATUS_COLOR: Record<string, string> = {
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[status] ?? "bg-gray-100 text-gray-600"}`}>
+    <span
+      className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[status] ?? "bg-gray-100 text-gray-600"}`}
+    >
       {STATUS_LABEL[status] ?? status}
     </span>
   );

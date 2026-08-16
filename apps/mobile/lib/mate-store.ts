@@ -1,4 +1,4 @@
-import * as SQLite from 'expo-sqlite';
+import * as SQLite from "expo-sqlite";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ export type CheckInQueueEntry = {
   localId: string;
   ticketId: string;
   tripId: string;
-  method: 'qr' | 'name_search' | 'manual';
+  method: "qr" | "name_search" | "manual";
   note: string | null;
   checkedInAt: string;
   synced: boolean;
@@ -60,7 +60,7 @@ let _db: SQLite.SQLiteDatabase | null = null;
 
 async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!_db) {
-    _db = await SQLite.openDatabaseAsync('mate.db');
+    _db = await SQLite.openDatabaseAsync("mate.db");
     await _db.execAsync(`
       CREATE TABLE IF NOT EXISTS mate_trips (
         id TEXT PRIMARY KEY,
@@ -93,12 +93,13 @@ export async function cacheTrips(tripList: MateTrip[]): Promise<void> {
   const db = await getDb();
   const now = new Date().toISOString();
   await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM mate_trips');
+    await db.runAsync("DELETE FROM mate_trips");
     for (const trip of tripList) {
-      await db.runAsync(
-        'INSERT INTO mate_trips (id, raw_json, cached_at) VALUES (?, ?, ?)',
-        [trip.id, JSON.stringify(trip), now]
-      );
+      await db.runAsync("INSERT INTO mate_trips (id, raw_json, cached_at) VALUES (?, ?, ?)", [
+        trip.id,
+        JSON.stringify(trip),
+        now,
+      ]);
     }
   });
 }
@@ -106,7 +107,7 @@ export async function cacheTrips(tripList: MateTrip[]): Promise<void> {
 export async function getCachedTrips(): Promise<MateTrip[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ raw_json: string }>(
-    'SELECT raw_json FROM mate_trips ORDER BY rowid'
+    "SELECT raw_json FROM mate_trips ORDER BY rowid",
   );
   return rows.map((r) => JSON.parse(r.raw_json) as MateTrip);
 }
@@ -119,15 +120,15 @@ export async function cacheManifest(tripId: string, manifest: MateManifest): Pro
   await db.runAsync(
     `INSERT INTO mate_manifests (trip_id, raw_json, cached_at) VALUES (?, ?, ?)
      ON CONFLICT(trip_id) DO UPDATE SET raw_json = excluded.raw_json, cached_at = excluded.cached_at`,
-    [tripId, JSON.stringify(manifest), now]
+    [tripId, JSON.stringify(manifest), now],
   );
 }
 
 export async function getCachedManifest(tripId: string): Promise<MateManifest | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ raw_json: string }>(
-    'SELECT raw_json FROM mate_manifests WHERE trip_id = ?',
-    [tripId]
+    "SELECT raw_json FROM mate_manifests WHERE trip_id = ?",
+    [tripId],
   );
   return row ? (JSON.parse(row.raw_json) as MateManifest) : null;
 }
@@ -135,7 +136,7 @@ export async function getCachedManifest(tripId: string): Promise<MateManifest | 
 // ─── Check-in queue ───────────────────────────────────────────────────────────
 
 export async function queueCheckIn(
-  entry: Omit<CheckInQueueEntry, 'synced' | 'syncError'>
+  entry: Omit<CheckInQueueEntry, "synced" | "syncError">,
 ): Promise<void> {
   const db = await getDb();
   await db.runAsync(
@@ -149,7 +150,7 @@ export async function queueCheckIn(
       entry.method,
       entry.note ?? null,
       entry.checkedInAt,
-    ]
+    ],
   );
 }
 
@@ -163,12 +164,12 @@ export async function getUnsyncedCheckIns(): Promise<CheckInQueueEntry[]> {
     note: string | null;
     checked_in_at: string;
     sync_error: string | null;
-  }>('SELECT * FROM mate_checkin_queue WHERE synced = 0');
+  }>("SELECT * FROM mate_checkin_queue WHERE synced = 0");
   return rows.map((r) => ({
     localId: r.local_id,
     ticketId: r.ticket_id,
     tripId: r.trip_id,
-    method: r.method as 'qr' | 'name_search' | 'manual',
+    method: r.method as "qr" | "name_search" | "manual",
     note: r.note,
     checkedInAt: r.checked_in_at,
     synced: false,
@@ -178,25 +179,22 @@ export async function getUnsyncedCheckIns(): Promise<CheckInQueueEntry[]> {
 
 export async function markCheckInSynced(localId: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync(
-    'UPDATE mate_checkin_queue SET synced = 1 WHERE local_id = ?',
-    [localId]
-  );
+  await db.runAsync("UPDATE mate_checkin_queue SET synced = 1 WHERE local_id = ?", [localId]);
 }
 
 export async function markCheckInError(localId: string, error: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync(
-    'UPDATE mate_checkin_queue SET sync_error = ? WHERE local_id = ?',
-    [error, localId]
-  );
+  await db.runAsync("UPDATE mate_checkin_queue SET sync_error = ? WHERE local_id = ?", [
+    error,
+    localId,
+  ]);
 }
 
 export async function getLocalCheckedInTickets(tripId: string): Promise<Set<string>> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ ticket_id: string }>(
-    'SELECT ticket_id FROM mate_checkin_queue WHERE trip_id = ?',
-    [tripId]
+    "SELECT ticket_id FROM mate_checkin_queue WHERE trip_id = ?",
+    [tripId],
   );
   return new Set(rows.map((r) => r.ticket_id));
 }

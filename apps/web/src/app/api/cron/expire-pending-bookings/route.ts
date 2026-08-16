@@ -39,17 +39,11 @@ export async function GET(req: NextRequest) {
         isNull(payments.bookingId),
         or(
           // New path: booking has an explicit expiry and it has passed
-          and(
-            sql`${bookings.holdExpiresAt} is not null`,
-            lt(bookings.holdExpiresAt, now)
-          ),
+          and(sql`${bookings.holdExpiresAt} is not null`, lt(bookings.holdExpiresAt, now)),
           // Legacy path: no expiry set, fall back to 30-min window
-          and(
-            sql`${bookings.holdExpiresAt} is null`,
-            lt(bookings.createdAt, legacyCutoff)
-          )
-        )
-      )
+          and(sql`${bookings.holdExpiresAt} is null`, lt(bookings.createdAt, legacyCutoff)),
+        ),
+      ),
     );
 
   if (staleBookings.length === 0) {
@@ -73,7 +67,7 @@ export async function GET(req: NextRequest) {
         } catch (stripeErr) {
           console.error(
             `Failed to cancel Payment Intent ${booking.stripePaymentIntentId} for booking ${booking.id}:`,
-            stripeErr
+            stripeErr,
           );
           // Non-fatal: proceed with seat restoration regardless
         }

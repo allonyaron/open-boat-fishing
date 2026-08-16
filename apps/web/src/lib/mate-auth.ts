@@ -45,7 +45,7 @@ function verifyMateToken(token: string): MateTokenPayload | null {
 }
 
 export async function requireMate(
-  req: NextRequest
+  req: NextRequest,
 ): Promise<{ staff: MateTokenPayload } | NextResponse> {
   const auth = req.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) {

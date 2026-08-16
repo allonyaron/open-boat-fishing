@@ -1,6 +1,6 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "expo-secure-store";
 
-const TOKEN_KEY = 'customer_token';
+const TOKEN_KEY = "customer_token";
 
 export type CustomerProfile = {
   customerId: string;
@@ -24,9 +24,9 @@ export async function clearCustomerToken(): Promise<void> {
 
 export function decodeCustomerToken(token: string): CustomerProfile | null {
   try {
-    const [data] = token.split('.');
+    const [data] = token.split(".");
     const payload = JSON.parse(
-      Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
+      Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"),
     ) as CustomerProfile & { exp: number };
     if (payload.exp < Date.now() / 1000) return null;
     return payload;

@@ -44,10 +44,7 @@ export default async function StatusPage() {
     .innerJoin(products, eq(products.id, productPrices.productId))
     .where(eq(products.operatorId, operator.id));
 
-  const domainRows = await db
-    .select()
-    .from(domains)
-    .where(eq(domains.operatorId, operator.id));
+  const domainRows = await db.select().from(domains).where(eq(domains.operatorId, operator.id));
 
   const checks = [
     { label: "Next.js + Railway Postgres", done: true, detail: "App running, DB connected" },
@@ -55,12 +52,37 @@ export default async function StatusPage() {
     { label: "Seed data", done: true, detail: "4 vessels · 61 products · 98 prices" },
     { label: "GET /api/trips", done: true, detail: "Calendar data endpoint live" },
     { label: "Calendar UI + side panel", done: true, detail: "Month view, trip selection, cart" },
-    { label: "Stripe Connect + checkout", done: true, detail: "PaymentIntent → Laura's account, $2.50 fee" },
-    { label: "Booking confirmation page", done: true, detail: "Confirmation code, trip details, total" },
-    { label: "Stripe webhook → confirm booking", done: true, detail: "payment_intent.succeeded → confirm + decrement seats + payments row" },
-    { label: "Boarding pass page", done: true, detail: "/boarding/[bookingId] — printable, QR code, vessel color" },
-    { label: "Customer info form", done: false, detail: "Collect name / email / phone before checkout (currently hardcoded 'Guest')" },
-    { label: "Stripe webhook — production setup", done: false, detail: "Register endpoint in Stripe Dashboard + set whsec_ in Vercel env vars before go-live" },
+    {
+      label: "Stripe Connect + checkout",
+      done: true,
+      detail: "PaymentIntent → Laura's account, $2.50 fee",
+    },
+    {
+      label: "Booking confirmation page",
+      done: true,
+      detail: "Confirmation code, trip details, total",
+    },
+    {
+      label: "Stripe webhook → confirm booking",
+      done: true,
+      detail: "payment_intent.succeeded → confirm + decrement seats + payments row",
+    },
+    {
+      label: "Boarding pass page",
+      done: true,
+      detail: "/boarding/[bookingId] — printable, QR code, vessel color",
+    },
+    {
+      label: "Customer info form",
+      done: false,
+      detail: "Collect name / email / phone before checkout (currently hardcoded 'Guest')",
+    },
+    {
+      label: "Stripe webhook — production setup",
+      done: false,
+      detail:
+        "Register endpoint in Stripe Dashboard + set whsec_ in Vercel env vars before go-live",
+    },
     { label: "Apple / Google Wallet", done: false, detail: "Passes delivered post-payment" },
     { label: "Admin dashboard", done: false, detail: "Schedule CRUD, materialize, refunds" },
     { label: "Expo mate app", done: false, detail: "QR scanner, offline manifest, check-in" },
@@ -114,9 +136,7 @@ export default async function StatusPage() {
                     className="text-xs bg-white/10 rounded-full px-3 py-1 text-gray-300"
                   >
                     {d.domain}
-                    {d.primary && (
-                      <span className="ml-1 text-blue-400">primary</span>
-                    )}
+                    {d.primary && <span className="ml-1 text-blue-400">primary</span>}
                   </span>
                 ))}
               </div>
@@ -135,14 +155,15 @@ export default async function StatusPage() {
             />
           </div>
           <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>{doneCount} of {checks.length} milestones done</span>
+            <span>
+              {doneCount} of {checks.length} milestones done
+            </span>
             <span>{checks.length - doneCount} remaining</span>
           </div>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-8 py-10 space-y-12">
-
         {/* Stats row */}
         <div className="grid grid-cols-3 gap-4">
           {[
@@ -150,7 +171,10 @@ export default async function StatusPage() {
             { label: "Products", value: totalProducts },
             { label: "Price rows", value: totalPrices },
           ].map((s) => (
-            <div key={s.label} className="bg-white/5 border border-white/10 rounded-2xl p-5 text-center">
+            <div
+              key={s.label}
+              className="bg-white/5 border border-white/10 rounded-2xl p-5 text-center"
+            >
               <div className="text-3xl font-bold">{s.value}</div>
               <div className="text-gray-400 text-sm mt-1">{s.label}</div>
             </div>
@@ -174,9 +198,7 @@ export default async function StatusPage() {
               >
                 <div
                   className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
-                    c.done
-                      ? "bg-emerald-500 text-white"
-                      : "bg-white/10 text-gray-500"
+                    c.done ? "bg-emerald-500 text-white" : "bg-white/10 text-gray-500"
                   }`}
                 >
                   {c.done ? "✓" : i + 1}
@@ -252,7 +274,10 @@ export default async function StatusPage() {
               { label: "Name", value: operator.name },
               { label: "Slug", value: operator.slug },
               { label: "Email from", value: operator.emailFrom },
-              { label: "Stripe", value: operator.stripeOnboardingComplete ? "Connected" : "Not connected" },
+              {
+                label: "Stripe",
+                value: operator.stripeOnboardingComplete ? "Connected" : "Not connected",
+              },
             ].map((row, i, arr) => (
               <div
                 key={row.label}
@@ -261,18 +286,19 @@ export default async function StatusPage() {
                 }`}
               >
                 <span className="text-gray-500 w-32 flex-shrink-0">{row.label}</span>
-                <span className={`font-medium ${
-                  row.label === "Stripe" && !operator.stripeOnboardingComplete
-                    ? "text-amber-400"
-                    : "text-white"
-                }`}>
+                <span
+                  className={`font-medium ${
+                    row.label === "Stripe" && !operator.stripeOnboardingComplete
+                      ? "text-amber-400"
+                      : "text-white"
+                  }`}
+                >
                   {row.value}
                 </span>
               </div>
             ))}
           </div>
         </section>
-
       </div>
     </main>
   );

@@ -6,7 +6,7 @@ import { sendOtpEmail } from "@/lib/email";
 import { eq } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({})) as { email?: string };
+  const body = (await req.json().catch(() => ({}))) as { email?: string };
   const email = body.email?.toLowerCase().trim();
 
   if (!email || !email.includes("@")) {

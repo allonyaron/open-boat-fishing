@@ -3,20 +3,40 @@
 @tailwind utilities;
 
 @keyframes slide-up {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 @keyframes fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes modal-appear {
-  from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); }
-  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
-.animate-slide-up { animation: slide-up 0.32s cubic-bezier(0.32, 0.72, 0, 1); }
-.animate-fade-in  { animation: fade-in 0.2s ease; }
+.animate-slide-up {
+  animation: slide-up 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease;
+}
 /* On desktop the overlay is a centered modal — replace slide-up with a fade+scale */
 @media (min-width: 768px) {
-  .animate-slide-up { animation: modal-appear 0.22s ease; }
+  .animate-slide-up {
+    animation: modal-appear 0.22s ease;
+  }
 }

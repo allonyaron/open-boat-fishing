@@ -6,10 +6,7 @@ export async function GET(req: NextRequest) {
   const month = req.nextUrl.searchParams.get("month");
 
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-    return NextResponse.json(
-      { error: "month param required, format: YYYY-MM" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "month param required, format: YYYY-MM" }, { status: 400 });
   }
 
   const [year, mon] = month.split("-").map(Number);
@@ -28,7 +25,7 @@ export async function GET(req: NextRequest) {
         eq(t.operatorId, operator.id),
         gte(t.departureDate, startDate),
         lte(t.departureDate, endDate),
-        eq(t.status, "scheduled")
+        eq(t.status, "scheduled"),
       ),
     with: {
       vessel: true,

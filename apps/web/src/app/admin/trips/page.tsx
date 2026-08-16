@@ -68,7 +68,9 @@ export default function AdminTripsPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function cancelTrip() {
     if (!modal) return;
@@ -135,7 +137,9 @@ export default function AdminTripsPage() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-gray-900">{trip.vessel.name}</span>
                             <span className="text-gray-400">·</span>
-                            <span className="text-gray-600 text-sm">{trip.product.displayName}</span>
+                            <span className="text-gray-600 text-sm">
+                              {trip.product.displayName}
+                            </span>
                             <span
                               className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[trip.status]}`}
                             >
@@ -143,7 +147,12 @@ export default function AdminTripsPage() {
                             </span>
                           </div>
                           <div className="text-sm text-gray-500 mt-0.5">
-                            {fmt(trip.startTime)} → {new Date(trip.endTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                            {fmt(trip.startTime)} →{" "}
+                            {new Date(trip.endTime).toLocaleTimeString("en-US", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                              hour12: true,
+                            })}
                             {trip.cancellationReason && (
                               <span className="ml-2 text-red-500">· {trip.cancellationReason}</span>
                             )}
@@ -227,9 +236,7 @@ export default function AdminTripsPage() {
               </select>
             </div>
 
-            {modal.error && (
-              <p className="text-sm text-red-600 mb-3">{modal.error}</p>
-            )}
+            {modal.error && <p className="text-sm text-red-600 mb-3">{modal.error}</p>}
 
             <div className="flex gap-3">
               <button

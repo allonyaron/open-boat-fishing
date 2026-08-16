@@ -4,10 +4,7 @@ import { requireAdmin } from "@/lib/session";
 import { trips, vessels, products, bookingItems, bookings, tickets, checkIns } from "@openboat/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { tripId: string } }
-) {
+export async function GET(req: NextRequest, { params }: { params: { tripId: string } }) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
   const { session } = auth;
@@ -38,10 +35,7 @@ export async function GET(
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  const itemRows = await db
-    .select()
-    .from(bookingItems)
-    .where(eq(bookingItems.tripId, tripId));
+  const itemRows = await db.select().from(bookingItems).where(eq(bookingItems.tripId, tripId));
 
   if (itemRows.length === 0) {
     return NextResponse.json({ trip, bookings: [] });
@@ -51,7 +45,15 @@ export async function GET(
 
   const [bookingRows, ticketRows, checkInRows] = await Promise.all([
     db.select().from(bookings).where(inArray(bookings.id, bookingIds)),
-    db.select().from(tickets).where(inArray(tickets.bookingItemId, itemRows.map((i) => i.id))),
+    db
+      .select()
+      .from(tickets)
+      .where(
+        inArray(
+          tickets.bookingItemId,
+          itemRows.map((i) => i.id),
+        ),
+      ),
     db.select().from(checkIns).where(eq(checkIns.tripId, tripId)),
   ]);
 
@@ -90,16 +92,13 @@ export async function GET(
   return NextResponse.json({ trip, bookings: bookingList });
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { tripId: string } }
-) {
+export async function PATCH(req: NextRequest, { params }: { params: { tripId: string } }) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
   const { session } = auth;
 
   const { tripId } = params;
-  const body = await req.json().catch(() => ({})) as { capacity?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { capacity?: unknown };
 
   const newCapacity = Number(body.capacity);
   if (!Number.isInteger(newCapacity) || newCapacity < 1) {
@@ -107,7 +106,12 @@ export async function PATCH(
   }
 
   const [trip] = await db
-    .select({ id: trips.id, capacity: trips.capacity, seatsRemaining: trips.seatsRemaining, status: trips.status })
+    .select({
+      id: trips.id,
+      capacity: trips.capacity,
+      seatsRemaining: trips.seatsRemaining,
+      status: trips.status,
+    })
     .from(trips)
     .where(and(eq(trips.id, tripId), eq(trips.operatorId, session.operatorId)));
 
@@ -128,7 +132,7 @@ export async function PATCH(
   if (newCapacity < sold) {
     return NextResponse.json(
       { error: `Cannot set capacity below tickets already sold (${sold})` },
-      { status: 422 }
+      { status: 422 },
     );
   }
 

@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const { customer } = auth;
 
   // customerEmail and customerId come from the verified token — not trusted from the body.
-  const body = await req.json().catch(() => ({})) as {
+  const body = (await req.json().catch(() => ({}))) as {
     expoToken?: string;
     notifyReminders?: boolean;
     notifyCancellations?: boolean;
@@ -45,8 +45,12 @@ export async function POST(req: NextRequest) {
         customerEmail: customer.email,
         active: true,
         ...(body.notifyReminders !== undefined && { notifyReminders: body.notifyReminders }),
-        ...(body.notifyCancellations !== undefined && { notifyCancellations: body.notifyCancellations }),
-        ...(body.notifyConfirmations !== undefined && { notifyConfirmations: body.notifyConfirmations }),
+        ...(body.notifyCancellations !== undefined && {
+          notifyCancellations: body.notifyCancellations,
+        }),
+        ...(body.notifyConfirmations !== undefined && {
+          notifyConfirmations: body.notifyConfirmations,
+        }),
         updatedAt: new Date(),
       },
     });
@@ -73,8 +77,8 @@ export async function DELETE(req: NextRequest) {
       and(
         eq(pushTokens.operatorId, operator.id),
         eq(pushTokens.expoToken, expoToken),
-        eq(pushTokens.customerEmail, customer.email)
-      )
+        eq(pushTokens.customerEmail, customer.email),
+      ),
     );
 
   return NextResponse.json({ ok: true });

@@ -31,25 +31,37 @@ async function seed() {
   let noPriceCount = 0;
 
   for (const { products, ...vesselFields } of fleetData) {
-    const [vessel] = await db.insert(schema.vessels).values({
-      operatorId: op.id,
-      ...vesselFields,
-    }).returning();
+    const [vessel] = await db
+      .insert(schema.vessels)
+      .values({
+        operatorId: op.id,
+        ...vesselFields,
+      })
+      .returning();
 
     for (const p of products) {
-      const [product] = await db.insert(schema.products).values({
-        operatorId:    op.id,
-        vesselId:      vessel.id,
-        category:      p.category,
-        displayName:   p.displayName,
-        showRemaining: p.showRemaining,
-      }).returning();
+      const [product] = await db
+        .insert(schema.products)
+        .values({
+          operatorId: op.id,
+          vesselId: vessel.id,
+          category: p.category,
+          displayName: p.displayName,
+          showRemaining: p.showRemaining,
+        })
+        .returning();
 
       productCount++;
 
-      const prices: { productId: string; ticketType: "adult" | "child" | "senior"; priceCents: number }[] = [];
-      if (p.adult) prices.push({ productId: product.id, ticketType: "adult", priceCents: toCents(p.adult) });
-      if (p.child) prices.push({ productId: product.id, ticketType: "child", priceCents: toCents(p.child) });
+      const prices: {
+        productId: string;
+        ticketType: "adult" | "child" | "senior";
+        priceCents: number;
+      }[] = [];
+      if (p.adult)
+        prices.push({ productId: product.id, ticketType: "adult", priceCents: toCents(p.adult) });
+      if (p.child)
+        prices.push({ productId: product.id, ticketType: "child", priceCents: toCents(p.child) });
 
       if (prices.length > 0) {
         await db.insert(schema.productPrices).values(prices);
@@ -63,9 +75,7 @@ async function seed() {
   }
 
   // ── Domains ───────────────────────────────────────────────────────────────
-  await db.insert(schema.domains).values(
-    domainData.map((d) => ({ operatorId: op.id, ...d }))
-  );
+  await db.insert(schema.domains).values(domainData.map((d) => ({ operatorId: op.id, ...d })));
   console.log(`  ✓ Domains: ${domainData.map((d) => d.domain).join(", ")}`);
 
   console.log(`\n✓ Seed complete`);

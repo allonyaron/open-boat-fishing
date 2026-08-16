@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from "react";
 import {
   getCustomerToken,
   clearCustomerToken,
   decodeCustomerToken,
   type CustomerProfile,
-} from './customer-auth';
+} from "./customer-auth";
 
 type CustomerAuthCtx = {
   token: string | null;
@@ -43,9 +43,7 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
   const customer = token ? decodeCustomerToken(token) : null;
 
   return (
-    <Ctx.Provider value={{ token, customer, loading, setAuth, logout }}>
-      {children}
-    </Ctx.Provider>
+    <Ctx.Provider value={{ token, customer, loading, setAuth, logout }}>{children}</Ctx.Provider>
   );
 }
 

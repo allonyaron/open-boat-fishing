@@ -6,7 +6,7 @@ import { signCustomerToken } from "@/lib/customer-auth";
 import { and, eq, gt, desc } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({})) as { email?: string; otp?: string };
+  const body = (await req.json().catch(() => ({}))) as { email?: string; otp?: string };
   const email = body.email?.toLowerCase().trim();
   const otp = body.otp?.trim();
 
@@ -26,8 +26,8 @@ export async function POST(req: NextRequest) {
         eq(magicLinkOtps.operatorId, operator.id),
         eq(magicLinkOtps.email, email),
         eq(magicLinkOtps.used, false),
-        gt(magicLinkOtps.expiresAt, new Date())
-      )
+        gt(magicLinkOtps.expiresAt, new Date()),
+      ),
     )
     .orderBy(desc(magicLinkOtps.createdAt))
     .limit(1);

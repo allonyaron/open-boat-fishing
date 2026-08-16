@@ -39,7 +39,9 @@ export function CheckoutForm({
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [expired, setExpired] = useState(false);
-  const [msLeft, setMsLeft] = useState<number>(() => new Date(holdExpiresAt).getTime() - Date.now());
+  const [msLeft, setMsLeft] = useState<number>(
+    () => new Date(holdExpiresAt).getTime() - Date.now(),
+  );
 
   // Countdown ticker — only renders when under 2 minutes
   useEffect(() => {
@@ -82,8 +84,7 @@ export function CheckoutForm({
 
     if (error) {
       const isExpired =
-        error.code === "payment_intent_unexpected_state" ||
-        error.type === "invalid_request_error";
+        error.code === "payment_intent_unexpected_state" || error.type === "invalid_request_error";
 
       if (isExpired) {
         setExpired(true);
@@ -116,12 +117,21 @@ export function CheckoutForm({
         <div className="space-y-2">
           {cartItems.map((item) => (
             <div key={item.tripId} className="text-[13px] text-muted flex gap-2 items-start">
-              <div className="w-2 h-2 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: item.vesselColor }} />
+              <div
+                className="w-2 h-2 rounded-full mt-1 flex-shrink-0"
+                style={{ backgroundColor: item.vesselColor }}
+              />
               <div>
                 <span className="font-semibold text-ink">{item.productName}</span>
-                {" · "}{item.vesselName}
-                {" · "}{new Date(item.departureDate + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                {" · "}{item.tickets.map((t) => `${t.quantity} ${t.ticketType}`).join(", ")}
+                {" · "}
+                {item.vesselName}
+                {" · "}
+                {new Date(item.departureDate + "T12:00:00Z").toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })}
+                {" · "}
+                {item.tickets.map((t) => `${t.quantity} ${t.ticketType}`).join(", ")}
               </div>
             </div>
           ))}
@@ -144,11 +154,21 @@ export function CheckoutForm({
     <form onSubmit={handleSubmit} className="space-y-6">
       {showCountdown && (
         <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-[12px] px-4 py-3">
-          <svg className="text-amber-600 flex-shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          <svg
+            className="text-amber-600 flex-shrink-0"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
           </svg>
           <span className="text-[13px] text-amber-900 font-medium">
-            Reservation held for <span className="font-grotesk font-bold">{fmtCountdown(msLeft)}</span>
+            Reservation held for{" "}
+            <span className="font-grotesk font-bold">{fmtCountdown(msLeft)}</span>
           </span>
         </div>
       )}
@@ -163,8 +183,10 @@ export function CheckoutForm({
 
       <p className="text-xs text-faint text-center">
         By completing this purchase you accept the{" "}
-        <a href="/terms" className="underline text-teal">terms and conditions</a>.
-        Payments processed securely by Stripe.
+        <a href="/terms" className="underline text-teal">
+          terms and conditions
+        </a>
+        . Payments processed securely by Stripe.
       </p>
 
       <button

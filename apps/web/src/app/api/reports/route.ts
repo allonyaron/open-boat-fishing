@@ -38,8 +38,8 @@ export async function GET(req: NextRequest) {
       and(
         eq(fishingReports.operatorId, operator.id),
         cursor ? lte(fishingReports.createdAt, new Date(cursor)) : undefined,
-        vesselId ? eq(fishingReports.vesselId, vesselId) : undefined
-      )
+        vesselId ? eq(fishingReports.vesselId, vesselId) : undefined,
+      ),
     )
     .orderBy(desc(fishingReports.createdAt))
     .limit(PAGE_SIZE + 1);

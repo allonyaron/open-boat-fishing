@@ -22,7 +22,10 @@ function fmtDate(date: string) {
 }
 
 export default async function FishingReportsPage() {
-  const [operator] = await db.select({ id: operators.id, name: operators.name }).from(operators).limit(1);
+  const [operator] = await db
+    .select({ id: operators.id, name: operators.name })
+    .from(operators)
+    .limit(1);
   if (!operator) return null;
 
   const rows = await db
@@ -90,7 +93,9 @@ export default async function FishingReportsPage() {
               )}
 
               {r.photoUrls.length > 0 && (
-                <p className="text-xs text-gray-400 mt-2">{r.photoUrls.length} photo{r.photoUrls.length !== 1 ? "s" : ""}</p>
+                <p className="text-xs text-gray-400 mt-2">
+                  {r.photoUrls.length} photo{r.photoUrls.length !== 1 ? "s" : ""}
+                </p>
               )}
             </Link>
           ))}

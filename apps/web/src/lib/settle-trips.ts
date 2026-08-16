@@ -28,8 +28,8 @@ export async function settleTrips(operatorId: string): Promise<{ settled: number
       and(
         eq(trips.operatorId, operatorId),
         eq(trips.status, "scheduled"),
-        lt(trips.startTime, now)
-      )
+        lt(trips.startTime, now),
+      ),
     );
 
   // Step 2: pending_settlement → sailed (grace window cleared)
@@ -40,8 +40,8 @@ export async function settleTrips(operatorId: string): Promise<{ settled: number
       and(
         eq(trips.operatorId, operatorId),
         eq(trips.status, "pending_settlement"),
-        lt(trips.startTime, graceCutoff)
-      )
+        lt(trips.startTime, graceCutoff),
+      ),
     );
 
   if (tripsToSettle.length === 0) return { settled: 0 };
@@ -69,8 +69,8 @@ export async function settleTrips(operatorId: string): Promise<{ settled: number
           and(
             inArray(tickets.bookingItemId, itemIds),
             eq(tickets.feeStatus, "held"),
-            eq(tickets.voided, false)
-          )
+            eq(tickets.voided, false),
+          ),
         );
     }
   });

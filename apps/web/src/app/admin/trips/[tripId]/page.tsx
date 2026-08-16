@@ -59,7 +59,11 @@ type TripDetail = {
 type ApiResponse = { trip: TripDetail; bookings: BookingRow[] };
 
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 function fmtDate(date: string) {
@@ -105,7 +109,10 @@ export default function TripDetailPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const res = await fetch(`/api/admin/trips/${tripId}`);
-    if (res.status === 401) { router.push("/admin/login"); return; }
+    if (res.status === 401) {
+      router.push("/admin/login");
+      return;
+    }
     if (res.ok) setData(await res.json());
     setLoading(false);
   }, [tripId, router]);
@@ -122,7 +129,9 @@ export default function TripDetailPage() {
     setReportLoaded(true);
   }, [tripId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
   useEffect(() => {
     if (data && (data.trip.status === "sailed" || data.trip.status === "pending_settlement")) {
       loadReport();
@@ -183,8 +192,8 @@ export default function TripDetailPage() {
           upload(`reports/${tripId}/${Date.now()}-${file.name}`, file, {
             access: "public",
             handleUploadUrl: "/api/reports/upload",
-          })
-        )
+          }),
+        ),
       );
       setPhotoUrls((prev) => [...prev, ...uploaded.map((u) => u.url)]);
     } catch {
@@ -219,7 +228,7 @@ export default function TripDetailPage() {
   }
 
   function updateFishCount(index: number, field: keyof FishCount, value: string | number) {
-    setFishCounts((prev) => prev.map((fc, i) => i === index ? { ...fc, [field]: value } : fc));
+    setFishCounts((prev) => prev.map((fc, i) => (i === index ? { ...fc, [field]: value } : fc)));
   }
 
   function removeFishCount(index: number) {
@@ -227,7 +236,11 @@ export default function TripDetailPage() {
   }
 
   if (loading || !data) {
-    return <div className="text-center text-gray-400 py-16">{loading ? "Loading…" : "Trip not found"}</div>;
+    return (
+      <div className="text-center text-gray-400 py-16">
+        {loading ? "Loading…" : "Trip not found"}
+      </div>
+    );
   }
 
   const { trip, bookings } = data;
@@ -237,14 +250,20 @@ export default function TripDetailPage() {
   return (
     <div className="max-w-4xl mx-auto">
       {/* Back link */}
-      <Link href="/admin/trips" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-4">
+      <Link
+        href="/admin/trips"
+        className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-4"
+      >
         ← Trips
       </Link>
 
       {/* Trip header */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <div className="flex items-start gap-4">
-          <div className="w-3 h-12 rounded-full flex-shrink-0 mt-1" style={{ backgroundColor: trip.vessel.color }} />
+          <div
+            className="w-3 h-12 rounded-full flex-shrink-0 mt-1"
+            style={{ backgroundColor: trip.vessel.color }}
+          />
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-semibold text-gray-900">{trip.vessel.name}</h1>
@@ -253,11 +272,14 @@ export default function TripDetailPage() {
             </div>
             <div className="text-gray-500 text-sm mt-1">
               {fmtDate(trip.departureDate)} · {fmtTime(trip.startTime)} → {fmtTime(trip.endTime)}
-              {trip.boardingTime && <span className="ml-2 text-gray-400">Board {trip.boardingTime}</span>}
+              {trip.boardingTime && (
+                <span className="ml-2 text-gray-400">Board {trip.boardingTime}</span>
+              )}
             </div>
             <div className="flex items-center gap-4 mt-2 text-sm flex-wrap">
               <span className="text-gray-700">
-                <strong>{activeTickets.length}</strong> / {editingCapacity ? capacityInput || "?" : trip.capacity} seats sold
+                <strong>{activeTickets.length}</strong> /{" "}
+                {editingCapacity ? capacityInput || "?" : trip.capacity} seats sold
               </span>
               <span className="text-gray-500">{checkedInCount} checked in</span>
               {trip.status === "cancelled" && (
@@ -277,8 +299,14 @@ export default function TripDetailPage() {
                       type="number"
                       min={activeTickets.length}
                       value={capacityInput}
-                      onChange={(e) => { setCapacityInput(e.target.value); setCapacityError(null); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") saveCapacity(); if (e.key === "Escape") setEditingCapacity(false); }}
+                      onChange={(e) => {
+                        setCapacityInput(e.target.value);
+                        setCapacityError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveCapacity();
+                        if (e.key === "Escape") setEditingCapacity(false);
+                      }}
                       className="w-20 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       autoFocus
                     />
@@ -295,9 +323,7 @@ export default function TripDetailPage() {
                     >
                       Cancel
                     </button>
-                    {capacityError && (
-                      <span className="text-xs text-red-600">{capacityError}</span>
-                    )}
+                    {capacityError && <span className="text-xs text-red-600">{capacityError}</span>}
                   </div>
                 ) : (
                   <button
@@ -317,7 +343,12 @@ export default function TripDetailPage() {
       {refundError && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
           {refundError}
-          <button onClick={() => setRefundError(null)} className="ml-4 text-red-500 hover:text-red-700">✕</button>
+          <button
+            onClick={() => setRefundError(null)}
+            className="ml-4 text-red-500 hover:text-red-700"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -367,7 +398,9 @@ export default function TripDetailPage() {
                       type="number"
                       min={0}
                       value={fc.count}
-                      onChange={(e) => updateFishCount(i, "count", parseInt(e.target.value, 10) || 0)}
+                      onChange={(e) =>
+                        updateFishCount(i, "count", parseInt(e.target.value, 10) || 0)
+                      }
                       className="w-20 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <button
@@ -406,7 +439,13 @@ export default function TripDetailPage() {
                   {photoUrls.map((url, i) => (
                     <div key={i} className="relative group">
                       <div className="relative w-20 h-20 rounded-lg overflow-hidden bg-gray-100">
-                        <Image src={url} alt={`Photo ${i + 1}`} fill className="object-cover" sizes="80px" />
+                        <Image
+                          src={url}
+                          alt={`Photo ${i + 1}`}
+                          fill
+                          className="object-cover"
+                          sizes="80px"
+                        />
                       </div>
                       <button
                         onClick={() => setPhotoUrls((prev) => prev.filter((_, idx) => idx !== i))}
@@ -505,7 +544,10 @@ export default function TripDetailPage() {
                   ))}
 
                   {voidedTickets.map((ticket) => (
-                    <div key={ticket.id} className="flex items-center gap-4 px-5 py-3 bg-gray-50 opacity-50">
+                    <div
+                      key={ticket.id}
+                      className="flex items-center gap-4 px-5 py-3 bg-gray-50 opacity-50"
+                    >
                       <span className="text-sm text-gray-400 line-through">
                         {TICKET_LABEL[ticket.ticketType]}
                       </span>

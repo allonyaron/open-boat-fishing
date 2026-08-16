@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -8,10 +8,10 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { Redirect, useFocusEffect, useRouter } from 'expo-router';
-import Constants from 'expo-constants';
-import { useMateAuth } from '@/lib/mate-auth-context';
+} from "react-native";
+import { Redirect, useFocusEffect, useRouter } from "expo-router";
+import Constants from "expo-constants";
+import { useMateAuth } from "@/lib/mate-auth-context";
 import {
   cacheManifest,
   cacheTrips,
@@ -21,16 +21,16 @@ import {
   markCheckInSynced,
   type MateManifest,
   type MateTrip,
-} from '@/lib/mate-store';
-import { Colors } from '@/constants/Colors';
+} from "@/lib/mate-store";
+import { Colors } from "@/constants/Colors";
 
 function getApiUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(':')[0];
+    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
     if (host) return `http://${host}:3000`;
   }
-  throw new Error('EXPO_PUBLIC_API_URL must be set for production builds');
+  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
 }
 const API_URL = getApiUrl();
 
@@ -38,37 +38,45 @@ function fmtTime(iso: string): string {
   const d = new Date(iso);
   const h = d.getHours();
   const m = d.getMinutes();
-  const ampm = h >= 12 ? 'PM' : 'AM';
+  const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 function statusLabel(status: string): string {
   switch (status) {
-    case 'scheduled': return 'Scheduled';
-    case 'sailed': return 'Sailed';
-    case 'cancelled': return 'Cancelled';
-    case 'pending_settlement': return 'Pending';
-    default: return status;
+    case "scheduled":
+      return "Scheduled";
+    case "sailed":
+      return "Sailed";
+    case "cancelled":
+      return "Cancelled";
+    case "pending_settlement":
+      return "Pending";
+    default:
+      return status;
   }
 }
 
 function statusColor(status: string): string {
   switch (status) {
-    case 'sailed': return Colors.success;
-    case 'cancelled': return Colors.error;
-    case 'pending_settlement': return Colors.warning;
-    default: return Colors.inkSubtle;
+    case "sailed":
+      return Colors.success;
+    case "cancelled":
+      return Colors.error;
+    case "pending_settlement":
+      return Colors.warning;
+    default:
+      return Colors.inkSubtle;
   }
 }
 
 // ─── TripCard ─────────────────────────────────────────────────────────────────
 
 function TripCard({ trip, onPress }: { trip: MateTrip; onPress: () => void }) {
-  const isCancelled = trip.status === 'cancelled';
-  const checkinPct = trip.ticketsSold > 0
-    ? Math.round((trip.checkedIn / trip.ticketsSold) * 100)
-    : 0;
+  const isCancelled = trip.status === "cancelled";
+  const checkinPct =
+    trip.ticketsSold > 0 ? Math.round((trip.checkedIn / trip.ticketsSold) * 100) : 0;
 
   return (
     <TouchableOpacity
@@ -81,7 +89,7 @@ function TripCard({ trip, onPress }: { trip: MateTrip; onPress: () => void }) {
       <View style={c.body}>
         <View style={c.topRow}>
           <Text style={c.vesselName}>{trip.vessel.name}</Text>
-          <View style={[c.badge, { backgroundColor: statusColor(trip.status) + '22' }]}>
+          <View style={[c.badge, { backgroundColor: statusColor(trip.status) + "22" }]}>
             <Text style={[c.badgeText, { color: statusColor(trip.status) }]}>
               {statusLabel(trip.status)}
             </Text>
@@ -132,22 +140,22 @@ export default function MateTripsScreen() {
     if (unsynced.length === 0) return;
     try {
       const res = await fetch(`${API_URL}/api/mate/checkins`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ events: unsynced }),
       });
       if (res.ok) {
-        const data = await res.json() as {
+        const data = (await res.json()) as {
           results: { localId: string; ok: boolean; error?: string }[];
         };
         await Promise.all(
           data.results.map(async (r) => {
             if (r.ok) {
               await markCheckInSynced(r.localId);
-            } else if (r.error === 'ticket_not_found' || r.error === 'ticket_voided') {
+            } else if (r.error === "ticket_not_found" || r.error === "ticket_voided") {
               await markCheckInError(r.localId, r.error);
             }
-          })
+          }),
         );
       }
     } catch {
@@ -158,26 +166,25 @@ export default function MateTripsScreen() {
   const fetchFromApi = useCallback(async () => {
     if (!token) return;
     try {
-      const localDate = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+      const localDate = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in local time
       const res = await fetch(`${API_URL}/api/mate/trips?date=${localDate}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const data = await res.json() as MateTrip[];
+        const data = (await res.json()) as MateTrip[];
         await cacheTrips(data);
         setTrips(data);
         // Refresh manifests in the background so offline cache stays current
         await Promise.allSettled(
           data.map(async (trip) => {
-            const mRes = await fetch(
-              `${API_URL}/api/mate/manifest?tripId=${trip.id}`,
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
+            const mRes = await fetch(`${API_URL}/api/mate/manifest?tripId=${trip.id}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
             if (mRes.ok) {
-              const manifest = await mRes.json() as MateManifest;
+              const manifest = (await mRes.json()) as MateManifest;
               await cacheManifest(trip.id, manifest);
             }
-          })
+          }),
         );
       }
     } catch {
@@ -195,7 +202,7 @@ export default function MateTripsScreen() {
     useCallback(() => {
       if (!token) return;
       syncQueue().then(fetchFromApi);
-    }, [token, syncQueue, fetchFromApi])
+    }, [token, syncQueue, fetchFromApi]),
   );
 
   const onRefresh = useCallback(async () => {
@@ -212,18 +219,23 @@ export default function MateTripsScreen() {
   // Auth guard — all hooks must be above this line
   if (!token) return <Redirect href="/(mate)/login" />;
 
-  const today = new Date().toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric',
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
   });
 
   return (
     <SafeAreaView style={s.safe}>
       <View style={s.header}>
         <View>
-          <Text style={s.greeting}>Hi, {staff?.name ?? 'Mate'}</Text>
+          <Text style={s.greeting}>Hi, {staff?.name ?? "Mate"}</Text>
           <Text style={s.date}>{today}</Text>
         </View>
-        <TouchableOpacity onPress={handleLogout} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity
+          onPress={handleLogout}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <Text style={s.logoutText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
@@ -243,16 +255,12 @@ export default function MateTripsScreen() {
           style={s.scroll}
           contentContainerStyle={s.scrollContent}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={Colors.teal}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.teal} />
           }
           showsVerticalScrollIndicator={false}
         >
           <Text style={s.sectionLabel}>
-            {trips.length} trip{trips.length !== 1 ? 's' : ''} departing today
+            {trips.length} trip{trips.length !== 1 ? "s" : ""} departing today
           </Text>
           {trips.map((trip) => (
             <TripCard
@@ -260,7 +268,7 @@ export default function MateTripsScreen() {
               trip={trip}
               onPress={() =>
                 router.push({
-                  pathname: '/(mate)/manifest/[tripId]',
+                  pathname: "/(mate)/manifest/[tripId]",
                   params: { tripId: trip.id },
                 })
               }
@@ -278,58 +286,61 @@ export default function MateTripsScreen() {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.surfaceAlt },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: Colors.teal,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
   greeting: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
+    fontWeight: "700",
+    color: "#fff",
   },
   date: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.75)',
+    color: "rgba(255,255,255,0.75)",
     marginTop: 2,
   },
   logoutText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.85)',
-    fontWeight: '600',
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: "600",
   },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   empty: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 32, gap: 12,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    gap: 12,
   },
   emptyIcon: { fontSize: 48 },
-  emptyTitle: { fontSize: 22, fontWeight: '700', color: Colors.ink, textAlign: 'center' },
-  emptyBody: { fontSize: 15, color: Colors.inkMuted, textAlign: 'center' },
+  emptyTitle: { fontSize: 22, fontWeight: "700", color: Colors.ink, textAlign: "center" },
+  emptyBody: { fontSize: 15, color: Colors.inkMuted, textAlign: "center" },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 16 },
   sectionLabel: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.inkSubtle,
     letterSpacing: 0.4,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     marginBottom: 10,
   },
 });
 
 const c = StyleSheet.create({
   card: {
-    flexDirection: 'row',
+    flexDirection: "row",
     backgroundColor: Colors.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -339,24 +350,24 @@ const c = StyleSheet.create({
   colorBar: { width: 6 },
   body: { flex: 1, padding: 12 },
   topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 2,
   },
-  vesselName: { fontSize: 16, fontWeight: '700', color: Colors.ink },
+  vesselName: { fontSize: 16, fontWeight: "700", color: Colors.ink },
   badge: {
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
-  productName: { fontSize: 13, color: Colors.inkMuted, fontWeight: '500', marginBottom: 1 },
+  badgeText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.3 },
+  productName: { fontSize: 13, color: Colors.inkMuted, fontWeight: "500", marginBottom: 1 },
   time: { fontSize: 13, color: Colors.inkSubtle },
   progress: {
     marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   progressTrack: {
@@ -364,22 +375,22 @@ const c = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: Colors.border,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   progressFill: {
-    height: '100%',
+    height: "100%",
     borderRadius: 3,
   },
   progressLabel: {
     fontSize: 12,
     color: Colors.inkSubtle,
-    fontWeight: '600',
+    fontWeight: "600",
     minWidth: 90,
   },
   chevron: {
     fontSize: 22,
     color: Colors.inkSubtle,
-    alignSelf: 'center',
+    alignSelf: "center",
     paddingRight: 12,
   },
 });

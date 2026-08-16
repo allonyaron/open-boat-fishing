@@ -48,19 +48,19 @@ sequenceDiagram
 
 ## How this differs from mate auth
 
-| | Admin | Mate |
-|---|---|---|
-| Credential | Email + password | Email + PIN |
-| Session storage | iron-session encrypted cookie | HMAC-signed JWT (Bearer header) |
-| Session lifetime | Cookie expiry (browser session) | Token lifetime in payload |
-| Role required | `admin` only | `mate` or `admin` |
-| Stateless | No — server reads cookie on every request | Yes — JWT self-contained |
+|                  | Admin                                     | Mate                            |
+| ---------------- | ----------------------------------------- | ------------------------------- |
+| Credential       | Email + password                          | Email + PIN                     |
+| Session storage  | iron-session encrypted cookie             | HMAC-signed JWT (Bearer header) |
+| Session lifetime | Cookie expiry (browser session)           | Token lifetime in payload       |
+| Role required    | `admin` only                              | `mate` or `admin`               |
+| Stateless        | No — server reads cookie on every request | Yes — JWT self-contained        |
 
 ## Key invariants
 
-| Invariant | Where enforced |
-|---|---|
-| Password never stored in plaintext | bcrypt hash stored in `staff.passwordHash` |
-| Session tamper-proof | iron-session encrypts + signs with `SESSION_SECRET` |
-| All admin queries are operator-scoped | `requireAdmin` returns `session.operatorId`; every query uses it |
-| Role checked at login, not just session | `member.role !== "admin"` check before session is written |
+| Invariant                               | Where enforced                                                   |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| Password never stored in plaintext      | bcrypt hash stored in `staff.passwordHash`                       |
+| Session tamper-proof                    | iron-session encrypts + signs with `SESSION_SECRET`              |
+| All admin queries are operator-scoped   | `requireAdmin` returns `session.operatorId`; every query uses it |
+| Role checked at login, not just session | `member.role !== "admin"` check before session is written        |

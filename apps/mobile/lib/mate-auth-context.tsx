@@ -1,5 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { clearMateToken, getMateToken, type MateStaff, decodeMateToken } from './mate-auth';
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { clearMateToken, getMateToken, type MateStaff, decodeMateToken } from "./mate-auth";
 
 type MateAuthCtx = {
   token: string | null;

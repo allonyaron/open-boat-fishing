@@ -19,5 +19,12 @@ export default async function HomePage() {
   const trips = await res.json();
   const operatorName = operatorRow[0]?.name ?? "Fishing Charter";
   const termsUrl = operatorRow[0]?.termsUrl ?? null;
-  return <BookingCalendar initialTrips={trips} initialMonth={month} operatorName={operatorName} termsUrl={termsUrl} />;
+  return (
+    <BookingCalendar
+      initialTrips={trips}
+      initialMonth={month}
+      operatorName={operatorName}
+      termsUrl={termsUrl}
+    />
+  );
 }

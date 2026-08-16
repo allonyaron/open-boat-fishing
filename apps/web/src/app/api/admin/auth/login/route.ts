@@ -17,10 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
 
-  const [member] = await db
-    .select()
-    .from(staff)
-    .where(eq(staff.email, email.toLowerCase().trim()));
+  const [member] = await db.select().from(staff).where(eq(staff.email, email.toLowerCase().trim()));
 
   if (!member || !member.passwordHash || member.operatorId !== operator.id) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });

@@ -46,12 +46,7 @@ export async function GET(req: NextRequest) {
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))
     .innerJoin(products, eq(trips.productId, products.id))
-    .where(
-      and(
-        eq(trips.operatorId, session.operatorId),
-        gte(trips.departureDate, from)
-      )
-    )
+    .where(and(eq(trips.operatorId, session.operatorId), gte(trips.departureDate, from)))
     .orderBy(trips.startTime)
     .limit(limit);
 

@@ -137,10 +137,10 @@ stateDiagram-v2
 
 ## Webhook Event Coverage
 
-| Event | Handler | Action |
-|---|---|---|
-| `payment_intent.succeeded` | ✅ | Confirm booking, record payment |
-| `payment_intent.canceled` | ✅ | Restore seats, cancel booking |
-| `payment_intent.payment_failed` | ❌ not handled | Customer can retry — no action needed |
-| `application_fee.refunded` | ❌ not handled | fee_status → reversed is handled in-process by cancellation + refund routes; no webhook needed |
-| `charge.refunded` | ❌ not handled | Future: trigger for cancellation flow |
+| Event                           | Handler        | Action                                                                                         |
+| ------------------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
+| `payment_intent.succeeded`      | ✅             | Confirm booking, record payment                                                                |
+| `payment_intent.canceled`       | ✅             | Restore seats, cancel booking                                                                  |
+| `payment_intent.payment_failed` | ❌ not handled | Customer can retry — no action needed                                                          |
+| `application_fee.refunded`      | ❌ not handled | fee_status → reversed is handled in-process by cancellation + refund routes; no webhook needed |
+| `charge.refunded`               | ❌ not handled | Future: trigger for cancellation flow                                                          |

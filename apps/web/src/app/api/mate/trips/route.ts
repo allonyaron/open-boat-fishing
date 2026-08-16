@@ -11,8 +11,7 @@ export async function GET(req: NextRequest) {
 
   // Client passes its local date so we don't compute "today" in UTC on the
   // server (which would be wrong for East Coast operators after 8 PM ET).
-  const today =
-    req.nextUrl.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
+  const today = req.nextUrl.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
 
   const tripRows = await db
     .select({
@@ -24,7 +23,12 @@ export async function GET(req: NextRequest) {
       capacity: trips.capacity,
       seatsRemaining: trips.seatsRemaining,
       status: trips.status,
-      vessel: { id: vessels.id, name: vessels.name, color: vessels.color, certificateCapacity: vessels.certificateCapacity },
+      vessel: {
+        id: vessels.id,
+        name: vessels.name,
+        color: vessels.color,
+        certificateCapacity: vessels.certificateCapacity,
+      },
       product: { id: products.id, displayName: products.displayName, category: products.category },
       ticketsSold: sql<number>`(
         select count(*) from ${tickets} t
@@ -40,12 +44,7 @@ export async function GET(req: NextRequest) {
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))
     .innerJoin(products, eq(trips.productId, products.id))
-    .where(
-      and(
-        eq(trips.operatorId, staff.operatorId),
-        eq(trips.departureDate, today)
-      )
-    )
+    .where(and(eq(trips.operatorId, staff.operatorId), eq(trips.departureDate, today)))
     .orderBy(trips.startTime);
 
   return NextResponse.json(tripRows);

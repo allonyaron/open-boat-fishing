@@ -53,7 +53,7 @@ function buildHtml(p: BookingEmailParams): string {
       <td style="padding:10px 0 10px 16px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#111827;text-align:right;white-space:nowrap;">
         ${fmt(t.priceCents * t.count)}
       </td>
-    </tr>`
+    </tr>`,
     )
     .join("");
 

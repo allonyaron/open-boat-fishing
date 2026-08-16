@@ -33,10 +33,10 @@ export async function GET(req: NextRequest) {
       vesselColor: vessels.color,
       productName: products.displayName,
       earnedCount: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'earned' and not ${tickets.voided} then 1 else 0 end) as int)`,
-      heldCount:   sql<number>`cast(sum(case when ${tickets.feeStatus} = 'held'   and not ${tickets.voided} then 1 else 0 end) as int)`,
+      heldCount: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'held'   and not ${tickets.voided} then 1 else 0 end) as int)`,
       reversedCount: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'reversed' then 1 else 0 end) as int)`,
       earnedCents: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'earned' and not ${tickets.voided} then ${tickets.feeAmountCents} else 0 end) as int)`,
-      heldCents:   sql<number>`cast(sum(case when ${tickets.feeStatus} = 'held'   and not ${tickets.voided} then ${tickets.feeAmountCents} else 0 end) as int)`,
+      heldCents: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'held'   and not ${tickets.voided} then ${tickets.feeAmountCents} else 0 end) as int)`,
       reversedCents: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'reversed' then ${tickets.feeAmountCents} else 0 end) as int)`,
     })
     .from(trips)
@@ -48,8 +48,8 @@ export async function GET(req: NextRequest) {
       and(
         eq(trips.operatorId, session.operatorId),
         gte(trips.departureDate, fromDate),
-        lte(trips.departureDate, toDate)
-      )
+        lte(trips.departureDate, toDate),
+      ),
     )
     .groupBy(trips.id, vessels.name, vessels.color, products.displayName)
     .orderBy(trips.startTime);
@@ -57,13 +57,20 @@ export async function GET(req: NextRequest) {
   const totals = tripRows.reduce(
     (acc, r) => ({
       earnedCents: acc.earnedCents + Number(r.earnedCents),
-      heldCents:   acc.heldCents   + Number(r.heldCents),
+      heldCents: acc.heldCents + Number(r.heldCents),
       reversedCents: acc.reversedCents + Number(r.reversedCents),
       earnedCount: acc.earnedCount + Number(r.earnedCount),
-      heldCount:   acc.heldCount   + Number(r.heldCount),
+      heldCount: acc.heldCount + Number(r.heldCount),
       reversedCount: acc.reversedCount + Number(r.reversedCount),
     }),
-    { earnedCents: 0, heldCents: 0, reversedCents: 0, earnedCount: 0, heldCount: 0, reversedCount: 0 }
+    {
+      earnedCents: 0,
+      heldCents: 0,
+      reversedCents: 0,
+      earnedCount: 0,
+      heldCount: 0,
+      reversedCount: 0,
+    },
   );
 
   return NextResponse.json({ fromDate, toDate, totals, trips: tripRows });

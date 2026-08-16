@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -8,18 +8,18 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import Constants from 'expo-constants';
-import { Colors } from '@/constants/Colors';
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import Constants from "expo-constants";
+import { Colors } from "@/constants/Colors";
 
 function getApiUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(':')[0];
+    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
     if (host) return `http://${host}:3000`;
   }
-  throw new Error('EXPO_PUBLIC_API_URL must be set for production builds');
+  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
 }
 const API_URL = getApiUrl();
 
@@ -40,14 +40,21 @@ type Report = {
 };
 
 function fmtDate(date: string): string {
-  const [y, m, d] = date.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
 function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 export default function ReportDetailScreen() {
@@ -58,7 +65,7 @@ export default function ReportDetailScreen() {
 
   useEffect(() => {
     fetch(`${API_URL}/api/reports/${reportId}`)
-      .then((res) => res.ok ? res.json() as Promise<Report> : null)
+      .then((res) => (res.ok ? (res.json() as Promise<Report>) : null))
       .then((data) => setReport(data))
       .finally(() => setLoading(false));
   }, [reportId]);
@@ -92,7 +99,11 @@ export default function ReportDetailScreen() {
         <Text style={s.backText}>← Fishing Reports</Text>
       </TouchableOpacity>
 
-      <ScrollView style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={s.content}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Vessel + trip info */}
         <View style={s.header}>
           <View style={[s.colorBar, { backgroundColor: report.vesselColor }]} />
@@ -100,7 +111,9 @@ export default function ReportDetailScreen() {
             <Text style={s.vesselName}>{report.vesselName}</Text>
             <Text style={s.productName}>{report.productName}</Text>
             <Text style={s.date}>{fmtDate(report.departureDate)}</Text>
-            <Text style={s.time}>{fmtTime(report.startTime)} – {fmtTime(report.endTime)}</Text>
+            <Text style={s.time}>
+              {fmtTime(report.startTime)} – {fmtTime(report.endTime)}
+            </Text>
           </View>
         </View>
 
@@ -147,15 +160,15 @@ export default function ReportDetailScreen() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.surfaceAlt },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   back: { paddingHorizontal: 16, paddingVertical: 12 },
-  backText: { color: Colors.teal, fontSize: 15, fontWeight: '600' },
+  backText: { color: Colors.teal, fontSize: 15, fontWeight: "600" },
   errorText: { color: Colors.inkSubtle, fontSize: 16 },
   scroll: { flex: 1 },
   content: { paddingHorizontal: 16 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 12,
     backgroundColor: Colors.surface,
     borderRadius: 12,
@@ -164,23 +177,23 @@ const s = StyleSheet.create({
     padding: 14,
     marginBottom: 16,
   },
-  colorBar: { width: 4, borderRadius: 2, alignSelf: 'stretch' },
-  vesselName: { fontSize: 18, fontWeight: '700', color: Colors.ink },
+  colorBar: { width: 4, borderRadius: 2, alignSelf: "stretch" },
+  vesselName: { fontSize: 18, fontWeight: "700", color: Colors.ink },
   productName: { fontSize: 14, color: Colors.inkMuted, marginTop: 2 },
   date: { fontSize: 13, color: Colors.inkSubtle, marginTop: 4 },
   time: { fontSize: 13, color: Colors.inkSubtle },
   section: { marginBottom: 16 },
   sectionLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.inkSubtle,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 0.6,
     marginBottom: 10,
   },
   fishGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
   },
   fishCard: {
@@ -189,11 +202,11 @@ const s = StyleSheet.create({
     borderColor: Colors.border,
     borderRadius: 10,
     padding: 12,
-    alignItems: 'center',
+    alignItems: "center",
     minWidth: 80,
   },
-  fishCount: { fontSize: 28, fontWeight: '800', color: Colors.ink },
-  fishSpecies: { fontSize: 12, color: Colors.inkMuted, marginTop: 2, textAlign: 'center' },
+  fishCount: { fontSize: 28, fontWeight: "800", color: Colors.ink },
+  fishSpecies: { fontSize: 12, color: Colors.inkMuted, marginTop: 2, textAlign: "center" },
   summary: {
     fontSize: 15,
     color: Colors.ink,
@@ -205,12 +218,12 @@ const s = StyleSheet.create({
     padding: 14,
   },
   photoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   photo: {
-    width: '48%',
+    width: "48%",
     aspectRatio: 1,
     borderRadius: 10,
     backgroundColor: Colors.border,

@@ -65,6 +65,7 @@ Captain posts a report after each trip. One report per trip (unique constraint o
 **Schema (migration 0007):** `fishing_reports` table — `catch_summary` (text), `fish_counts` (jsonb `[{species, count}]`), `photo_urls` (text[]), FKs to trips/vessels/staff/operators, indexes on `operator_id` and `vessel_id`.
 
 **API routes:**
+
 - `POST/GET /api/mate/trips/[tripId]/report` — JWT Bearer auth (mate + admin); upserts on the `trip_id` unique constraint so re-posting updates rather than errors
 - `POST/GET /api/admin/trips/[tripId]/report` — iron-session auth for the web dashboard; same upsert logic
 - `GET /api/reports` — public, paginated (cursor on `created_at`), optional `vesselId` filter

@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { signMateToken } from "@/lib/mate-auth";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({})) as { email?: string; pin?: string };
+  const body = (await req.json().catch(() => ({}))) as { email?: string; pin?: string };
   const { email, pin } = body;
 
   if (!email || !pin) {
@@ -18,10 +18,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
 
-  const [member] = await db
-    .select()
-    .from(staff)
-    .where(eq(staff.email, email.toLowerCase().trim()));
+  const [member] = await db.select().from(staff).where(eq(staff.email, email.toLowerCase().trim()));
 
   if (!member || member.operatorId !== operator.id) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });

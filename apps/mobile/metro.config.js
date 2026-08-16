@@ -1,5 +1,5 @@
-const { getDefaultConfig } = require('expo/metro-config');
-const path = require('path');
+const { getDefaultConfig } = require("expo/metro-config");
+const path = require("path");
 
 const projectRoot = __dirname;
 
@@ -15,30 +15,26 @@ const config = getDefaultConfig(projectRoot);
 // as distinct modules and includes both — causing "Tried to register two views
 // with the same name RNCSafeAreaProvider" at startup.
 const singletons = new Set([
-  'react',
-  'react-native',
-  'react-native-safe-area-context',
-  'react-native-screens',
-  'react-native-gesture-handler',
-  'react-native-reanimated',
+  "react",
+  "react-native",
+  "react-native-safe-area-context",
+  "react-native-screens",
+  "react-native-gesture-handler",
+  "react-native-reanimated",
 ]);
 
 const originalResolveRequest = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (singletons.has(moduleName)) {
-    const pinnedPath = path.resolve(projectRoot, 'node_modules', moduleName);
+    const pinnedPath = path.resolve(projectRoot, "node_modules", moduleName);
     return (originalResolveRequest ?? context.resolveRequest)(
-      { ...context, originModulePath: pinnedPath + '/package.json' },
+      { ...context, originModulePath: pinnedPath + "/package.json" },
       moduleName,
-      platform
+      platform,
     );
   }
-  return (originalResolveRequest ?? context.resolveRequest)(
-    context,
-    moduleName,
-    platform
-  );
+  return (originalResolveRequest ?? context.resolveRequest)(context, moduleName, platform);
 };
 
 module.exports = config;

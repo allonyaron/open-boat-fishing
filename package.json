@@ -5,13 +5,22 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "turbo typecheck",
     "db:migrate": "pnpm --filter @openboat/db migrate",
     "db:studio": "pnpm --filter @openboat/db studio"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "playwright": "^1.62.1",
+    "prettier": "^3.9.6",
     "turbo": "^2.5.4",
     "typescript": "^5.8.3"
   },

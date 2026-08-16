@@ -1,4 +1,4 @@
-import * as SQLite from 'expo-sqlite';
+import * as SQLite from "expo-sqlite";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Mirror the shape returned by GET /api/bookings, plus a syncedAt timestamp
@@ -6,7 +6,7 @@ import * as SQLite from 'expo-sqlite';
 
 export type WalletTicket = {
   id: string;
-  ticketType: 'adult' | 'child' | 'senior';
+  ticketType: "adult" | "child" | "senior";
   priceCents: number;
   feeAmountCents: number;
   qrPayload: string;
@@ -49,7 +49,7 @@ let _db: SQLite.SQLiteDatabase | null = null;
 
 async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!_db) {
-    _db = await SQLite.openDatabaseAsync('wallet.db');
+    _db = await SQLite.openDatabaseAsync("wallet.db");
     await _db.execAsync(`
       CREATE TABLE IF NOT EXISTS wallet_bookings (
         id TEXT PRIMARY KEY,
@@ -66,7 +66,7 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function upsertBooking(
-  booking: Omit<WalletBooking, 'syncedAt'>
+  booking: Omit<WalletBooking, "syncedAt">,
 ): Promise<WalletBooking> {
   const db = await getDb();
   const syncedAt = new Date().toISOString();
@@ -77,7 +77,7 @@ export async function upsertBooking(
      ON CONFLICT(id) DO UPDATE SET
        synced_at = excluded.synced_at,
        raw_json = excluded.raw_json`,
-    [booking.id, booking.confirmationCode, booking.customerEmail, syncedAt, JSON.stringify(record)]
+    [booking.id, booking.confirmationCode, booking.customerEmail, syncedAt, JSON.stringify(record)],
   );
   return record;
 }
@@ -85,13 +85,13 @@ export async function upsertBooking(
 export async function getAllBookings(): Promise<WalletBooking[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ raw_json: string }>(
-    'SELECT raw_json FROM wallet_bookings ORDER BY id'
+    "SELECT raw_json FROM wallet_bookings ORDER BY id",
   );
   return rows.map((r) => JSON.parse(r.raw_json) as WalletBooking);
 }
 
 export async function getTicketById(
-  ticketId: string
+  ticketId: string,
 ): Promise<{ booking: WalletBooking; item: WalletBookingItem; ticket: WalletTicket } | null> {
   const bookings = await getAllBookings();
   for (const booking of bookings) {
@@ -105,5 +105,5 @@ export async function getTicketById(
 
 export async function removeBooking(bookingId: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync('DELETE FROM wallet_bookings WHERE id = ?', [bookingId]);
+  await db.runAsync("DELETE FROM wallet_bookings WHERE id = ?", [bookingId]);
 }

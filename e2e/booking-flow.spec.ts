@@ -30,7 +30,10 @@ test("booking flow", async ({ page }, testInfo) => {
 
   // On desktop, hydration flips to calendar mode (md breakpoint useEffect).
   // Click the "list" toggle to bring trip rows back into the DOM.
-  const listToggle = page.locator("button").filter({ hasText: /^list$/ }).first();
+  const listToggle = page
+    .locator("button")
+    .filter({ hasText: /^list$/ })
+    .first();
   if (await listToggle.isVisible().catch(() => false)) {
     await listToggle.click();
   }
@@ -58,9 +61,10 @@ test("booking flow", async ({ page }, testInfo) => {
   // Sheet closes; mobile CartBar or desktop SidebarCartFooter shows "Reserve".
   // waitForSelector picks the first DOM match which may be CSS-hidden on one viewport,
   // so use waitForFunction to check any visible Reserve button.
-  await page.waitForFunction(
-    () => [...document.querySelectorAll("button")]
-      .some((b) => b.textContent?.trim().startsWith("Reserve") && b.checkVisibility())
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll("button")].some(
+      (b) => b.textContent?.trim().startsWith("Reserve") && b.checkVisibility(),
+    ),
   );
   await page.screenshot({ path: shot("04-cart-bar") });
 
@@ -69,7 +73,9 @@ test("booking flow", async ({ page }, testInfo) => {
   // CartBar is last in DOM (after DesktopSidebar); SidebarCartFooter is first but CSS-hidden on mobile.
   // Use filter to click the visible one.
   const reserveBtn = page.locator("button:text('Reserve')");
-  const visibleReserve = (await reserveBtn.first().isVisible()) ? reserveBtn.first() : reserveBtn.last();
+  const visibleReserve = (await reserveBtn.first().isVisible())
+    ? reserveBtn.first()
+    : reserveBtn.last();
   await Promise.all([page.waitForURL("/cart"), visibleReserve.click()]);
   await page.waitForSelector("text=Your cart");
   await page.screenshot({ path: shot("05-cart") });
@@ -97,10 +103,7 @@ test("post-payment screens", async ({ page }, testInfo) => {
   const { code, bookingId } = loadFixtures();
 
   if (!code || !bookingId) {
-    test.skip(
-      true,
-      "Seed booking not found. Run seed-test-customers.ts first, then re-run."
-    );
+    test.skip(true, "Seed booking not found. Run seed-test-customers.ts first, then re-run.");
     return;
   }
 
@@ -109,9 +112,7 @@ test("post-payment screens", async ({ page }, testInfo) => {
   // ── 08  Delivery / ticket delivery screen ─────────────────────────────────
   // The delivery page requires redirect_status=succeeded to render (otherwise
   // it redirects to the confirmation page).
-  await page.goto(
-    `/booking/delivery?code=${code}&redirect_status=succeeded`
-  );
+  await page.goto(`/booking/delivery?code=${code}&redirect_status=succeeded`);
   await page.waitForSelector("text=You're booked!");
   await page.screenshot({ path: shot("08-delivery") });
 

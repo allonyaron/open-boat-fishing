@@ -26,7 +26,7 @@ export async function getSession(): Promise<IronSession<SessionData>> {
 }
 
 export async function requireAdmin(
-  req: NextRequest
+  req: NextRequest,
 ): Promise<{ session: IronSession<SessionData> } | NextResponse> {
   const cookieStore = await cookies();
   const session = await getIronSession<SessionData>(cookieStore, sessionOptions);

@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ reportId: string }> }
+  { params }: { params: Promise<{ reportId: string }> },
 ) {
   const [operator] = await db.select().from(operators).limit(1);
   if (!operator) {
@@ -37,12 +37,7 @@ export async function GET(
     .innerJoin(trips, eq(fishingReports.tripId, trips.id))
     .innerJoin(vessels, eq(fishingReports.vesselId, vessels.id))
     .innerJoin(products, eq(trips.productId, products.id))
-    .where(
-      and(
-        eq(fishingReports.id, reportId),
-        eq(fishingReports.operatorId, operator.id)
-      )
-    );
+    .where(and(eq(fishingReports.id, reportId), eq(fishingReports.operatorId, operator.id)));
 
   if (!row) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

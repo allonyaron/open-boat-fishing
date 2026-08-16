@@ -13,10 +13,7 @@ export async function GET(req: NextRequest) {
     .select()
     .from(bookings)
     .where(
-      and(
-        eq(bookings.operatorId, customer.operatorId),
-        eq(bookings.customerEmail, customer.email)
-      )
+      and(eq(bookings.operatorId, customer.operatorId), eq(bookings.customerEmail, customer.email)),
     )
     .orderBy(desc(bookings.createdAt));
 

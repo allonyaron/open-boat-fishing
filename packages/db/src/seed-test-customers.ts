@@ -133,12 +133,13 @@ async function run() {
       and(
         eq(schema.trips.departureDate, today),
         eq(schema.trips.operatorId, op.id),
-        eq(schema.trips.status, "scheduled")
-      )
+        eq(schema.trips.status, "scheduled"),
+      ),
     )
     .limit(1);
 
-  if (!trip) throw new Error(`No scheduled trip found for today (${today}). Run seed-test-trip.ts first.`);
+  if (!trip)
+    throw new Error(`No scheduled trip found for today (${today}). Run seed-test-trip.ts first.`);
 
   console.log(`Adding bookings to trip ${trip.id} (${today})`);
 
@@ -195,7 +196,7 @@ async function run() {
           feeAmountCents: 150,
           qrPayload: id,
         };
-      })
+      }),
     );
 
     ticketCount += c.tickets.length;
@@ -211,7 +212,9 @@ async function run() {
     })
     .where(eq(schema.trips.id, trip.id));
 
-  console.log(`\nDone — ${ticketCount} tickets added. Refresh the mate app to see the full manifest.`);
+  console.log(
+    `\nDone — ${ticketCount} tickets added. Refresh the mate app to see the full manifest.`,
+  );
   await client.end();
 }
 

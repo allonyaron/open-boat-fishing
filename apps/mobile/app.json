@@ -14,9 +14,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#0E7C7B"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.openboat.fishing",
@@ -30,10 +28,7 @@
         "backgroundColor": "#0E7C7B"
       },
       "package": "com.openboat.fishing",
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
-      ]
+      "permissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"]
     },
     "web": {
       "favicon": "./assets/favicon.png",

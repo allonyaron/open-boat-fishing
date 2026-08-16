@@ -96,7 +96,11 @@ async function run() {
 
     // Show ticket QR payloads for scanner testing
     const ticketRows = await db
-      .select({ id: schema.tickets.id, type: schema.tickets.ticketType, qr: schema.tickets.qrPayload })
+      .select({
+        id: schema.tickets.id,
+        type: schema.tickets.ticketType,
+        qr: schema.tickets.qrPayload,
+      })
       .from(schema.tickets)
       .where(eq(schema.tickets.bookingItemId, existingItems[0].id));
     console.log("\nTickets to scan (paste qrPayload into keyboard scan):");

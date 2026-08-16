@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,25 +13,25 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useFocusEffect } from 'expo-router';
-import Constants from 'expo-constants';
-import * as SecureStore from 'expo-secure-store';
-import { Colors } from '@/constants/Colors';
-import { useCustomerAuth } from '@/lib/customer-auth-context';
-import { saveCustomerToken } from '@/lib/customer-auth';
-import { registerForPushNotifications, type NotificationPrefs } from '@/lib/push-notifications';
+} from "react-native";
+import { useFocusEffect } from "expo-router";
+import Constants from "expo-constants";
+import * as SecureStore from "expo-secure-store";
+import { Colors } from "@/constants/Colors";
+import { useCustomerAuth } from "@/lib/customer-auth-context";
+import { saveCustomerToken } from "@/lib/customer-auth";
+import { registerForPushNotifications, type NotificationPrefs } from "@/lib/push-notifications";
 
-const PUSH_TOKEN_KEY = 'expo_push_token';
-const PREFS_KEY = 'notification_prefs';
+const PUSH_TOKEN_KEY = "expo_push_token";
+const PREFS_KEY = "notification_prefs";
 
 function getApiUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(':')[0];
+    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
     if (host) return `http://${host}:3000`;
   }
-  throw new Error('EXPO_PUBLIC_API_URL must be set for production builds');
+  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
 }
 const API_URL = getApiUrl();
 
@@ -67,21 +67,26 @@ function fmt$(cents: number) {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  return new Date(iso + "T12:00:00").toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
 function fmtTime(iso: string) {
   const d = new Date(iso);
-  const h = d.getHours(), m = d.getMinutes(), ampm = h >= 12 ? 'PM' : 'AM';
+  const h = d.getHours(),
+    m = d.getMinutes(),
+    ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 function statusColor(s: string) {
-  if (s === 'cancelled') return Colors.error;
-  if (s === 'sailed' || s === 'confirmed') return Colors.success;
+  if (s === "cancelled") return Colors.error;
+  if (s === "sailed" || s === "confirmed") return Colors.success;
   return Colors.inkSubtle;
 }
 
@@ -103,10 +108,14 @@ function BookingCard({ booking }: { booking: Booking }) {
             <Text style={b.itemVessel}>{item.vesselName}</Text>
             <Text style={b.itemProduct}>{item.productName}</Text>
             <Text style={b.itemDate}>
-              {fmtDate(item.tripDepartureDate)} · {fmtTime(item.tripStartTime)}–{fmtTime(item.tripEndTime)}
+              {fmtDate(item.tripDepartureDate)} · {fmtTime(item.tripStartTime)}–
+              {fmtTime(item.tripEndTime)}
             </Text>
             <Text style={b.itemTickets}>
-              {item.tickets.filter((t) => !t.voided).map((t) => t.ticketType).join(', ')}
+              {item.tickets
+                .filter((t) => !t.voided)
+                .map((t) => t.ticketType)
+                .join(", ")}
             </Text>
           </View>
         </View>
@@ -121,27 +130,34 @@ function BookingCard({ booking }: { booking: Booking }) {
 // ─── SignInForm ───────────────────────────────────────────────────────────────
 
 function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
-  const [step, setStep] = useState<'email' | 'otp'>('email');
-  const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
+  const [step, setStep] = useState<"email" | "otp">("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const requestOtp = async () => {
     const clean = email.trim().toLowerCase();
-    if (!clean.includes('@')) { setError('Enter a valid email address.'); return; }
-    setLoading(true); setError(null);
+    if (!clean.includes("@")) {
+      setError("Enter a valid email address.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`${API_URL}/api/auth/request`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: clean }),
       });
-      const data = await res.json() as { ok?: boolean; error?: string };
-      if (!res.ok) { setError(data.error ?? 'Failed to send code.'); }
-      else { setStep('otp'); }
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Failed to send code.");
+      } else {
+        setStep("otp");
+      }
     } catch {
-      setError('Could not connect. Check your network.');
+      setError("Could not connect. Check your network.");
     } finally {
       setLoading(false);
     }
@@ -149,35 +165,42 @@ function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
 
   const verifyOtp = async () => {
     const clean = otp.trim();
-    if (clean.length !== 6) { setError('Enter the 6-digit code from your email.'); return; }
-    setLoading(true); setError(null);
+    if (clean.length !== 6) {
+      setError("Enter the 6-digit code from your email.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`${API_URL}/api/auth/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim().toLowerCase(), otp: clean }),
       });
-      const data = await res.json() as { token?: string; error?: string };
-      if (!res.ok || !data.token) { setError(data.error ?? 'Incorrect code. Try again.'); }
-      else { onSignedIn(data.token); }
+      const data = (await res.json()) as { token?: string; error?: string };
+      if (!res.ok || !data.token) {
+        setError(data.error ?? "Incorrect code. Try again.");
+      } else {
+        onSignedIn(data.token);
+      }
     } catch {
-      setError('Could not connect. Check your network.');
+      setError("Could not connect. Check your network.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={f.wrap}>
         <Text style={f.heading}>Sign In</Text>
         <Text style={f.sub}>
-          {step === 'email'
-            ? 'Enter your email to receive a one-time code.'
+          {step === "email"
+            ? "Enter your email to receive a one-time code."
             : `We sent a 6-digit code to ${email}. Enter it below.`}
         </Text>
 
-        {step === 'email' ? (
+        {step === "email" ? (
           <TextInput
             style={f.input}
             value={email}
@@ -211,17 +234,25 @@ function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
 
         <TouchableOpacity
           style={[f.btn, loading && f.btnLoading]}
-          onPress={step === 'email' ? requestOtp : verifyOtp}
+          onPress={step === "email" ? requestOtp : verifyOtp}
           disabled={loading}
           activeOpacity={0.85}
         >
-          {loading
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={f.btnText}>{step === 'email' ? 'Send Code' : 'Verify Code'}</Text>}
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={f.btnText}>{step === "email" ? "Send Code" : "Verify Code"}</Text>
+          )}
         </TouchableOpacity>
 
-        {step === 'otp' && (
-          <TouchableOpacity onPress={() => { setStep('email'); setOtp(''); setError(null); }}>
+        {step === "otp" && (
+          <TouchableOpacity
+            onPress={() => {
+              setStep("email");
+              setOtp("");
+              setError(null);
+            }}
+          >
             <Text style={f.back}>← Use a different email</Text>
           </TouchableOpacity>
         )}
@@ -232,8 +263,18 @@ function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
 
 // ─── NotificationSettings ─────────────────────────────────────────────────────
 
-function NotificationSettings({ pushToken, token }: { pushToken: string | null; token: string | null }) {
-  const defaultPrefs: NotificationPrefs = { notifyReminders: true, notifyCancellations: true, notifyConfirmations: true };
+function NotificationSettings({
+  pushToken,
+  token,
+}: {
+  pushToken: string | null;
+  token: string | null;
+}) {
+  const defaultPrefs: NotificationPrefs = {
+    notifyReminders: true,
+    notifyCancellations: true,
+    notifyConfirmations: true,
+  };
   const [prefs, setPrefs] = useState<NotificationPrefs>(defaultPrefs);
   const [saving, setSaving] = useState(false);
   const mounted = useRef(true);
@@ -241,10 +282,14 @@ function NotificationSettings({ pushToken, token }: { pushToken: string | null; 
   useEffect(() => {
     SecureStore.getItemAsync(PREFS_KEY).then((raw) => {
       if (raw && mounted.current) {
-        try { setPrefs(JSON.parse(raw)); } catch {}
+        try {
+          setPrefs(JSON.parse(raw));
+        } catch {}
       }
     });
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+    };
   }, []);
 
   const updatePref = async (key: keyof NotificationPrefs, value: boolean) => {
@@ -255,8 +300,8 @@ function NotificationSettings({ pushToken, token }: { pushToken: string | null; 
     setSaving(true);
     try {
       await fetch(`${API_URL}/api/push/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ expoToken: pushToken, ...next }),
       });
     } catch {}
@@ -267,21 +312,31 @@ function NotificationSettings({ pushToken, token }: { pushToken: string | null; 
     return (
       <View style={n.wrap}>
         <Text style={n.title}>Notifications</Text>
-        <Text style={n.noToken}>
-          Notifications are not available in this environment.
-        </Text>
+        <Text style={n.noToken}>Notifications are not available in this environment.</Text>
       </View>
     );
   }
 
   return (
     <View style={n.wrap}>
-      <Text style={n.title}>Notifications {saving ? '(saving…)' : ''}</Text>
+      <Text style={n.title}>Notifications {saving ? "(saving…)" : ""}</Text>
       {(
         [
-          { key: 'notifyCancellations', label: 'Trip cancellations', desc: 'Get notified immediately if your trip is cancelled.' },
-          { key: 'notifyReminders', label: 'Trip reminders', desc: 'Reminder 24 hours before your trip departs.' },
-          { key: 'notifyConfirmations', label: 'Booking confirmations', desc: 'Confirmation push when a booking is processed.' },
+          {
+            key: "notifyCancellations",
+            label: "Trip cancellations",
+            desc: "Get notified immediately if your trip is cancelled.",
+          },
+          {
+            key: "notifyReminders",
+            label: "Trip reminders",
+            desc: "Reminder 24 hours before your trip departs.",
+          },
+          {
+            key: "notifyConfirmations",
+            label: "Booking confirmations",
+            desc: "Confirmation push when a booking is processed.",
+          },
         ] as { key: keyof NotificationPrefs; label: string; desc: string }[]
       ).map((item) => (
         <View key={item.key} style={n.row}>
@@ -327,7 +382,7 @@ export default function AccountScreen() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const data = await res.json() as Booking[];
+        const data = (await res.json()) as Booking[];
         setBookings(data);
       }
     } catch {}
@@ -337,7 +392,7 @@ export default function AccountScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchBookings();
-    }, [fetchBookings])
+    }, [fetchBookings]),
   );
 
   const onRefresh = useCallback(async () => {
@@ -351,24 +406,26 @@ export default function AccountScreen() {
     setAuth(newToken);
     if (pushToken) {
       fetch(`${API_URL}/api/push/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${newToken}` },
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${newToken}` },
         body: JSON.stringify({ expoToken: pushToken }),
       }).catch(() => {});
     }
   };
 
   const handleLogout = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: logout },
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign Out", style: "destructive", onPress: logout },
     ]);
   };
 
   if (authLoading) {
     return (
       <SafeAreaView style={s.safe}>
-        <View style={s.centered}><ActivityIndicator color={Colors.teal} /></View>
+        <View style={s.centered}>
+          <ActivityIndicator color={Colors.teal} />
+        </View>
       </SafeAreaView>
     );
   }
@@ -400,7 +457,10 @@ export default function AccountScreen() {
             <Text style={s.headerTitle}>Account</Text>
             <Text style={s.headerEmail}>{customer?.email}</Text>
           </View>
-          <TouchableOpacity onPress={handleLogout} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity
+            onPress={handleLogout}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <Text style={s.signOut}>Sign Out</Text>
           </TouchableOpacity>
         </View>
@@ -429,28 +489,33 @@ export default function AccountScreen() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.surfaceAlt },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   scrollContent: { paddingBottom: 40 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: Colors.teal,
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: '#fff' },
-  headerEmail: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
-  signOut: { fontSize: 14, color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
+  headerTitle: { fontSize: 22, fontWeight: "800", color: "#fff" },
+  headerEmail: { fontSize: 13, color: "rgba(255,255,255,0.75)", marginTop: 2 },
+  signOut: { fontSize: 14, color: "rgba(255,255,255,0.85)", fontWeight: "600" },
   sectionLabel: {
-    fontSize: 12, fontWeight: '700', color: Colors.inkSubtle,
-    letterSpacing: 0.5, textTransform: 'uppercase',
-    paddingHorizontal: 16, paddingTop: 20, paddingBottom: 10,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.inkSubtle,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 10,
   },
-  empty: { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 32, gap: 10 },
+  empty: { alignItems: "center", paddingVertical: 48, paddingHorizontal: 32, gap: 10 },
   emptyIcon: { fontSize: 40 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.ink },
-  emptyBody: { fontSize: 14, color: Colors.inkMuted, textAlign: 'center' },
+  emptyTitle: { fontSize: 18, fontWeight: "700", color: Colors.ink },
+  emptyBody: { fontSize: 14, color: Colors.inkMuted, textAlign: "center" },
 });
 
 const b = StyleSheet.create({
@@ -461,31 +526,34 @@ const b = StyleSheet.create({
     borderColor: Colors.border,
     marginHorizontal: 16,
     marginBottom: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  code: { fontSize: 14, fontWeight: '700', color: Colors.ink },
-  status: { fontSize: 12, fontWeight: '700' },
-  item: { flexDirection: 'row', padding: 12, gap: 10 },
+  code: { fontSize: 14, fontWeight: "700", color: Colors.ink },
+  status: { fontSize: 12, fontWeight: "700" },
+  item: { flexDirection: "row", padding: 12, gap: 10 },
   colorDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   itemBody: { flex: 1 },
-  itemVessel: { fontSize: 14, fontWeight: '700', color: Colors.ink },
-  itemProduct: { fontSize: 13, color: Colors.inkMuted, fontWeight: '500' },
+  itemVessel: { fontSize: 14, fontWeight: "700", color: Colors.ink },
+  itemProduct: { fontSize: 13, color: Colors.inkMuted, fontWeight: "500" },
   itemDate: { fontSize: 12, color: Colors.inkSubtle, marginTop: 2 },
-  itemTickets: { fontSize: 12, color: Colors.inkSubtle, marginTop: 2, textTransform: 'capitalize' },
+  itemTickets: { fontSize: 12, color: Colors.inkSubtle, marginTop: 2, textTransform: "capitalize" },
   cardFooter: {
-    borderTopWidth: 1, borderTopColor: Colors.border,
-    paddingHorizontal: 14, paddingVertical: 8, alignItems: 'flex-end',
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: "flex-end",
   },
-  total: { fontSize: 14, fontWeight: '700', color: Colors.ink },
+  total: { fontSize: 14, fontWeight: "700", color: Colors.ink },
 });
 
 const f = StyleSheet.create({
@@ -496,22 +564,30 @@ const f = StyleSheet.create({
     padding: 20,
     gap: 12,
   },
-  heading: { fontSize: 20, fontWeight: '800', color: Colors.ink },
+  heading: { fontSize: 20, fontWeight: "800", color: Colors.ink },
   sub: { fontSize: 14, color: Colors.inkMuted, lineHeight: 20 },
   input: {
-    height: 50, borderWidth: 1.5, borderColor: Colors.border,
-    borderRadius: 10, paddingHorizontal: 14, fontSize: 16, color: Colors.ink,
+    height: 50,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    color: Colors.ink,
     backgroundColor: Colors.surfaceAlt,
   },
-  otpInput: { fontSize: 28, fontWeight: '700', letterSpacing: 8, textAlign: 'center' },
+  otpInput: { fontSize: 28, fontWeight: "700", letterSpacing: 8, textAlign: "center" },
   error: { fontSize: 13, color: Colors.error },
   btn: {
-    height: 50, backgroundColor: Colors.teal, borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center',
+    height: 50,
+    backgroundColor: Colors.teal,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
   btnLoading: { opacity: 0.7 },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  back: { fontSize: 13, color: Colors.teal, textAlign: 'center' },
+  btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  back: { fontSize: 13, color: Colors.teal, textAlign: "center" },
 });
 
 const n = StyleSheet.create({
@@ -523,18 +599,18 @@ const n = StyleSheet.create({
     padding: 20,
     gap: 4,
   },
-  title: { fontSize: 16, fontWeight: '700', color: Colors.ink, marginBottom: 12 },
+  title: { fontSize: 16, fontWeight: "700", color: Colors.ink, marginBottom: 12 },
   noToken: { fontSize: 14, color: Colors.inkMuted },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     gap: 12,
   },
   rowText: { flex: 1 },
-  rowLabel: { fontSize: 14, fontWeight: '600', color: Colors.ink },
+  rowLabel: { fontSize: 14, fontWeight: "600", color: Colors.ink },
   rowDesc: { fontSize: 12, color: Colors.inkMuted, marginTop: 2, lineHeight: 16 },
 });

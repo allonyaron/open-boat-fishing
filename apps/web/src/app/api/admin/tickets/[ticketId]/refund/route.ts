@@ -5,10 +5,7 @@ import { requireAdmin } from "@/lib/session";
 import { tickets, bookingItems, bookings, payments, trips } from "@openboat/db";
 import { and, eq, sql } from "drizzle-orm";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { ticketId: string } }
-) {
+export async function POST(req: NextRequest, { params }: { params: { ticketId: string } }) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
   const { session } = auth;
@@ -27,12 +24,7 @@ export async function POST(
     .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
     .innerJoin(bookings, eq(tickets.bookingId, bookings.id))
     .innerJoin(payments, eq(payments.bookingId, bookings.id))
-    .where(
-      and(
-        eq(tickets.id, ticketId),
-        eq(tickets.operatorId, session.operatorId)
-      )
-    );
+    .where(and(eq(tickets.id, ticketId), eq(tickets.operatorId, session.operatorId)));
 
   if (!row) {
     return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
@@ -68,7 +60,10 @@ export async function POST(
     }
   } catch (err) {
     console.error("Stripe refund failed for ticket", ticketId, err);
-    return NextResponse.json({ error: "Stripe refund failed", detail: String(err) }, { status: 502 });
+    return NextResponse.json(
+      { error: "Stripe refund failed", detail: String(err) },
+      { status: 502 },
+    );
   }
 
   // Mark ticket voided + restore one seat on the trip

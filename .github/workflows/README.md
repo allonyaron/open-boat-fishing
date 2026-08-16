@@ -2,19 +2,19 @@
 
 ## Workflows
 
-| File | Trigger | What it does |
-|---|---|---|
-| `mobile-checks.yml` | PR targeting `main` touching `apps/mobile/**` or `packages/**` | TypeScript typecheck + `expo-doctor` validation. Posts a PR comment explaining failures. |
-| `mobile-preview.yml` | Push to `main` touching `apps/mobile/**` or `packages/**` | EAS Build (`preview` profile, all platforms) + EAS Update (OTA push to the `main` branch). |
-| `mobile-release.yml` | Push of a `v*` tag (e.g. `v1.0.0`) | EAS Build (`consumer` profile, all platforms) then `eas submit` to App Store + Google Play. |
-| `web-checks.yml` | PR targeting `main` touching `apps/web/**` or `packages/**` | TypeScript typecheck + full Next.js build (catches build-time errors). |
+| File                 | Trigger                                                        | What it does                                                                                |
+| -------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `mobile-checks.yml`  | PR targeting `main` touching `apps/mobile/**` or `packages/**` | TypeScript typecheck + `expo-doctor` validation. Posts a PR comment explaining failures.    |
+| `mobile-preview.yml` | Push to `main` touching `apps/mobile/**` or `packages/**`      | EAS Build (`preview` profile, all platforms) + EAS Update (OTA push to the `main` branch).  |
+| `mobile-release.yml` | Push of a `v*` tag (e.g. `v1.0.0`)                             | EAS Build (`consumer` profile, all platforms) then `eas submit` to App Store + Google Play. |
+| `web-checks.yml`     | PR targeting `main` touching `apps/web/**` or `packages/**`    | TypeScript typecheck + full Next.js build (catches build-time errors).                      |
 
 ## Required GitHub Secrets
 
 Add one secret under **Settings → Secrets and variables → Actions**:
 
-| Secret | How to get it |
-|---|---|
+| Secret       | How to get it                                              |
+| ------------ | ---------------------------------------------------------- |
 | `EXPO_TOKEN` | expo.dev → Account Settings → Access Tokens → Create token |
 
 ## Apple & Google Credentials (EAS, not GitHub)

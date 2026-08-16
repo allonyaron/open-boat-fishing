@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 See `docs/build-status.md` for the full per-step build narrative.
 
 **Known gaps blocking production:**
+
 - SMS not sent (Twilio TODO in webhook)
 - QR payload is bare UUID — needs HMAC signing before launch
 - Weekend vs. weekday pricing not modelled (schema change needed)
@@ -113,12 +114,12 @@ DATABASE_URL=... tsx packages/db/src/seed-test-customers.ts  # seed fixture book
 
 ## Key Env Vars (non-obvious)
 
-| Var | Where | Purpose |
-|-----|-------|---------|
-| `SESSION_SECRET` | `apps/web/.env.local` + Vercel | Signs mate tokens and customer tokens (HMAC-SHA256). Must be ≥ 32 chars. |
-| `CRON_SECRET` | `apps/web/.env.local` + Vercel | Authenticates Vercel cron calls to `/api/cron/trip-reminders` and `/api/cron/expire-pending-bookings`. Add to Vercel env before deploying. |
-| `EXPO_PUBLIC_APP_VARIANT` | `apps/mobile/.env.local` | Set to `mate` to run/build the mate check-in app. Leave unset for consumer app. |
-| `EXPO_PUBLIC_API_URL` | `apps/mobile/.env.local` | Override API host. In dev: `http://localhost:3000`. In production: operator's domain. |
+| Var                       | Where                          | Purpose                                                                                                                                    |
+| ------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SESSION_SECRET`          | `apps/web/.env.local` + Vercel | Signs mate tokens and customer tokens (HMAC-SHA256). Must be ≥ 32 chars.                                                                   |
+| `CRON_SECRET`             | `apps/web/.env.local` + Vercel | Authenticates Vercel cron calls to `/api/cron/trip-reminders` and `/api/cron/expire-pending-bookings`. Add to Vercel env before deploying. |
+| `EXPO_PUBLIC_APP_VARIANT` | `apps/mobile/.env.local`       | Set to `mate` to run/build the mate check-in app. Leave unset for consumer app.                                                            |
+| `EXPO_PUBLIC_API_URL`     | `apps/mobile/.env.local`       | Override API host. In dev: `http://localhost:3000`. In production: operator's domain.                                                      |
 
 ## Dependency Overrides (pnpm-workspace.yaml)
 

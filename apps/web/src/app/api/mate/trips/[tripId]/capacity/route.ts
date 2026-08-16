@@ -4,16 +4,13 @@ import { requireMate } from "@/lib/mate-auth";
 import { trips, vessels, tickets, bookingItems, capacityChanges } from "@openboat/db";
 import { and, eq, sql } from "drizzle-orm";
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ tripId: string }> }
-) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ tripId: string }> }) {
   const auth = await requireMate(req);
   if (auth instanceof NextResponse) return auth;
   const { staff } = auth;
 
   const { tripId } = await params;
-  const body = await req.json().catch(() => ({})) as { capacity?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { capacity?: unknown };
 
   const newCapacity = Number(body.capacity);
   if (!Number.isInteger(newCapacity) || newCapacity < 1) {
@@ -41,13 +38,13 @@ export async function PATCH(
   if (trip.certificateCapacity === null) {
     return NextResponse.json(
       { error: "Certificate capacity not configured for this vessel — contact admin" },
-      { status: 422 }
+      { status: 422 },
     );
   }
   if (newCapacity > trip.certificateCapacity) {
     return NextResponse.json(
       { error: `Cannot exceed certificate capacity of ${trip.certificateCapacity}` },
-      { status: 422 }
+      { status: 422 },
     );
   }
 
@@ -60,7 +57,7 @@ export async function PATCH(
   if (newCapacity < sold) {
     return NextResponse.json(
       { error: `Cannot set capacity below tickets already sold (${sold})` },
-      { status: 422 }
+      { status: 422 },
     );
   }
 

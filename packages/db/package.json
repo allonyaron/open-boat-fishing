@@ -15,6 +15,7 @@
     "seed-trips": "tsx --env-file .env src/seed-trips-dev.ts",
     "seed:admin": "tsx --env-file .env src/seed-admin.ts",
     "seed:mate": "tsx --env-file .env src/seed-mate.ts",
+    "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

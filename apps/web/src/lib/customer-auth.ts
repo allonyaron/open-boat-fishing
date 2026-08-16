@@ -43,7 +43,7 @@ function verifyCustomerToken(token: string): CustomerTokenPayload | null {
 }
 
 export async function requireCustomer(
-  req: NextRequest
+  req: NextRequest,
 ): Promise<{ customer: CustomerTokenPayload } | NextResponse> {
   const auth = req.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) {

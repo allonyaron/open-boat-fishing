@@ -33,8 +33,8 @@ export async function GET(req: NextRequest) {
       and(
         eq(trips.status, "scheduled"),
         gte(trips.startTime, windowStart),
-        lte(trips.startTime, windowEnd)
-      )
+        lte(trips.startTime, windowEnd),
+      ),
     );
 
   let sent = 0;
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
         body: `Your ${trip.vesselName} ${trip.productName} departs tomorrow at ${departs}. See you at the dock!`,
         data: { type: "trip_reminder", tripId: trip.id },
       },
-      "reminders"
+      "reminders",
     );
     sent += emails.length;
   }

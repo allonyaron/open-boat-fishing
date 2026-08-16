@@ -6,25 +6,35 @@ import { and, eq } from "drizzle-orm";
 
 type FishCount = { species: string; count: number };
 
-function parseBody(raw: unknown): { catchSummary?: string; fishCounts?: FishCount[]; photoUrls?: string[] } | string {
+function parseBody(
+  raw: unknown,
+): { catchSummary?: string; fishCounts?: FishCount[]; photoUrls?: string[] } | string {
   if (typeof raw !== "object" || raw === null) return "body must be an object";
   const b = raw as Record<string, unknown>;
-  if (b.catchSummary !== undefined && (typeof b.catchSummary !== "string" || b.catchSummary.length > 2000)) {
+  if (
+    b.catchSummary !== undefined &&
+    (typeof b.catchSummary !== "string" || b.catchSummary.length > 2000)
+  ) {
     return "catchSummary must be a string ≤ 2000 chars";
   }
   if (b.fishCounts !== undefined) {
-    if (!Array.isArray(b.fishCounts) || b.fishCounts.length > 50) return "fishCounts must be an array ≤ 50 items";
+    if (!Array.isArray(b.fishCounts) || b.fishCounts.length > 50)
+      return "fishCounts must be an array ≤ 50 items";
     for (const item of b.fishCounts) {
       if (typeof item !== "object" || item === null) return "each fishCount must be an object";
       const fc = item as Record<string, unknown>;
-      if (typeof fc.species !== "string" || fc.species.length < 1 || fc.species.length > 100) return "species must be a string 1–100 chars";
-      if (typeof fc.count !== "number" || !Number.isInteger(fc.count) || fc.count < 0) return "count must be a non-negative integer";
+      if (typeof fc.species !== "string" || fc.species.length < 1 || fc.species.length > 100)
+        return "species must be a string 1–100 chars";
+      if (typeof fc.count !== "number" || !Number.isInteger(fc.count) || fc.count < 0)
+        return "count must be a non-negative integer";
     }
   }
   if (b.photoUrls !== undefined) {
-    if (!Array.isArray(b.photoUrls) || b.photoUrls.length > 20) return "photoUrls must be an array ≤ 20 items";
+    if (!Array.isArray(b.photoUrls) || b.photoUrls.length > 20)
+      return "photoUrls must be an array ≤ 20 items";
     for (const u of b.photoUrls) {
-      if (typeof u !== "string" || u.length > 2048) return "each photoUrl must be a string ≤ 2048 chars";
+      if (typeof u !== "string" || u.length > 2048)
+        return "each photoUrl must be a string ≤ 2048 chars";
     }
   }
   return {
@@ -34,10 +44,7 @@ function parseBody(raw: unknown): { catchSummary?: string; fishCounts?: FishCoun
   };
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ tripId: string }> }
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ tripId: string }> }) {
   const auth = await requireMate(req);
   if (auth instanceof NextResponse) return auth;
   const { staff } = auth;
@@ -55,10 +62,7 @@ export async function GET(
   return NextResponse.json(report);
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ tripId: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ tripId: string }> }) {
   const auth = await requireMate(req);
   if (auth instanceof NextResponse) return auth;
   const { staff } = auth;
@@ -82,7 +86,7 @@ export async function POST(
   if (trip.status !== "sailed" && trip.status !== "pending_settlement") {
     return NextResponse.json(
       { error: "Reports can only be posted after the trip has sailed" },
-      { status: 409 }
+      { status: 409 },
     );
   }
 

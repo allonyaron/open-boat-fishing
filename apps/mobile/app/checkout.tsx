@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -10,13 +10,13 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { useStripe } from '@stripe/stripe-react-native';
-import { MMKV } from 'react-native-mmkv';
-import Constants from 'expo-constants';
-import { Colors } from '@/constants/Colors';
-import { upsertBooking } from '@/lib/wallet';
+} from "react-native";
+import { useRouter } from "expo-router";
+import { useStripe } from "@stripe/stripe-react-native";
+import { MMKV } from "react-native-mmkv";
+import Constants from "expo-constants";
+import { Colors } from "@/constants/Colors";
+import { upsertBooking } from "@/lib/wallet";
 
 // ─── Types (mirrors trips.tsx) ────────────────────────────────────────────────
 
@@ -47,10 +47,10 @@ const checkoutStorage = new MMKV();
 function getApiUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(':')[0];
+    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
     if (host) return `http://${host}:3000`;
   }
-  throw new Error('EXPO_PUBLIC_API_URL must be set for production builds');
+  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
 }
 const API_URL = getApiUrl();
 
@@ -64,9 +64,9 @@ function fmtTime(iso: string): string {
   const d = new Date(iso);
   const h = d.getHours();
   const m = d.getMinutes();
-  const ampm = h >= 12 ? 'PM' : 'AM';
+  const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 function ticketLabel(type: string): string {
@@ -97,8 +97,8 @@ function ConfirmedView({
           <Text style={cv.code}>{code}</Text>
         </View>
         <Text style={cv.hint}>
-          Your boarding passes will appear in My Tickets shortly. You can also add them
-          manually using your code and email.
+          Your boarding passes will appear in My Tickets shortly. You can also add them manually
+          using your code and email.
         </Text>
         <TouchableOpacity style={cv.btn} onPress={onDone} activeOpacity={0.85}>
           <Text style={cv.btnText}>View My Tickets</Text>
@@ -123,19 +123,21 @@ export default function CheckoutScreen() {
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const [pending, setPending] = useState<PendingCheckout | null>(null);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState<{ code: string; email: string } | null>(null);
 
   useEffect(() => {
-    const raw = checkoutStorage.getString('pending_checkout');
+    const raw = checkoutStorage.getString("pending_checkout");
     if (raw) {
       try {
         setPending(JSON.parse(raw) as PendingCheckout);
-      } catch { /* ignore malformed */ }
+      } catch {
+        /* ignore malformed */
+      }
     }
   }, []);
 
@@ -144,7 +146,7 @@ export default function CheckoutScreen() {
     const lines: CartLine[] = [];
     for (const [key, qty] of Object.entries(pending.cart)) {
       if (qty <= 0) continue;
-      const [tripId, ticketType] = key.split(':');
+      const [tripId, ticketType] = key.split(":");
       const trip = pending.cartTrips.find((t) => t.id === tripId);
       if (!trip) continue;
       const price = trip.product.prices.find((p) => p.ticketType === ticketType);
@@ -160,10 +162,7 @@ export default function CheckoutScreen() {
     return lines;
   }, [pending]);
 
-  const totalCents = useMemo(
-    () => cartLines.reduce((s, l) => s + l.lineTotal, 0),
-    [cartLines]
-  );
+  const totalCents = useMemo(() => cartLines.reduce((s, l) => s + l.lineTotal, 0), [cartLines]);
 
   const linesByTrip = useMemo(() => {
     const map = new Map<string, { trip: Trip; lines: CartLine[] }>();
@@ -179,9 +178,12 @@ export default function CheckoutScreen() {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPhone = phone.trim() || undefined;
 
-    if (!cleanName) { setError('Please enter your name.'); return; }
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setError('Please enter a valid email address.');
+    if (!cleanName) {
+      setError("Please enter your name.");
+      return;
+    }
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      setError("Please enter a valid email address.");
       return;
     }
 
@@ -201,8 +203,8 @@ export default function CheckoutScreen() {
       }));
 
       const res = await fetch(`${API_URL}/api/bookings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cart: cartPayload,
           customerName: cleanName,
@@ -221,21 +223,21 @@ export default function CheckoutScreen() {
       const data = (await res.json()) as BookingResponse;
 
       if (!res.ok || !data.clientSecret || !data.confirmationCode) {
-        setError(data.error ?? 'Unable to create booking. Please try again.');
+        setError(data.error ?? "Unable to create booking. Please try again.");
         return;
       }
 
       const { clientSecret, confirmationCode } = data;
 
       const { error: initError } = await initPaymentSheet({
-        merchantDisplayName: process.env.EXPO_PUBLIC_MERCHANT_NAME ?? 'Fishing Tickets',
+        merchantDisplayName: process.env.EXPO_PUBLIC_MERCHANT_NAME ?? "Fishing Tickets",
         paymentIntentClientSecret: clientSecret,
         defaultBillingDetails: { name: cleanName, email: cleanEmail, phone: cleanPhone },
         allowsDelayedPaymentMethods: false,
       });
 
       if (initError) {
-        setError(initError.message ?? 'Payment setup failed. Please try again.');
+        setError(initError.message ?? "Payment setup failed. Please try again.");
         return;
       }
 
@@ -243,15 +245,15 @@ export default function CheckoutScreen() {
 
       if (presentError) {
         // 'Canceled' means the user dismissed the sheet — not an error to surface
-        if (presentError.code !== 'Canceled') {
-          setError(presentError.message ?? 'Payment failed. Please try again.');
+        if (presentError.code !== "Canceled") {
+          setError(presentError.message ?? "Payment failed. Please try again.");
         }
         return;
       }
 
       // Payment succeeded — clear the pending cart
-      checkoutStorage.set('cart_paid', true);
-      checkoutStorage.delete('pending_checkout');
+      checkoutStorage.set("cart_paid", true);
+      checkoutStorage.delete("pending_checkout");
 
       setConfirmed({ code: confirmationCode, email: cleanEmail });
 
@@ -263,18 +265,20 @@ export default function CheckoutScreen() {
           await new Promise<void>((r) => setTimeout(r, 1500));
           try {
             const r = await fetch(
-              `${API_URL}/api/bookings?code=${encodeURIComponent(confirmationCode)}&email=${encodeURIComponent(cleanEmail)}`
+              `${API_URL}/api/bookings?code=${encodeURIComponent(confirmationCode)}&email=${encodeURIComponent(cleanEmail)}`,
             );
             if (r.ok) {
-              const bookingData = await r.json() as Parameters<typeof upsertBooking>[0];
+              const bookingData = (await r.json()) as Parameters<typeof upsertBooking>[0];
               await upsertBooking(bookingData);
               break;
             }
-          } catch { /* keep trying */ }
+          } catch {
+            /* keep trying */
+          }
         }
       })();
     } catch {
-      setError('Could not connect to server. Check your connection and try again.');
+      setError("Could not connect to server. Check your connection and try again.");
     } finally {
       setPaying(false);
     }
@@ -285,7 +289,7 @@ export default function CheckoutScreen() {
       <ConfirmedView
         code={confirmed.code}
         email={confirmed.email}
-        onDone={() => router.replace('/(tabs)/tickets')}
+        onDone={() => router.replace("/(tabs)/tickets")}
       />
     );
   }
@@ -304,7 +308,7 @@ export default function CheckoutScreen() {
     <SafeAreaView style={s.safe}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
           style={s.scroll}
@@ -376,8 +380,7 @@ export default function CheckoutScreen() {
             </View>
             <View style={[s.fieldGroup, { marginBottom: 0 }]}>
               <Text style={s.fieldLabel}>
-                Mobile Number{' '}
-                <Text style={s.optional}>(for ticket delivery)</Text>
+                Mobile Number <Text style={s.optional}>(for ticket delivery)</Text>
               </Text>
               <TextInput
                 style={s.input}
@@ -426,8 +429,8 @@ const s = StyleSheet.create({
   },
   centered: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: 24,
   },
   emptyText: {
@@ -443,7 +446,7 @@ const s = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.inkSubtle,
     letterSpacing: 0.8,
     marginBottom: 8,
@@ -455,15 +458,15 @@ const s = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden',
-    shadowColor: '#000',
+    overflow: "hidden",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
   tripGroup: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingVertical: 14,
     paddingRight: 16,
   },
@@ -475,7 +478,7 @@ const s = StyleSheet.create({
     width: 4,
     borderRadius: 2,
     marginHorizontal: 12,
-    alignSelf: 'stretch',
+    alignSelf: "stretch",
   },
   tripGroupBody: {
     flex: 1,
@@ -483,13 +486,13 @@ const s = StyleSheet.create({
   },
   tripVessel: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.ink,
   },
   tripMeta: {
     fontSize: 13,
     color: Colors.inkMuted,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   tripTime: {
     fontSize: 13,
@@ -497,9 +500,9 @@ const s = StyleSheet.create({
     marginBottom: 8,
   },
   lineRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginTop: 2,
   },
   lineLabel: {
@@ -508,13 +511,13 @@ const s = StyleSheet.create({
   },
   linePrice: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.ink,
   },
   totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
@@ -522,12 +525,12 @@ const s = StyleSheet.create({
   },
   totalLabel: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.ink,
   },
   totalAmount: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: "800",
     color: Colors.ink,
   },
   fieldGroup: {
@@ -540,13 +543,13 @@ const s = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.inkSubtle,
     letterSpacing: 0.3,
     marginBottom: 4,
   },
   optional: {
-    fontWeight: '400',
+    fontWeight: "400",
     color: Colors.inkSubtle,
   },
   input: {
@@ -564,7 +567,7 @@ const s = StyleSheet.create({
   terms: {
     fontSize: 13,
     color: Colors.inkSubtle,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 16,
     marginBottom: 12,
     paddingHorizontal: 8,
@@ -574,8 +577,8 @@ const s = StyleSheet.create({
     backgroundColor: Colors.teal,
     paddingVertical: 16,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 4,
     shadowColor: Colors.teal,
     shadowOffset: { width: 0, height: 4 },
@@ -587,9 +590,9 @@ const s = StyleSheet.create({
     opacity: 0.7,
   },
   payBtnText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 0.3,
   },
 });
@@ -601,8 +604,8 @@ const cv = StyleSheet.create({
   },
   inner: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 32,
     gap: 16,
   },
@@ -611,26 +614,26 @@ const cv = StyleSheet.create({
     height: 72,
     borderRadius: 36,
     backgroundColor: Colors.teal,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 4,
   },
   checkmark: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 36,
-    fontWeight: '700',
+    fontWeight: "700",
     lineHeight: 44,
   },
   title: {
     fontSize: 28,
-    fontWeight: '800',
+    fontWeight: "800",
     color: Colors.ink,
-    textAlign: 'center',
+    textAlign: "center",
   },
   subtitle: {
     fontSize: 14,
     color: Colors.inkMuted,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 20,
   },
   codeBox: {
@@ -640,26 +643,26 @@ const cv = StyleSheet.create({
     borderColor: Colors.border,
     paddingHorizontal: 28,
     paddingVertical: 16,
-    alignItems: 'center',
-    width: '100%',
+    alignItems: "center",
+    width: "100%",
   },
   codeLabel: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.inkSubtle,
     letterSpacing: 1,
     marginBottom: 6,
   },
   code: {
     fontSize: 32,
-    fontWeight: '800',
+    fontWeight: "800",
     color: Colors.ink,
     letterSpacing: 4,
   },
   hint: {
     fontSize: 13,
     color: Colors.inkSubtle,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 19,
   },
   btn: {
@@ -668,12 +671,12 @@ const cv = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 14,
     marginTop: 8,
-    width: '100%',
-    alignItems: 'center',
+    width: "100%",
+    alignItems: "center",
   },
   btnText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 });

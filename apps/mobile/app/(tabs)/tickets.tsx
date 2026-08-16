@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -14,27 +14,27 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
-import Constants from 'expo-constants';
-import { Colors } from '@/constants/Colors';
+} from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import Constants from "expo-constants";
+import { Colors } from "@/constants/Colors";
 import {
   type WalletBooking,
   type WalletBookingItem,
   type WalletTicket,
   getAllBookings,
   upsertBooking,
-} from '@/lib/wallet';
+} from "@/lib/wallet";
 
 // ─── API URL ─────────────────────────────────────────────────────────────────
 
 function getApiUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(':')[0];
+    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
     if (host) return `http://${host}:3000`;
   }
-  throw new Error('EXPO_PUBLIC_API_URL must be set for production builds');
+  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
 }
 const API_URL = getApiUrl();
 
@@ -44,14 +44,16 @@ function fmtTime(iso: string): string {
   const d = new Date(iso);
   const h = d.getHours();
   const m = d.getMinutes();
-  const ampm = h >= 12 ? 'PM' : 'AM';
+  const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 function fmtDate(dateStr: string): string {
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric',
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
   });
 }
 
@@ -68,8 +70,8 @@ function AddBookingSheet({
   onClose: () => void;
   onAdded: (booking: WalletBooking) => void;
 }) {
-  const [code, setCode] = useState('');
-  const [email, setEmail] = useState('');
+  const [code, setCode] = useState("");
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const translateY = useRef(new Animated.Value(500)).current;
@@ -95,25 +97,27 @@ function AddBookingSheet({
     const cleanCode = code.trim().toUpperCase();
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanCode || !cleanEmail) {
-      setError('Enter your confirmation code and email.');
+      setError("Enter your confirmation code and email.");
       return;
     }
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(
-        `${API_URL}/api/bookings?code=${encodeURIComponent(cleanCode)}&email=${encodeURIComponent(cleanEmail)}`
+        `${API_URL}/api/bookings?code=${encodeURIComponent(cleanCode)}&email=${encodeURIComponent(cleanEmail)}`,
       );
-      const data = await res.json() as Record<string, unknown>;
+      const data = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
-        setError((data.error as string | undefined) ?? 'Booking not found. Check your code and email.');
+        setError(
+          (data.error as string | undefined) ?? "Booking not found. Check your code and email.",
+        );
         return;
       }
-      const booking = await upsertBooking(data as Omit<WalletBooking, 'syncedAt'>);
+      const booking = await upsertBooking(data as Omit<WalletBooking, "syncedAt">);
       onAdded(booking);
       dismiss();
     } catch {
-      setError('Could not connect to server. Try again when you have signal.');
+      setError("Could not connect to server. Try again when you have signal.");
     } finally {
       setLoading(false);
     }
@@ -122,10 +126,7 @@ function AddBookingSheet({
   return (
     <Modal transparent animationType="none" onRequestClose={dismiss}>
       <Pressable style={add.backdrop} onPress={dismiss} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={add.kav}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={add.kav}>
         <Animated.View style={[add.sheet, { transform: [{ translateY }] }]}>
           <View style={add.handle} />
           <Text style={add.title}>Add Booking</Text>
@@ -172,10 +173,11 @@ function AddBookingSheet({
             disabled={loading}
             activeOpacity={0.85}
           >
-            {loading
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={add.btnText}>Find My Tickets</Text>
-            }
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={add.btnText}>Find My Tickets</Text>
+            )}
           </TouchableOpacity>
 
           <View style={{ height: 24 }} />
@@ -187,13 +189,7 @@ function AddBookingSheet({
 
 // ─── TicketRow ────────────────────────────────────────────────────────────────
 
-function TicketRow({
-  ticket,
-  onPress,
-}: {
-  ticket: WalletTicket;
-  onPress: () => void;
-}) {
+function TicketRow({ ticket, onPress }: { ticket: WalletTicket; onPress: () => void }) {
   return (
     <TouchableOpacity style={tr.row} onPress={onPress} activeOpacity={0.7}>
       <View style={tr.left}>
@@ -217,7 +213,7 @@ function BookingItemCard({
   onTicketPress: (ticketId: string) => void;
 }) {
   const { trip } = item;
-  const isTripCancelled = trip.status === 'cancelled';
+  const isTripCancelled = trip.status === "cancelled";
 
   return (
     <View style={[bic.card, isTripCancelled && bic.cardCancelled]}>
@@ -237,11 +233,7 @@ function BookingItemCard({
         </Text>
         <View style={bic.divider} />
         {item.tickets.map((t) => (
-          <TicketRow
-            key={t.id}
-            ticket={t}
-            onPress={() => onTicketPress(t.id)}
-          />
+          <TicketRow key={t.id} ticket={t} onPress={() => onTicketPress(t.id)} />
         ))}
       </View>
     </View>
@@ -271,7 +263,7 @@ export default function TicketsScreen() {
   useFocusEffect(
     useCallback(() => {
       loadFromCache();
-    }, [loadFromCache])
+    }, [loadFromCache]),
   );
 
   const onRefresh = useCallback(async () => {
@@ -281,15 +273,13 @@ export default function TicketsScreen() {
       const results = await Promise.allSettled(
         stored.map((b) =>
           fetch(
-            `${API_URL}/api/bookings?code=${b.confirmationCode}&email=${encodeURIComponent(b.customerEmail)}`
+            `${API_URL}/api/bookings?code=${b.confirmationCode}&email=${encodeURIComponent(b.customerEmail)}`,
           )
-            .then((r) => r.json() as Promise<Omit<WalletBooking, 'syncedAt'>>)
-            .then((data) => upsertBooking(data))
-        )
+            .then((r) => r.json() as Promise<Omit<WalletBooking, "syncedAt">>)
+            .then((data) => upsertBooking(data)),
+        ),
       );
-      setBookings(
-        results.map((r, i) => (r.status === 'fulfilled' ? r.value : stored[i]))
-      );
+      setBookings(results.map((r, i) => (r.status === "fulfilled" ? r.value : stored[i])));
     } catch {
       // keep showing cached data
     } finally {
@@ -332,7 +322,8 @@ export default function TicketsScreen() {
           <Text style={s.emptyIcon}>🎫</Text>
           <Text style={s.emptyTitle}>No tickets yet</Text>
           <Text style={s.emptyBody}>
-            After booking, tap Add to save your boarding passes here. They'll work offline at the dock.
+            After booking, tap Add to save your boarding passes here. They'll work offline at the
+            dock.
           </Text>
           <TouchableOpacity
             style={s.emptyBtn}
@@ -348,11 +339,7 @@ export default function TicketsScreen() {
           contentContainerStyle={s.scrollContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={Colors.teal}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.teal} />
           }
         >
           {sortedDates.map((date) => (
@@ -363,7 +350,7 @@ export default function TicketsScreen() {
                   key={item.id}
                   item={item}
                   onTicketPress={(ticketId) =>
-                    router.push({ pathname: '/boarding/[ticketId]', params: { ticketId } })
+                    router.push({ pathname: "/boarding/[ticketId]", params: { ticketId } })
                   }
                 />
               ))}
@@ -401,9 +388,9 @@ const s = StyleSheet.create({
     backgroundColor: Colors.surfaceAlt,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 14,
     backgroundColor: Colors.surface,
@@ -412,7 +399,7 @@ const s = StyleSheet.create({
   },
   heading: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.ink,
   },
   addBtn: {
@@ -422,19 +409,19 @@ const s = StyleSheet.create({
     borderRadius: 8,
   },
   addBtnText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   centered: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   empty: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 32,
     gap: 12,
   },
@@ -443,14 +430,14 @@ const s = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.ink,
-    textAlign: 'center',
+    textAlign: "center",
   },
   emptyBody: {
     fontSize: 15,
     color: Colors.inkMuted,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 22,
   },
   emptyBtn: {
@@ -461,9 +448,9 @@ const s = StyleSheet.create({
     borderRadius: 12,
   },
   emptyBtnText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   scroll: {
     flex: 1,
@@ -474,10 +461,10 @@ const s = StyleSheet.create({
   },
   dateHeader: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.inkSubtle,
     letterSpacing: 0.4,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     marginBottom: 8,
     marginTop: 4,
   },
@@ -485,14 +472,14 @@ const s = StyleSheet.create({
 
 const bic = StyleSheet.create({
   card: {
-    flexDirection: 'row',
+    flexDirection: "row",
     backgroundColor: Colors.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -509,14 +496,14 @@ const bic = StyleSheet.create({
     padding: 12,
   },
   topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 2,
   },
   vesselName: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.ink,
   },
   cancelBadge: {
@@ -526,15 +513,15 @@ const bic = StyleSheet.create({
     paddingVertical: 2,
   },
   cancelBadgeText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.3,
   },
   productName: {
     fontSize: 13,
     color: Colors.inkMuted,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 1,
   },
   time: {
@@ -550,31 +537,31 @@ const bic = StyleSheet.create({
 
 const tr = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 8,
     paddingHorizontal: 4,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
   left: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   type: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.ink,
   },
   typeVoided: {
     color: Colors.inkSubtle,
-    textDecorationLine: 'line-through',
+    textDecorationLine: "line-through",
   },
   cancelled: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.error,
     letterSpacing: 0.3,
   },
@@ -588,10 +575,10 @@ const tr = StyleSheet.create({
 const add = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: "rgba(0,0,0,0.45)",
   },
   kav: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
@@ -608,13 +595,13 @@ const add = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: Colors.border,
-    alignSelf: 'center',
+    alignSelf: "center",
     marginTop: 10,
     marginBottom: 18,
   },
   title: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.ink,
     marginBottom: 4,
   },
@@ -629,7 +616,7 @@ const add = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.inkMuted,
     marginBottom: 6,
     letterSpacing: 0.2,
@@ -654,16 +641,16 @@ const add = StyleSheet.create({
     height: 50,
     backgroundColor: Colors.teal,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 4,
   },
   btnLoading: {
     opacity: 0.75,
   },
   btnText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 });

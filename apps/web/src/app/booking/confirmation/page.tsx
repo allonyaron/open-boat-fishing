@@ -12,10 +12,7 @@ export default async function ConfirmationPage({
 
   if (!code) notFound();
 
-  const [booking] = await db
-    .select()
-    .from(bookings)
-    .where(eq(bookings.confirmationCode, code));
+  const [booking] = await db.select().from(bookings).where(eq(bookings.confirmationCode, code));
 
   if (!booking) notFound();
 
@@ -43,13 +40,18 @@ export default async function ConfirmationPage({
 
   function fmtTime(iso: Date | string) {
     return new Date(iso).toLocaleTimeString("en-US", {
-      hour: "numeric", minute: "2-digit", timeZone: "America/New_York",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "America/New_York",
     });
   }
 
   function fmtDate(d: string) {
     return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {
-      weekday: "long", month: "long", day: "numeric", year: "numeric",
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
     });
   }
 
@@ -59,8 +61,20 @@ export default async function ConfirmationPage({
       <header className="bg-white border-b border-hairline h-[66px] flex items-center px-5 md:px-8 gap-3">
         <a href="/" className="flex items-center gap-3">
           <div className="w-[34px] h-[34px] rounded-[10px] bg-teal flex items-center justify-center">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2"/><path d="M4 20l2-8h12l2 8"/><path d="M12 4v8"/><path d="M8 8h8"/>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2" />
+              <path d="M4 20l2-8h12l2 8" />
+              <path d="M12 4v8" />
+              <path d="M8 8h8" />
             </svg>
           </div>
           <span className="font-grotesk text-[17px] font-semibold text-ink">{operatorName}</span>
@@ -69,9 +83,11 @@ export default async function ConfirmationPage({
 
       <div className="max-w-lg mx-auto px-5 py-10">
         {/* Status banner */}
-        <div className={`rounded-[20px] p-6 mb-6 text-center ${
-          paymentSucceeded ? "bg-success-bg" : "bg-yellow-50 border border-yellow-200"
-        }`}>
+        <div
+          className={`rounded-[20px] p-6 mb-6 text-center ${
+            paymentSucceeded ? "bg-success-bg" : "bg-yellow-50 border border-yellow-200"
+          }`}
+        >
           <div className="text-4xl mb-3">{paymentSucceeded ? "🎣" : "⏳"}</div>
           <h1 className="font-grotesk text-[24px] font-semibold text-ink mb-1">
             {paymentSucceeded ? "You're booked!" : "Payment processing…"}
@@ -115,9 +131,7 @@ export default async function ConfirmationPage({
                   <div className="font-grotesk text-[15px] font-semibold text-ink">
                     {item.productName}
                   </div>
-                  <div className="text-[13px] text-muted mt-0.5">
-                    {fmtDate(item.tripDate)}
-                  </div>
+                  <div className="text-[13px] text-muted mt-0.5">{fmtDate(item.tripDate)}</div>
                   <div className="text-[13px] text-muted">
                     {fmtTime(item.startTime)} – {fmtTime(item.endTime)} · {item.vesselName}
                   </div>
@@ -129,9 +143,7 @@ export default async function ConfirmationPage({
 
         {/* Customer + total */}
         <div className="bg-white rounded-card border border-card-border p-5 mb-6">
-          <div className="text-xs font-bold uppercase tracking-widest text-faint mb-3">
-            Details
-          </div>
+          <div className="text-xs font-bold uppercase tracking-widest text-faint mb-3">Details</div>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-muted">Name</span>
@@ -157,8 +169,18 @@ export default async function ConfirmationPage({
             className="w-full bg-teal text-white font-grotesk font-semibold py-4 rounded-btn flex items-center justify-center gap-2 hover:bg-teal-hover transition-colors"
           >
             View Boarding Passes
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
             </svg>
           </a>
           <a
@@ -170,8 +192,8 @@ export default async function ConfirmationPage({
         </div>
 
         <p className="text-xs text-faint text-center mt-6">
-          A confirmation email will be sent to {booking.customerEmail}.
-          This page is sufficient for boarding if you don't receive it.
+          A confirmation email will be sent to {booking.customerEmail}. This page is sufficient for
+          boarding if you don't receive it.
         </p>
       </div>
     </div>

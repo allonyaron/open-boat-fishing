@@ -1,22 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
-import * as Brightness from 'expo-brightness';
-import QRCode from 'react-native-qrcode-svg';
-import { Colors } from '@/constants/Colors';
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useLocalSearchParams, useNavigation } from "expo-router";
+import * as Brightness from "expo-brightness";
+import QRCode from "react-native-qrcode-svg";
+import { Colors } from "@/constants/Colors";
 import {
   type WalletBooking,
   type WalletBookingItem,
   type WalletTicket,
   getTicketById,
-} from '@/lib/wallet';
+} from "@/lib/wallet";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -24,23 +17,26 @@ function fmtTime(iso: string): string {
   const d = new Date(iso);
   const h = d.getHours();
   const m = d.getMinutes();
-  const ampm = h >= 12 ? 'PM' : 'AM';
+  const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 function fmtDateLong(dateStr: string): string {
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
 // Postgres `time` columns come back as "HH:MM:SS" strings.
 function fmtTimeStr(timeStr: string): string {
-  const [h, m] = timeStr.split(':').map(Number);
-  const ampm = h >= 12 ? 'PM' : 'AM';
+  const [h, m] = timeStr.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 function ticketLabel(type: string): string {
@@ -99,7 +95,7 @@ export default function BoardingPassScreen() {
 
   // Also restore on blur so swipe-to-dismiss on iOS doesn't leave brightness stuck.
   useEffect(() => {
-    return navigation.addListener('blur', () => {
+    return navigation.addListener("blur", () => {
       if (prevBrightnessRef.current !== null) {
         Brightness.setBrightnessAsync(prevBrightnessRef.current);
         prevBrightnessRef.current = null;
@@ -128,7 +124,7 @@ export default function BoardingPassScreen() {
 
   const { booking, item, ticket } = data;
   const { trip } = item;
-  const isCancelled = trip.status === 'cancelled' || ticket.voided;
+  const isCancelled = trip.status === "cancelled" || ticket.voided;
 
   return (
     <ScrollView
@@ -146,7 +142,7 @@ export default function BoardingPassScreen() {
       {isCancelled && (
         <View style={s.cancelBanner}>
           <Text style={s.cancelBannerText}>
-            {ticket.voided ? 'TICKET CANCELLED' : 'TRIP CANCELLED'}
+            {ticket.voided ? "TICKET CANCELLED" : "TRIP CANCELLED"}
           </Text>
         </View>
       )}
@@ -158,12 +154,7 @@ export default function BoardingPassScreen() {
             <Text style={s.qrVoidText}>✕</Text>
           </View>
         ) : (
-          <QRCode
-            value={ticket.qrPayload}
-            size={220}
-            color="#000000"
-            backgroundColor="#FFFFFF"
-          />
+          <QRCode value={ticket.qrPayload} size={220} color="#000000" backgroundColor="#FFFFFF" />
         )}
       </View>
 
@@ -207,54 +198,54 @@ const s = StyleSheet.create({
   },
   centered: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: 32,
     backgroundColor: Colors.surfaceAlt,
   },
   errorTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.ink,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 8,
   },
   errorBody: {
     fontSize: 15,
     color: Colors.inkMuted,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 22,
   },
   header: {
     paddingVertical: 24,
     paddingHorizontal: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   headerVessel: {
     fontSize: 22,
-    fontWeight: '800',
-    color: '#fff',
+    fontWeight: "800",
+    color: "#fff",
     marginBottom: 4,
   },
   headerProduct: {
     fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
-    fontWeight: '500',
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: "500",
   },
   cancelBanner: {
     backgroundColor: Colors.error,
     paddingVertical: 10,
-    alignItems: 'center',
+    alignItems: "center",
   },
   cancelBannerText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 1,
   },
   qrContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: Colors.surface,
     marginHorizontal: 20,
     marginTop: 24,
@@ -263,7 +254,7 @@ const s = StyleSheet.create({
     padding: 24,
     borderWidth: 1,
     borderColor: Colors.border,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -275,24 +266,24 @@ const s = StyleSheet.create({
   qrVoid: {
     width: 220,
     height: 220,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: Colors.surfaceAlt,
     borderRadius: 8,
   },
   qrVoidText: {
     fontSize: 80,
     color: Colors.error,
-    fontWeight: '200',
+    fontWeight: "200",
   },
   typeBadge: {
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 16,
     marginBottom: 4,
   },
   typeBadgeText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.inkSubtle,
     letterSpacing: 1.2,
   },
@@ -303,12 +294,12 @@ const s = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 13,
     borderBottomWidth: 1,
@@ -317,21 +308,21 @@ const s = StyleSheet.create({
   detailLabel: {
     fontSize: 14,
     color: Colors.inkMuted,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   detailValue: {
     fontSize: 14,
     color: Colors.ink,
-    fontWeight: '600',
-    textAlign: 'right',
+    fontWeight: "600",
+    textAlign: "right",
     flexShrink: 1,
     marginLeft: 16,
   },
   ticketId: {
     fontSize: 11,
     color: Colors.inkSubtle,
-    fontVariant: ['tabular-nums'],
-    textAlign: 'center',
+    fontVariant: ["tabular-nums"],
+    textAlign: "center",
     marginTop: 20,
     marginHorizontal: 20,
     letterSpacing: 0.3,

@@ -5,7 +5,16 @@ import { stripe } from "@/lib/stripe";
 import { sendBookingConfirmation } from "@/lib/email";
 import { sendPushToEmails } from "@/lib/push";
 import { getPostHogServer } from "@/lib/posthog";
-import { bookings, bookingItems, tickets, payments, trips, operators, vessels, products } from "@openboat/db";
+import {
+  bookings,
+  bookingItems,
+  tickets,
+  payments,
+  trips,
+  operators,
+  vessels,
+  products,
+} from "@openboat/db";
 import { eq, inArray, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 
@@ -22,11 +31,7 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(
-      body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
+    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (err) {
     console.error("Stripe webhook signature verification failed:", err);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
@@ -83,10 +88,7 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
     }
 
     // Confirm the booking (seats were already decremented at booking creation)
-    await tx
-      .update(bookings)
-      .set({ status: "confirmed" })
-      .where(eq(bookings.id, bookingId));
+    await tx.update(bookings).set({ status: "confirmed" }).where(eq(bookings.id, bookingId));
 
     // Record the payment
     await tx.insert(payments).values({
@@ -111,8 +113,8 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
   // complete, even after the response has been returned to Stripe.
   waitUntil(
     sendConfirmationEmail(booking, bookingId).catch((err) =>
-      console.error("Failed to send confirmation email:", err)
-    )
+      console.error("Failed to send confirmation email:", err),
+    ),
   );
 
   if (booking.customerEmail) {
@@ -125,8 +127,8 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
           body: `Your trip is booked. Confirmation: ${booking.confirmationCode}`,
           data: { type: "booking_confirmed", bookingId },
         },
-        "confirmations"
-      ).catch((err) => console.error("Push error on confirmation:", err))
+        "confirmations",
+      ).catch((err) => console.error("Push error on confirmation:", err)),
     );
   }
 
@@ -158,31 +160,40 @@ async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
       } catch (err) {
         console.error("PostHog capture error:", err);
       }
-    })()
+    })(),
   );
 }
 
-async function sendConfirmationEmail(
-  booking: typeof bookings.$inferSelect,
-  bookingId: string
-) {
+async function sendConfirmationEmail(booking: typeof bookings.$inferSelect, bookingId: string) {
   const [operator] = await db.select().from(operators).where(eq(operators.id, booking.operatorId));
   if (!operator) return;
 
-  const itemRows = await db.select().from(bookingItems).where(eq(bookingItems.bookingId, bookingId));
+  const itemRows = await db
+    .select()
+    .from(bookingItems)
+    .where(eq(bookingItems.bookingId, bookingId));
   const tripIds = itemRows.map((i) => i.tripId);
   const [ticketRows, tripRows] = await Promise.all([
     db.select().from(tickets).where(eq(tickets.bookingId, bookingId)),
-    tripIds.length > 0 ? db.select().from(trips).where(inArray(trips.id, tripIds)) : Promise.resolve([] as (typeof trips.$inferSelect)[]),
+    tripIds.length > 0
+      ? db.select().from(trips).where(inArray(trips.id, tripIds))
+      : Promise.resolve([] as (typeof trips.$inferSelect)[]),
   ]);
   const vesselIds = [...new Set(tripRows.map((t) => t.vesselId))];
   const productIds = [...new Set(tripRows.map((t) => t.productId))];
   const [vesselRows, productRows] = await Promise.all([
-    vesselIds.length > 0 ? db.select().from(vessels).where(inArray(vessels.id, vesselIds)) : Promise.resolve([] as (typeof vessels.$inferSelect)[]),
-    productIds.length > 0 ? db.select().from(products).where(inArray(products.id, productIds)) : Promise.resolve([] as (typeof products.$inferSelect)[]),
+    vesselIds.length > 0
+      ? db.select().from(vessels).where(inArray(vessels.id, vesselIds))
+      : Promise.resolve([] as (typeof vessels.$inferSelect)[]),
+    productIds.length > 0
+      ? db.select().from(products).where(inArray(products.id, productIds))
+      : Promise.resolve([] as (typeof products.$inferSelect)[]),
   ]);
 
-  const lineMap = new Map<string, { count: number; priceCents: number; tripId: string; ticketType: string }>();
+  const lineMap = new Map<
+    string,
+    { count: number; priceCents: number; tripId: string; ticketType: string }
+  >();
   for (const t of ticketRows) {
     const item = itemRows.find((i) => i.id === t.bookingItemId)!;
     const key = `${item.tripId}:${t.ticketType}`;
@@ -190,13 +201,20 @@ async function sendConfirmationEmail(
     if (existing) {
       existing.count += 1;
     } else {
-      lineMap.set(key, { count: 1, priceCents: t.priceCents, tripId: item.tripId, ticketType: t.ticketType });
+      lineMap.set(key, {
+        count: 1,
+        priceCents: t.priceCents,
+        tripId: item.tripId,
+        ticketType: t.ticketType,
+      });
     }
   }
 
   function fmtTime(iso: string | Date) {
     const d = new Date(iso);
-    const h = d.getHours(), m = d.getMinutes(), ampm = h >= 12 ? "PM" : "AM";
+    const h = d.getHours(),
+      m = d.getMinutes(),
+      ampm = h >= 12 ? "PM" : "AM";
     const h12 = h % 12 || 12;
     return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
   }
@@ -209,7 +227,12 @@ async function sendConfirmationEmail(
       ticketType: l.ticketType,
       count: l.count,
       priceCents: l.priceCents,
-      tripDate: new Date(trip.departureDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }),
+      tripDate: new Date(trip.departureDate + "T12:00:00").toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }),
       vesselName: vessel.name,
       productName: product.displayName,
       departs: fmtTime(trip.startTime),
@@ -240,7 +263,11 @@ async function handlePaymentIntentCanceled(pi: Stripe.PaymentIntent) {
   // and the expire-pending-bookings cron can't both restore seats.
   const result = await db.transaction(async (tx) => {
     const [booking] = await tx
-      .select({ id: bookings.id, status: bookings.status, confirmationCode: bookings.confirmationCode })
+      .select({
+        id: bookings.id,
+        status: bookings.status,
+        confirmationCode: bookings.confirmationCode,
+      })
       .from(bookings)
       .where(eq(bookings.id, bookingId))
       .for("update");

@@ -1,0 +1,9 @@
+node_modules
+.next
+.turbo
+pnpm-lock.yaml
+packages/db/src/migrations/*.sql
+packages/db/src/migrations/meta/
+# drizzle-generated files
+packages/db/src/schema.ts
+packages/db/src/relations.ts

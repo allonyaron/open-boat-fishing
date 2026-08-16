@@ -6,11 +6,11 @@ Multi-tenant ticketing and check-in platform for party fishing boat operators. E
 
 ## What's in the box
 
-| App | Description |
-|-----|-------------|
-| `apps/web` | Next.js 14 — marketing site, booking calendar, checkout, boarding passes, admin dashboard, API routes |
+| App           | Description                                                                                                                                                                               |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`    | Next.js 14 — marketing site, booking calendar, checkout, boarding passes, admin dashboard, API routes                                                                                     |
 | `apps/mobile` | Expo SDK 53 — consumer booking app (trips calendar, Stripe Payment Sheet, offline tickets wallet, Account tab with OTP sign-in) + mate check-in app (same codebase, separate EAS profile) |
-| `packages/db` | Drizzle ORM schema + migrations (shared source of truth) |
+| `packages/db` | Drizzle ORM schema + migrations (shared source of truth)                                                                                                                                  |
 
 The **mate check-in app** (QR scanner, offline manifest, PIN auth) is built from the same `apps/mobile` codebase using the `mate` EAS build profile (`EXPO_PUBLIC_APP_VARIANT=mate`).
 
@@ -188,12 +188,12 @@ The mobile app uses [Expo EAS Build](https://docs.expo.dev/build/introduction/).
 
 ### Build profiles (in `apps/mobile/eas.json`)
 
-| Profile | Purpose |
-|---------|---------|
+| Profile       | Purpose                                                                           |
+| ------------- | --------------------------------------------------------------------------------- |
 | `development` | Dev client build — installs on device, connects to local Metro for fast iteration |
-| `preview` | Internal distribution (TestFlight / direct APK) — for QA and stakeholder review |
-| `consumer` | App Store / Google Play production build |
-| `mate` | Internal distribution — mate check-in app (TestFlight / internal Play track) |
+| `preview`     | Internal distribution (TestFlight / direct APK) — for QA and stakeholder review   |
+| `consumer`    | App Store / Google Play production build                                          |
+| `mate`        | Internal distribution — mate check-in app (TestFlight / internal Play track)      |
 
 ### First-time EAS setup
 
@@ -265,6 +265,7 @@ See `CLAUDE.md` for the full build order, data model, and architectural decision
 ## Project status
 
 **Complete (steps 1–9):**
+
 - Web booking flow end-to-end (calendar → cart → Stripe PaymentElement → boarding passes)
 - Stripe webhooks (`payment_intent.succeeded` + `payment_intent.canceled`), confirmation email via Resend
 - Admin dashboard: staff auth, trips list, one-tap cancellation (push sent to passengers), manifest + per-ticket refund, revenue reporting, lazy sail-signal transition, per-trip capacity edit
@@ -273,6 +274,7 @@ See `CLAUDE.md` for the full build order, data model, and architectural decision
 - Mate check-in app: PIN auth, offline manifest (SQLite prefetch at login), QR scanner + keyboard/Bluetooth mode, check-in queue with online sync
 
 **Remaining before launch:**
+
 - EAS build + App Store / Google Play submission (configure `eas.json submit` section)
 - SMS via Twilio (TODO in webhook)
 - QR payload HMAC signing (currently bare UUID)

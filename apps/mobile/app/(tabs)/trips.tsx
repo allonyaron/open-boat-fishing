@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -10,11 +10,11 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
-import Constants from 'expo-constants';
-import { MMKV } from 'react-native-mmkv';
-import { Colors } from '@/constants/Colors';
+} from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import Constants from "expo-constants";
+import { MMKV } from "react-native-mmkv";
+import { Colors } from "@/constants/Colors";
 
 const storage = new MMKV();
 
@@ -22,15 +22,15 @@ const storage = new MMKV();
 
 type Price = {
   id: string;
-  ticketType: string;   // "adult" | "child" | "senior"
+  ticketType: string; // "adult" | "child" | "senior"
   priceCents: number;
 };
 
 type Trip = {
   id: string;
-  departureDate: string;   // "YYYY-MM-DD"
-  startTime: string;       // ISO timestamptz
-  endTime: string;         // ISO timestamptz
+  departureDate: string; // "YYYY-MM-DD"
+  startTime: string; // ISO timestamptz
+  endTime: string; // ISO timestamptz
   capacity: number;
   seatsRemaining: number;
   vessel: { id: string; name: string; color: string };
@@ -46,10 +46,10 @@ type CartKey = string; // "tripId:ticketType"
 function getApiUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   if (__DEV__) {
-    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(':')[0];
+    const host = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri?.split(":")[0];
     if (host) return `http://${host}:3000`;
   }
-  throw new Error('EXPO_PUBLIC_API_URL must be set for production builds');
+  throw new Error("EXPO_PUBLIC_API_URL must be set for production builds");
 }
 
 const API_URL = getApiUrl();
@@ -60,9 +60,9 @@ function fmtTime(iso: string): string {
   const d = new Date(iso);
   const h = d.getHours();
   const m = d.getMinutes();
-  const ampm = h >= 12 ? 'PM' : 'AM';
+  const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
-  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 function fmtCents(cents: number): string {
@@ -74,8 +74,18 @@ function ticketLabel(type: string): string {
 }
 
 const MONTH_NAMES = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December',
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 // ─── MonthCalendar ────────────────────────────────────────────────────────────
@@ -95,12 +105,12 @@ function MonthCalendar({
 }) {
   const firstDow = new Date(year, month, 1).getDay(); // 0 = Sunday
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = new Date().toISOString().split("T")[0];
 
   // day number → unique vessel colors for that day
   const dotsByDay = new Map<number, string[]>();
   for (const trip of trips) {
-    const parts = trip.departureDate.split('-');
+    const parts = trip.departureDate.split("-");
     const d = parseInt(parts[2], 10);
     if (!dotsByDay.has(d)) dotsByDay.set(d, []);
     const existing = dotsByDay.get(d)!;
@@ -115,7 +125,7 @@ function MonthCalendar({
   return (
     <View style={cal.grid}>
       {/* Column headers */}
-      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+      {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
         <View key={`h${i}`} style={cal.cell}>
           <Text style={cal.header}>{d}</Text>
         </View>
@@ -123,7 +133,7 @@ function MonthCalendar({
       {/* Day cells */}
       {cells.map((day, i) => {
         if (!day) return <View key={`b${i}`} style={cal.cell} />;
-        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         const colors = dotsByDay.get(day) ?? [];
         const isSelected = selectedDay === dateStr;
         const isToday = dateStr === todayStr;
@@ -135,22 +145,20 @@ function MonthCalendar({
             onPress={() => onSelectDay(dateStr)}
             activeOpacity={0.7}
           >
-            <View style={[
-              cal.dayCircle,
-              isSelected && cal.dayCircleSelected,
-              isToday && !isSelected && cal.dayCircleToday,
-            ]}>
-              <Text style={[cal.dayNum, isSelected && cal.dayNumSelected]}>
-                {day}
-              </Text>
+            <View
+              style={[
+                cal.dayCircle,
+                isSelected && cal.dayCircleSelected,
+                isToday && !isSelected && cal.dayCircleToday,
+              ]}
+            >
+              <Text style={[cal.dayNum, isSelected && cal.dayNumSelected]}>{day}</Text>
             </View>
             <View style={cal.dots}>
               {colors.slice(0, 4).map((c, di) => (
                 <View key={di} style={[cal.dot, { backgroundColor: c }]} />
               ))}
-              {colors.length > 4 && (
-                <Text style={cal.dotPlus}>+{colors.length - 4}</Text>
-              )}
+              {colors.length > 4 && <Text style={cal.dotPlus}>+{colors.length - 4}</Text>}
             </View>
           </TouchableOpacity>
         );
@@ -192,7 +200,8 @@ function TicketSheet({
   }, [onClose]);
 
   const tripQty = trip.product.prices.reduce(
-    (sum, p) => sum + (cart[`${trip.id}:${p.ticketType}`] ?? 0), 0
+    (sum, p) => sum + (cart[`${trip.id}:${p.ticketType}`] ?? 0),
+    0,
   );
   const tripTotalCents = trip.product.prices.reduce((sum, p) => {
     const qty = cart[`${trip.id}:${p.ticketType}`] ?? 0;
@@ -264,7 +273,8 @@ function TicketSheet({
           {tripQty > 0 && (
             <View style={sh.cartSummary}>
               <Text style={sh.cartSummaryText}>
-                IN CART: {tripQty}{'  '}TOTAL: {fmtCents(tripTotalCents)}
+                IN CART: {tripQty}
+                {"  "}TOTAL: {fmtCents(tripTotalCents)}
               </Text>
             </View>
           )}
@@ -309,7 +319,9 @@ function CartBar({
   return (
     <View style={cb.bar}>
       <View style={cb.info}>
-        <Text style={cb.qty}>{totalQty} ticket{totalQty !== 1 ? 's' : ''}</Text>
+        <Text style={cb.qty}>
+          {totalQty} ticket{totalQty !== 1 ? "s" : ""}
+        </Text>
         <Text style={cb.total}>{fmtCents(totalCents)}</Text>
       </View>
       <TouchableOpacity style={cb.btn} onPress={onReserve} activeOpacity={0.85}>
@@ -331,50 +343,52 @@ export default function TripsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedDay, setSelectedDay] = useState<string | null>(
-    now.toISOString().split('T')[0]
-  );
+  const [selectedDay, setSelectedDay] = useState<string | null>(now.toISOString().split("T")[0]);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [cart, setCart] = useState<Record<CartKey, number>>({});
 
   // Clear cart after a successful checkout
   useFocusEffect(
     useCallback(() => {
-      if (storage.getBoolean('cart_paid')) {
+      if (storage.getBoolean("cart_paid")) {
         setCart({});
-        storage.delete('cart_paid');
+        storage.delete("cart_paid");
       }
-    }, [])
+    }, []),
   );
 
   useEffect(() => {
-    const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+    const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
     setLoading(true);
     setError(null);
     fetch(`${API_URL}/api/trips?month=${monthStr}`)
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) setTrips(data as Trip[]);
-        else setError((data as { error?: string }).error ?? 'Failed to load trips');
+        else setError((data as { error?: string }).error ?? "Failed to load trips");
       })
-      .catch(() => setError('Could not connect to server.\nMake sure the web app is running.'))
+      .catch(() => setError("Could not connect to server.\nMake sure the web app is running."))
       .finally(() => setLoading(false));
   }, [year, month]);
 
   function prevMonth() {
-    if (month === 0) { setMonth(11); setYear((y) => y - 1); }
-    else setMonth((m) => m - 1);
+    if (month === 0) {
+      setMonth(11);
+      setYear((y) => y - 1);
+    } else setMonth((m) => m - 1);
   }
   function nextMonth() {
-    if (month === 11) { setMonth(0); setYear((y) => y + 1); }
-    else setMonth((m) => m + 1);
+    if (month === 11) {
+      setMonth(0);
+      setYear((y) => y + 1);
+    } else setMonth((m) => m + 1);
   }
 
   const handleReserve = useCallback(() => {
-    const tripIdsInCart = new Set(Object.keys(cart).map((k) => k.split(':')[0]));
+    const tripIdsInCart = new Set(Object.keys(cart).map((k) => k.split(":")[0]));
     const cartTrips = trips.filter((t) => tripIdsInCart.has(t.id));
-    storage.set('pending_checkout', JSON.stringify({ cart, cartTrips }));
-    router.push('/checkout');
+    storage.set("pending_checkout", JSON.stringify({ cart, cartTrips }));
+    router.push("/checkout");
   }, [cart, trips, router]);
 
   const handleAdjust = useCallback((tripId: string, ticketType: string, delta: number) => {
@@ -390,13 +404,13 @@ export default function TripsScreen() {
     });
   }, []);
 
-  const dayTrips = selectedDay
-    ? trips.filter((t) => t.departureDate === selectedDay)
-    : [];
+  const dayTrips = selectedDay ? trips.filter((t) => t.departureDate === selectedDay) : [];
 
   const selectedDayLabel = selectedDay
-    ? new Date(selectedDay + 'T12:00:00').toLocaleDateString('en-US', {
-        weekday: 'long', month: 'long', day: 'numeric',
+    ? new Date(selectedDay + "T12:00:00").toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
       })
     : null;
 
@@ -404,11 +418,21 @@ export default function TripsScreen() {
     <SafeAreaView style={s.safe}>
       {/* Month nav header */}
       <View style={s.monthNav}>
-        <TouchableOpacity onPress={prevMonth} style={s.navBtn} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}>
+        <TouchableOpacity
+          onPress={prevMonth}
+          style={s.navBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+        >
           <Text style={s.navArrow}>‹</Text>
         </TouchableOpacity>
-        <Text style={s.monthTitle}>{MONTH_NAMES[month]} {year}</Text>
-        <TouchableOpacity onPress={nextMonth} style={s.navBtn} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}>
+        <Text style={s.monthTitle}>
+          {MONTH_NAMES[month]} {year}
+        </Text>
+        <TouchableOpacity
+          onPress={nextMonth}
+          style={s.navBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+        >
           <Text style={s.navArrow}>›</Text>
         </TouchableOpacity>
       </View>
@@ -425,9 +449,7 @@ export default function TripsScreen() {
       <View style={s.divider} />
 
       {/* Day header */}
-      {selectedDayLabel && (
-        <Text style={s.dayLabel}>{selectedDayLabel}</Text>
-      )}
+      {selectedDayLabel && <Text style={s.dayLabel}>{selectedDayLabel}</Text>}
 
       {/* Trip list */}
       {loading ? (
@@ -446,12 +468,13 @@ export default function TripsScreen() {
         >
           {dayTrips.length === 0 ? (
             <Text style={s.emptyText}>
-              {selectedDay ? 'No trips scheduled this day.' : 'Select a day to see trips.'}
+              {selectedDay ? "No trips scheduled this day." : "Select a day to see trips."}
             </Text>
           ) : (
             dayTrips.map((trip) => {
               const cartQty = trip.product.prices.reduce(
-                (sum, p) => sum + (cart[`${trip.id}:${p.ticketType}`] ?? 0), 0
+                (sum, p) => sum + (cart[`${trip.id}:${p.ticketType}`] ?? 0),
+                0,
               );
               const isSoldOut = trip.seatsRemaining === 0;
               const isLow = !isSoldOut && trip.seatsRemaining <= 5;
@@ -460,7 +483,9 @@ export default function TripsScreen() {
                 <TouchableOpacity
                   key={trip.id}
                   style={[s.card, isSoldOut && s.cardSoldOut]}
-                  onPress={() => { if (!isSoldOut) setSelectedTrip(trip); }}
+                  onPress={() => {
+                    if (!isSoldOut) setSelectedTrip(trip);
+                  }}
                   activeOpacity={isSoldOut ? 1 : 0.78}
                 >
                   <View style={[s.colorBar, { backgroundColor: trip.vessel.color }]} />
@@ -485,12 +510,18 @@ export default function TripsScreen() {
                           </Text>
                         ))}
                       </View>
-                      <Text style={[
-                        s.seatsBadge,
-                        isSoldOut && s.seatsBadgeSoldOut,
-                        isLow && s.seatsBadgeLow,
-                      ]}>
-                        {isSoldOut ? 'SOLD OUT' : isLow ? `${trip.seatsRemaining} left` : `${trip.seatsRemaining} left`}
+                      <Text
+                        style={[
+                          s.seatsBadge,
+                          isSoldOut && s.seatsBadgeSoldOut,
+                          isLow && s.seatsBadgeLow,
+                        ]}
+                      >
+                        {isSoldOut
+                          ? "SOLD OUT"
+                          : isLow
+                            ? `${trip.seatsRemaining} left`
+                            : `${trip.seatsRemaining} left`}
                       </Text>
                     </View>
                   </View>
@@ -525,9 +556,9 @@ const s = StyleSheet.create({
     backgroundColor: Colors.surface,
   },
   monthNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
@@ -541,7 +572,7 @@ const s = StyleSheet.create({
   },
   monthTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.ink,
   },
   divider: {
@@ -552,7 +583,7 @@ const s = StyleSheet.create({
   },
   dayLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.inkMuted,
     paddingHorizontal: 16,
     paddingBottom: 8,
@@ -560,13 +591,13 @@ const s = StyleSheet.create({
   },
   centered: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: 24,
   },
   errorText: {
     color: Colors.error,
-    textAlign: 'center',
+    textAlign: "center",
     fontSize: 14,
     lineHeight: 20,
   },
@@ -580,18 +611,18 @@ const s = StyleSheet.create({
   },
   emptyText: {
     color: Colors.inkSubtle,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 32,
     fontSize: 15,
   },
   card: {
-    flexDirection: 'row',
+    flexDirection: "row",
     backgroundColor: Colors.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden',
-    shadowColor: '#000',
+    overflow: "hidden",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -609,13 +640,13 @@ const s = StyleSheet.create({
     gap: 3,
   },
   cardTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   vesselName: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.ink,
   },
   inCartBadge: {
@@ -625,14 +656,14 @@ const s = StyleSheet.create({
     paddingVertical: 2,
   },
   inCartText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   productName: {
     fontSize: 13,
     color: Colors.inkMuted,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   timeRange: {
     fontSize: 13,
@@ -640,15 +671,15 @@ const s = StyleSheet.create({
     marginTop: 1,
   },
   cardBottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginTop: 6,
   },
   priceChips: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 6,
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
     flex: 1,
   },
   priceChip: {
@@ -661,7 +692,7 @@ const s = StyleSheet.create({
   },
   seatsBadge: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.success,
   },
   seatsBadgeLow: {
@@ -674,19 +705,19 @@ const s = StyleSheet.create({
 
 const cal = StyleSheet.create({
   grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     paddingHorizontal: 8,
     paddingBottom: 8,
   },
   cell: {
     width: `${100 / 7}%` as unknown as number,
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 3,
   },
   header: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.inkSubtle,
     letterSpacing: 0.5,
     paddingBottom: 4,
@@ -695,8 +726,8 @@ const cal = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   dayCircleSelected: {
     backgroundColor: Colors.teal,
@@ -708,18 +739,18 @@ const cal = StyleSheet.create({
   dayNum: {
     fontSize: 14,
     color: Colors.ink,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   dayNumSelected: {
-    color: '#fff',
-    fontWeight: '700',
+    color: "#fff",
+    fontWeight: "700",
   },
   dots: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 2,
     marginTop: 2,
     height: 6,
-    alignItems: 'center',
+    alignItems: "center",
   },
   dot: {
     width: 5,
@@ -735,17 +766,17 @@ const cal = StyleSheet.create({
 const sh = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: "rgba(0,0,0,0.45)",
   },
   sheet: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: Colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '70%',
+    maxHeight: "70%",
     paddingBottom: 32,
   },
   handle: {
@@ -753,7 +784,7 @@ const sh = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: Colors.border,
-    alignSelf: 'center',
+    alignSelf: "center",
     marginTop: 10,
     marginBottom: 6,
   },
@@ -768,19 +799,19 @@ const sh = StyleSheet.create({
     gap: 2,
   },
   infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   vesselName: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.ink,
   },
   seatsLeft: {
     fontSize: 13,
     color: Colors.inkMuted,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   soldOutBadge: {
     backgroundColor: Colors.error,
@@ -789,14 +820,14 @@ const sh = StyleSheet.create({
     paddingVertical: 2,
   },
   soldOutText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   productName: {
     fontSize: 14,
     color: Colors.inkMuted,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   timeRange: {
     fontSize: 13,
@@ -810,9 +841,9 @@ const sh = StyleSheet.create({
     marginVertical: 14,
   },
   priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
@@ -820,7 +851,7 @@ const sh = StyleSheet.create({
   },
   ticketType: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.ink,
   },
   ticketPrice: {
@@ -829,8 +860,8 @@ const sh = StyleSheet.create({
     marginTop: 2,
   },
   stepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
   },
   stepBtn: {
@@ -840,8 +871,8 @@ const sh = StyleSheet.create({
     backgroundColor: Colors.surfaceAlt,
     borderWidth: 1,
     borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   stepBtnDisabled: {
     opacity: 0.35,
@@ -850,17 +881,17 @@ const sh = StyleSheet.create({
     fontSize: 20,
     color: Colors.ink,
     lineHeight: 24,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   stepBtnTextDisabled: {
     color: Colors.inkSubtle,
   },
   stepQty: {
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.ink,
     width: 28,
-    textAlign: 'center',
+    textAlign: "center",
   },
   cartSummary: {
     marginHorizontal: 20,
@@ -873,24 +904,24 @@ const sh = StyleSheet.create({
   },
   cartSummaryText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Colors.teal,
-    textAlign: 'center',
+    textAlign: "center",
     letterSpacing: 0.5,
   },
 });
 
 const cb = StyleSheet.create({
   bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -902,11 +933,11 @@ const cb = StyleSheet.create({
   qty: {
     fontSize: 13,
     color: Colors.inkMuted,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   total: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: "800",
     color: Colors.ink,
   },
   btn: {
@@ -916,9 +947,9 @@ const cb = StyleSheet.create({
     borderRadius: 12,
   },
   btnText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.3,
   },
 });

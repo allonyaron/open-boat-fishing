@@ -11,7 +11,10 @@ export const revalidate = 300;
 type Props = { params: Promise<{ reportId: string }> };
 
 async function fetchReport(reportId: string) {
-  const [operator] = await db.select({ id: operators.id, name: operators.name }).from(operators).limit(1);
+  const [operator] = await db
+    .select({ id: operators.id, name: operators.name })
+    .from(operators)
+    .limit(1);
   if (!operator) return null;
 
   const [row] = await db
@@ -36,12 +39,7 @@ async function fetchReport(reportId: string) {
     .innerJoin(vessels, eq(fishingReports.vesselId, vessels.id))
     .innerJoin(products, eq(trips.productId, products.id))
     .innerJoin(operators, eq(fishingReports.operatorId, operators.id))
-    .where(
-      and(
-        eq(fishingReports.id, reportId),
-        eq(fishingReports.operatorId, operator.id)
-      )
-    );
+    .where(and(eq(fishingReports.id, reportId), eq(fishingReports.operatorId, operator.id)));
 
   return row ?? null;
 }
@@ -52,16 +50,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!row) return { title: "Report Not Found" };
 
   const [y, m, d] = row.departureDate.split("-").map(Number);
-  const date = new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const date = new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 
-  const counts = (row.fishCounts as { species: string; count: number }[]);
-  const headline = counts.length > 0
-    ? counts.map((fc) => `${fc.count} ${fc.species}`).join(", ")
-    : row.catchSummary?.slice(0, 80) ?? "Fishing Report";
+  const counts = row.fishCounts as { species: string; count: number }[];
+  const headline =
+    counts.length > 0
+      ? counts.map((fc) => `${fc.count} ${fc.species}`).join(", ")
+      : (row.catchSummary?.slice(0, 80) ?? "Fishing Report");
 
   return {
     title: `${row.vesselName} · ${date} · ${headline}`,
-    description: row.catchSummary?.slice(0, 160) ?? `Fishing report from ${row.vesselName} on ${date}`,
+    description:
+      row.catchSummary?.slice(0, 160) ?? `Fishing report from ${row.vesselName} on ${date}`,
     openGraph: row.photoUrls.length > 0 ? { images: [row.photoUrls[0]] } : undefined,
   };
 }
@@ -77,7 +81,11 @@ function fmtDate(date: string) {
 }
 
 function fmtTime(d: Date | string) {
-  return new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  return new Date(d).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 export default async function FishingReportPage({ params }: Props) {
@@ -85,16 +93,22 @@ export default async function FishingReportPage({ params }: Props) {
   const row = await fetchReport(reportId);
   if (!row) notFound();
 
-  const fishCounts = (row.fishCounts as { species: string; count: number }[]);
+  const fishCounts = row.fishCounts as { species: string; count: number }[];
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-10">
-      <Link href="/fishing-reports" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-6">
+      <Link
+        href="/fishing-reports"
+        className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-6"
+      >
         ← Fishing Reports
       </Link>
 
       <div className="flex items-center gap-3 mb-1">
-        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: row.vesselColor }} />
+        <div
+          className="w-3 h-3 rounded-full flex-shrink-0"
+          style={{ backgroundColor: row.vesselColor }}
+        />
         <h1 className="text-2xl font-bold text-gray-900">{row.vesselName}</h1>
         <span className="text-gray-400">·</span>
         <span className="text-gray-600">{row.productName}</span>
@@ -105,7 +119,9 @@ export default async function FishingReportPage({ params }: Props) {
 
       {fishCounts.length > 0 && (
         <div className="bg-blue-50 rounded-xl p-4 mb-6">
-          <h2 className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-3">Today&apos;s Catch</h2>
+          <h2 className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-3">
+            Today&apos;s Catch
+          </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {fishCounts.map((fc, i) => (
               <div key={i} className="bg-white rounded-lg p-3 text-center shadow-sm">

@@ -9,9 +9,7 @@ const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 export async function POST(req: NextRequest) {
   // Accept both mate JWT and admin iron-session
   const mateAuth = await requireMate(req.clone() as NextRequest);
-  const adminAuth = !(mateAuth instanceof NextResponse)
-    ? null
-    : await requireAdmin(req);
+  const adminAuth = !(mateAuth instanceof NextResponse) ? null : await requireAdmin(req);
 
   if (mateAuth instanceof NextResponse && adminAuth instanceof NextResponse) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

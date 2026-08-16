@@ -7,7 +7,7 @@ const EXTEND_MS = 5 * 60 * 1000; // 5 extra minutes on payment attempt
 
 export async function PATCH(
   _req: NextRequest,
-  { params }: { params: Promise<{ bookingId: string }> }
+  { params }: { params: Promise<{ bookingId: string }> },
 ) {
   const { bookingId } = await params;
 

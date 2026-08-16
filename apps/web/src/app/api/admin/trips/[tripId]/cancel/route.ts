@@ -6,10 +6,7 @@ import { sendPushToEmails } from "@/lib/push";
 import { trips, bookingItems, bookings, tickets, vessels, products } from "@openboat/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { tripId: string } }
-) {
+export async function POST(req: NextRequest, { params }: { params: { tripId: string } }) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
   const { session } = auth;
@@ -33,16 +30,18 @@ export async function POST(
   }
 
   // Load all booking_items on this trip
-  const tripItems = await db
-    .select()
-    .from(bookingItems)
-    .where(eq(bookingItems.tripId, tripId));
+  const tripItems = await db.select().from(bookingItems).where(eq(bookingItems.tripId, tripId));
 
   if (tripItems.length === 0) {
     // No bookings — just mark the trip cancelled
     await db
       .update(trips)
-      .set({ status: "cancelled", cancelledAt: new Date(), cancellationReason: reason ?? null, updatedAt: new Date() })
+      .set({
+        status: "cancelled",
+        cancelledAt: new Date(),
+        cancellationReason: reason ?? null,
+        updatedAt: new Date(),
+      })
       .where(eq(trips.id, tripId));
     return NextResponse.json({ ok: true, tripId, bookingsCancelled: 0, ticketsVoided: 0 });
   }
@@ -59,7 +58,7 @@ export async function POST(
   // - if ALL items are on this trip → full refund (payment_intent refund, no amount param)
   // - if some items are on other trips → partial refund for the subtotal of this trip's items only
   type RefundPlan = {
-    booking: typeof affectedBookings[0];
+    booking: (typeof affectedBookings)[0];
     refundCents: number;
     fullRefund: boolean;
     itemsOnThisTrip: typeof tripItems;
@@ -100,8 +99,11 @@ export async function POST(
 
   if (refundErrors.length > 0) {
     return NextResponse.json(
-      { error: "Some refunds failed — cancellation aborted. Check Stripe dashboard.", failed: refundErrors },
-      { status: 502 }
+      {
+        error: "Some refunds failed — cancellation aborted. Check Stripe dashboard.",
+        failed: refundErrors,
+      },
+      { status: 502 },
     );
   }
 
@@ -113,7 +115,12 @@ export async function POST(
     // Mark trip cancelled
     await tx
       .update(trips)
-      .set({ status: "cancelled", cancelledAt: now, cancellationReason: reason ?? null, updatedAt: now })
+      .set({
+        status: "cancelled",
+        cancelledAt: now,
+        cancellationReason: reason ?? null,
+        updatedAt: now,
+      })
       .where(eq(trips.id, tripId));
 
     // Void tickets on this trip + reverse their fees
@@ -137,10 +144,7 @@ export async function POST(
     }
 
     // Reset seats to capacity (trip is done; no new bookings possible)
-    await tx
-      .update(trips)
-      .set({ seatsRemaining: trip.capacity })
-      .where(eq(trips.id, tripId));
+    await tx.update(trips).set({ seatsRemaining: trip.capacity }).where(eq(trips.id, tripId));
   });
 
   // Count voided tickets for the response
@@ -169,7 +173,7 @@ export async function POST(
           : "Your trip has been cancelled. A full refund is on the way.",
         data: { type: "trip_cancelled", tripId },
       },
-      "cancellations"
+      "cancellations",
     ).catch((err) => console.error("Push error on cancellation:", err));
   }
 
