@@ -45,6 +45,12 @@ images/tmp/
 test-results/
 e2e/.fixtures.json
 
+# Vitest coverage output
+coverage/
+
+# Test env (contains real DB credentials)
+.env.test.local
+
 # Operator-specific planning docs (not for public repo)
 CONTEXT.md
 ARCHITECTURE.md

@@ -16,6 +16,8 @@
     "seed:admin": "tsx --env-file .env src/seed-admin.ts",
     "seed:mate": "tsx --env-file .env src/seed-mate.ts",
     "lint": "eslint . --ext .ts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
