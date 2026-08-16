@@ -84,11 +84,11 @@ function Stepper({ value, onChange, max }: { value: number; onChange: (n: number
     <div className="flex items-center gap-3">
       <button type="button" onClick={() => onChange(Math.max(0, value - 1))} disabled={value === 0}
         className={`w-9 h-9 rounded-pill flex items-center justify-center text-lg transition-colors ${
-          value === 0 ? "border border-hairline text-disabled-text cursor-default" : "border-[1.5px] border-teal text-teal"
+          value === 0 ? "border border-hairline text-disabled-text cursor-default" : "border-[1.5px] border-gold text-gold"
         }`}>−</button>
       <span className="font-grotesk text-[17px] font-semibold w-5 text-center">{value}</span>
       <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}
-        className="w-9 h-9 rounded-pill bg-teal text-white flex items-center justify-center text-lg hover:bg-teal-hover transition-colors disabled:bg-disabled disabled:text-disabled-text">+</button>
+        className="w-9 h-9 rounded-pill bg-navy text-white flex items-center justify-center text-lg hover:bg-navy-medium transition-colors disabled:bg-disabled disabled:text-disabled-text">+</button>
     </div>
   );
 }
@@ -118,13 +118,13 @@ function TripRow({ trip, cartQty, onSelect }: { trip: Trip; cartQty: number; onS
     <button type="button" onClick={onSelect} disabled={soldOut}
       className={`w-full text-left flex items-center gap-3 p-4 bg-white rounded-[16px] border transition-all ${
         soldOut ? "border-hairline opacity-60 cursor-not-allowed"
-        : cartQty > 0 ? "border-teal shadow-card-selected"
-        : "border-card-border shadow-card hover:border-teal/40"
+        : cartQty > 0 ? "border-gold shadow-card-selected"
+        : "border-card-border shadow-card hover:border-gold/40"
       }`}>
       <div className="w-1 self-stretch rounded-pill flex-shrink-0" style={{ backgroundColor: trip.vessel.color }} />
       <div className="flex-1 min-w-0">
-        <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-teal mb-0.5">{trip.product.category}</div>
-        <div className="font-grotesk text-[15px] font-semibold text-ink truncate">{trip.product.displayName}</div>
+        <div className="text-[11px] font-bold uppercase tracking-wide text-gold mb-0.5">{trip.product.category}</div>
+        <div className="font-grotesk text-[15px] font-bold text-navy truncate">{trip.product.displayName}</div>
         <div className="text-[13px] text-muted mt-0.5">
           {trip.vessel.name} · {fmtTime(trip.startTime)} – {fmtTime(trip.endTime)} · {fmtDuration(trip.startTime, trip.endTime)}
         </div>
@@ -133,7 +133,7 @@ function TripRow({ trip, cartQty, onSelect }: { trip: Trip; cartQty: number; onS
         )}
       </div>
       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-        {cartQty > 0 && <span className="text-[11px] font-bold text-teal bg-teal-tint px-2 py-0.5 rounded-pill">{cartQty} in cart</span>}
+        {cartQty > 0 && <span className="text-[11px] font-bold text-gold bg-gold/10 border border-gold/30 px-2 py-0.5 rounded-pill">{cartQty} in cart</span>}
         {badge}
         <ChevronRight />
       </div>
@@ -182,11 +182,11 @@ function MonthGrid({
               disabled={!hasTrips}
               className={`min-h-[80px] rounded-[14px] p-2.5 text-left transition-all ${
                 isSelected
-                  ? "bg-teal shadow-day-selected"
+                  ? "bg-navy shadow-day-selected"
                   : hasTrips
-                  ? "bg-white border border-card-border hover:border-teal/50 shadow-card cursor-pointer"
+                  ? "bg-white border border-card-border hover:border-gold/50 shadow-card cursor-pointer"
                   : "bg-fill/60 border border-hairline cursor-default"
-              } ${isToday && !isSelected ? "ring-1 ring-teal/40" : ""}`}
+              } ${isToday && !isSelected ? "ring-2 ring-gold/40" : ""}`}
             >
               <div className={`font-grotesk text-[14px] font-semibold mb-2 ${
                 isSelected ? "text-white" : hasTrips ? "text-ink" : "text-faint"
@@ -195,7 +195,7 @@ function MonthGrid({
                 <div className="flex flex-wrap gap-[3px]">
                   {trips.slice(0, 5).map((t, j) => (
                     <div key={j} className="w-[7px] h-[7px] rounded-pill"
-                      style={{ backgroundColor: isSelected ? "rgba(255,255,255,0.65)" : t.vessel.color }} />
+                      style={{ backgroundColor: isSelected ? "rgba(255,255,255,0.65)" : "#C9922A" }} />
                   ))}
                   {trips.length > 5 && (
                     <span className={`text-[9px] font-bold leading-[7px] ${isSelected ? "text-white/65" : "text-faint"}`}>
@@ -239,7 +239,7 @@ function TicketSheet({
           <div className="w-10 h-1 rounded-pill bg-hairline" />
         </div>
         <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-hairline flex-shrink-0">
-          <div className="font-grotesk text-[17px] font-semibold text-ink">Select tickets</div>
+          <div className="font-grotesk text-[17px] font-semibold text-navy">Select tickets</div>
           <button onClick={onClose} className="w-8 h-8 rounded-pill hover:bg-fill flex items-center justify-center text-muted transition-colors">✕</button>
         </div>
 
@@ -247,16 +247,16 @@ function TicketSheet({
           <div className="py-4 border-b border-hairline">
             <div className="flex items-center gap-2 mb-1">
               <div className="w-2 h-2 rounded-pill" style={{ backgroundColor: trip.vessel.color }} />
-              <span className="text-[12px] font-bold uppercase tracking-wide text-faint">{trip.vessel.name}</span>
+              <span className="text-[12px] font-bold uppercase tracking-wide text-gold">{trip.vessel.name}</span>
             </div>
-            <div className="font-grotesk text-[20px] font-semibold text-ink">{trip.product.displayName}</div>
+            <div className="font-grotesk text-[20px] font-semibold text-navy">{trip.product.displayName}</div>
             <div className="text-[13px] text-muted mt-1">
               {fmtTime(trip.startTime)} – {fmtTime(trip.endTime)} · {fmtDuration(trip.startTime, trip.endTime)}
             </div>
             <div className="text-[12px] text-success font-semibold mt-1.5">{trip.seatsRemaining} tickets available</div>
             <div className="text-[12px] text-muted mt-1.5">
               Weather cancellations receive a full refund.{" "}
-              {termsUrl && <a href={termsUrl} target="_blank" rel="noopener noreferrer" className="underline text-teal">View policy</a>}
+              {termsUrl && <a href={termsUrl} target="_blank" rel="noopener noreferrer" className="underline text-gold">View policy</a>}
             </div>
           </div>
           <div className="py-4 space-y-5 pb-2">
@@ -290,7 +290,7 @@ function TicketSheet({
             </div>
           )}
           <button type="button" onClick={onAdd} disabled={ticketCount === 0}
-            className="w-full py-4 rounded-btn font-grotesk text-[15px] font-semibold transition-colors bg-teal text-white hover:bg-teal-hover disabled:bg-disabled disabled:text-disabled-text">
+            className="w-full py-4 rounded-btn font-grotesk text-[15px] font-bold transition-colors bg-gold text-navy hover:bg-gold-hover disabled:bg-disabled disabled:text-disabled-text">
             {ticketCount === 0 ? "Select tickets" : "Add to cart"}
           </button>
         </div>
@@ -330,7 +330,7 @@ function DesktopSidebar({
           </>
         ) : (
           <div className="flex flex-col items-center justify-center flex-1 text-center px-8">
-            <div className="w-11 h-11 rounded-[13px] bg-teal-tint flex items-center justify-center mb-3">
+            <div className="w-11 h-11 rounded-[13px] bg-navy-tint flex items-center justify-center mb-3">
               <CalendarIcon />
             </div>
             <div className="font-grotesk text-[15px] font-semibold text-ink mb-1">Select a date</div>
@@ -358,13 +358,13 @@ function SidebarCartFooter({ totalCents, totalTickets, onCheckout }: { totalCent
     <div className="border-t border-hairline p-5 flex-shrink-0">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <div className="text-[12px] font-bold uppercase tracking-wide text-faint mb-0.5">Total</div>
+          <div className="text-[12px] font-bold uppercase tracking-wide text-gold mb-0.5">Total</div>
           <div className="font-grotesk text-[24px] font-bold text-ink">{dollars(totalCents)}</div>
         </div>
         <div className="text-[13px] text-muted">{totalTickets} ticket{totalTickets !== 1 ? "s" : ""}</div>
       </div>
       <button type="button" onClick={onCheckout}
-        className="w-full py-4 rounded-btn bg-teal text-white font-grotesk text-[15px] font-semibold hover:bg-teal-hover transition-colors flex items-center justify-center gap-2">
+        className="w-full py-4 rounded-btn bg-gold text-navy font-grotesk text-[15px] font-bold hover:bg-gold-hover transition-colors flex items-center justify-center gap-2">
         Checkout <ArrowRight />
       </button>
     </div>
@@ -382,7 +382,7 @@ function CartBar({ totalCents, ticketCount, onCheckout }: { totalCents: number; 
         <div className="text-[12px] text-faint">{ticketCount} ticket{ticketCount !== 1 ? "s" : ""}</div>
       </div>
       <button type="button" onClick={onCheckout}
-        className="flex items-center gap-2 px-6 py-3.5 rounded-btn bg-teal text-white font-grotesk text-[15px] font-semibold hover:bg-teal-hover transition-colors">
+        className="flex items-center gap-2 px-6 py-3.5 rounded-btn bg-gold text-navy font-grotesk text-[15px] font-bold hover:bg-gold-hover transition-colors">
         Checkout <ArrowRight />
       </button>
     </div>
@@ -522,25 +522,23 @@ export function BookingCalendar({ initialTrips, initialMonth, operatorName, term
   return (
     <div className="min-h-screen bg-surface font-jakarta">
       {/* App bar */}
-      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-[14px] border-b border-hairline h-[60px] flex items-center justify-between px-5">
+      <header className="sticky top-0 z-20 h-[60px] flex items-center justify-between px-5" style={{ backgroundColor: "#0D1B2A" }}>
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-[9px] bg-teal flex items-center justify-center">
-            <BoatIcon />
-          </div>
-          <span className="font-grotesk text-[17px] font-semibold text-ink">{operatorName}</span>
+          <AnchorIconSmall />
+          <span className="font-grotesk text-[17px] font-semibold text-white">{operatorName}</span>
         </div>
 
         <div className="flex items-center gap-3">
           {/* View toggle — desktop only */}
-          <div className="hidden md:flex items-center gap-0.5 bg-fill rounded-[10px] p-0.5">
+          <div className="hidden md:flex items-center gap-0.5 rounded-[10px] p-0.5" style={{ background: "rgba(255,255,255,0.1)" }}>
             {(["list", "calendar"] as ViewMode[]).map((mode) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
                 className={`px-3 py-1.5 rounded-[8px] text-[13px] font-semibold transition-all capitalize ${
                   viewMode === mode
-                    ? "bg-white text-ink shadow-card"
-                    : "text-faint hover:text-muted"
+                    ? "bg-white/20 text-white"
+                    : "text-white/50 hover:text-white/70"
                 }`}
               >
                 {mode}
@@ -550,13 +548,13 @@ export function BookingCalendar({ initialTrips, initialMonth, operatorName, term
 
           {/* Month nav */}
           <div className="flex items-center gap-1.5">
-            <button onClick={prevMonth} className="w-8 h-8 rounded-[8px] border border-card-border bg-white flex items-center justify-center text-muted hover:bg-fill transition-colors">
+            <button onClick={prevMonth} className="w-8 h-8 rounded-[8px] border border-white/20 flex items-center justify-center text-white/70 hover:text-white hover:border-white/40 transition-colors">
               <ChevronLeft />
             </button>
-            <span className="font-grotesk text-[13px] font-semibold text-ink min-w-[90px] text-center">
+            <span className="font-grotesk text-[13px] font-semibold text-white min-w-[90px] text-center">
               {MONTHS[mon - 1]} {year}
             </span>
-            <button onClick={nextMonth} className="w-8 h-8 rounded-[8px] border border-card-border bg-white flex items-center justify-center text-muted hover:bg-fill transition-colors">
+            <button onClick={nextMonth} className="w-8 h-8 rounded-[8px] border border-white/20 flex items-center justify-center text-white/70 hover:text-white hover:border-white/40 transition-colors">
               <ChevronRight />
             </button>
           </div>
@@ -636,7 +634,7 @@ export function BookingCalendar({ initialTrips, initialMonth, operatorName, term
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
-      <div className="w-12 h-12 rounded-[14px] bg-teal-tint flex items-center justify-center mb-3">
+      <div className="w-12 h-12 rounded-[14px] bg-navy-tint flex items-center justify-center mb-3">
         <CalendarIcon />
       </div>
       <div className="font-grotesk text-[16px] font-semibold text-ink mb-1">No trips this month</div>
@@ -647,10 +645,10 @@ function EmptyState() {
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
-function BoatIcon() {
+function AnchorIconSmall() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2"/><path d="M4 20l2-8h12l2 8"/><path d="M12 4v8"/><path d="M8 8h8"/>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9922A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="5" r="3"/><line x1="12" y1="22" x2="12" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/>
     </svg>
   );
 }
@@ -677,7 +675,7 @@ function ArrowRight() {
 }
 function CalendarIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0E7C7B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C9922A" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
     </svg>
   );
