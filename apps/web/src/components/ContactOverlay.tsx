@@ -14,6 +14,7 @@ function ArrowRight() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <path d="M5 12h14" />
       <path d="m12 5 7 7-7 7" />
@@ -45,9 +46,18 @@ export function ContactOverlay({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-40 animate-fade-in" onClick={onClose} />
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[24px] shadow-2xl animate-slide-up md:left-1/2 md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:w-[440px] md:rounded-[24px] md:max-h-[90vh] md:overflow-y-auto">
-        <div className="flex justify-center pt-3 pb-1 md:hidden">
+      <div
+        className="fixed inset-0 bg-black/40 z-40 animate-fade-in"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="contact-overlay-title"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[24px] shadow-2xl animate-slide-up md:left-1/2 md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:w-[440px] md:rounded-[24px] md:max-h-[90vh] md:overflow-y-auto"
+      >
+        <div className="flex justify-center pt-3 pb-1 md:hidden" aria-hidden="true">
           <div className="w-10 h-1 rounded-pill bg-hairline" />
         </div>
         <form
@@ -58,13 +68,14 @@ export function ContactOverlay({
           className="px-5 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))] md:pb-6"
         >
           <div className="hidden md:flex items-center justify-between mb-5">
-            <div className="font-grotesk text-[20px] font-semibold text-ink">Your details</div>
+            <div id="contact-overlay-title" className="font-grotesk text-[20px] font-semibold text-ink">Your details</div>
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close"
               className="w-8 h-8 rounded-pill hover:bg-fill flex items-center justify-center text-muted"
             >
-              ✕
+              <span aria-hidden="true">✕</span>
             </button>
           </div>
           <div className="mb-5 md:hidden">
@@ -84,6 +95,7 @@ export function ContactOverlay({
           <div className="space-y-3">
             {[
               {
+                id: "contact-name",
                 label: "Full name",
                 value: name,
                 setter: setName,
@@ -94,6 +106,7 @@ export function ContactOverlay({
                 required: true,
               },
               {
+                id: "contact-email",
                 label: "Email",
                 value: email,
                 setter: setEmail,
@@ -104,6 +117,7 @@ export function ContactOverlay({
                 required: true,
               },
               {
+                id: "contact-phone",
                 label: "Mobile (for text updates)",
                 value: phone,
                 setter: setPhone,
@@ -114,12 +128,16 @@ export function ContactOverlay({
                 required: false,
               },
             ].map(
-              ({ label, value, setter, type, autoComplete, inputMode, placeholder, required }) => (
-                <div key={label}>
-                  <label className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5">
+              ({ id, label, value, setter, type, autoComplete, inputMode, placeholder, required }) => (
+                <div key={id}>
+                  <label
+                    htmlFor={id}
+                    className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5"
+                  >
                     {label}
                   </label>
                   <input
+                    id={id}
                     required={required}
                     type={type}
                     autoComplete={autoComplete}

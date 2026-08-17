@@ -30,6 +30,7 @@ function ArrowRight() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <path d="M5 12h14" />
       <path d="m12 5 7 7-7 7" />
@@ -41,26 +42,36 @@ function Stepper({
   value,
   onChange,
   max,
+  label,
 }: {
   value: number;
   onChange: (n: number) => void;
   max: number;
+  label: string;
 }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3" role="group" aria-label={`${label} quantity`}>
       <button
         type="button"
         onClick={() => onChange(Math.max(0, value - 1))}
         disabled={value === 0}
+        aria-label={`Decrease ${label.toLowerCase()} count`}
         className={`w-9 h-9 rounded-pill flex items-center justify-center text-lg transition-colors ${value === 0 ? "border border-hairline text-disabled-text cursor-default" : "border-[1.5px] border-teal text-teal"}`}
       >
         −
       </button>
-      <span className="font-grotesk text-[17px] font-semibold w-5 text-center">{value}</span>
+      <span
+        className="font-grotesk text-[17px] font-semibold w-5 text-center"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {value}
+      </span>
       <button
         type="button"
         onClick={() => onChange(Math.min(max, value + 1))}
         disabled={value >= max}
+        aria-label={`Increase ${label.toLowerCase()} count`}
         className="w-9 h-9 rounded-pill bg-teal text-white flex items-center justify-center text-lg hover:bg-teal-hover transition-colors disabled:bg-disabled disabled:text-disabled-text"
       >
         +
@@ -102,6 +113,7 @@ function TripCard({
           <button
             type="button"
             onClick={onRemove}
+            aria-label={`Remove ${item.productName} from cart`}
             className="text-[13px] text-faint hover:text-error transition-colors flex-shrink-0"
           >
             Remove
@@ -132,6 +144,7 @@ function TripCard({
                     value={ticket.quantity}
                     onChange={(n) => onQtyChange(ticket.ticketType, n)}
                     max={item.seatsRemaining - otherQty}
+                    label={ticket.ticketType.charAt(0).toUpperCase() + ticket.ticketType.slice(1)}
                   />
                   <div className="w-[64px] text-right font-grotesk text-[15px] font-semibold text-ink">
                     {dollars(ticket.priceCents * ticket.quantity)}
@@ -264,8 +277,8 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
 
   const nav = (
     <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-[14px] border-b border-hairline h-[60px] flex items-center px-5 md:px-8 gap-3">
-      <a href="/" className="flex items-center gap-3">
-        <div className="w-[34px] h-[34px] rounded-[10px] bg-teal flex items-center justify-center">
+      <a href="/" className="flex items-center gap-3" aria-label={`${operatorName} home`}>
+        <div className="w-[34px] h-[34px] rounded-[10px] bg-teal flex items-center justify-center" aria-hidden="true">
           <svg
             width="18"
             height="18"
@@ -351,10 +364,11 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
 
             <div className="space-y-3 mb-4">
               <div>
-                <label className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5">
+                <label htmlFor="checkout-email" className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5">
                   Email
                 </label>
                 <input
+                  id="checkout-email"
                   required
                   type="email"
                   autoComplete="email"
@@ -365,10 +379,11 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
                 />
               </div>
               <div>
-                <label className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5">
+                <label htmlFor="checkout-phone" className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5">
                   Mobile (for text updates)
                 </label>
                 <input
+                  id="checkout-phone"
                   type="tel"
                   autoComplete="tel"
                   inputMode="numeric"
@@ -381,10 +396,11 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
 
               {showName ? (
                 <div>
-                  <label className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5">
+                  <label htmlFor="checkout-name" className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5">
                     Full name (optional)
                   </label>
                   <input
+                    id="checkout-name"
                     type="text"
                     autoComplete="name"
                     value={name}

@@ -16,12 +16,12 @@ async function adminLogin(page: Parameters<Parameters<typeof test>[1]>[0]) {
   await page.goto("/admin/login");
   await page.waitForLoadState("networkidle");
 
-  const emailInput = page.locator('input[type="email"]');
+  const emailInput = page.getByLabel("Email");
   if (!(await emailInput.isVisible().catch(() => false))) return false;
 
   await emailInput.fill(ADMIN_EMAIL);
-  await page.locator('input[type="password"]').fill(ADMIN_PASSWORD);
-  await page.locator('button[type="submit"]').click();
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
 
   try {
     await page.waitForURL("/admin/trips", { timeout: 8_000 });
@@ -41,18 +41,18 @@ test("admin login → trips list", async ({ page }, testInfo) => {
   }
 
   // ── Trips list renders ─────────────────────────────────────────────────────
-  await page.waitForSelector("h1:has-text('Trips')", { timeout: 8_000 });
-  // Wait for loading spinner to disappear
+  await page.getByRole("heading", { name: "Trips" }).waitFor({ timeout: 8_000 });
+  // Wait for client-side data to finish loading (loading text goes away)
   await page.waitForFunction(
-    () => !document.querySelector("div.text-center.text-gray-400.py-16:not(:has(text))"),
-    { timeout: 8_000 },
+    () => !document.body.innerText.includes("Loading…"),
+    { timeout: 10_000 },
   );
   await page.screenshot({ path: shot("10-admin-trips-list") });
 
-  // At least one trip or "No upcoming trips" message renders — either is valid
-  const hasTrips = await page.locator('a:has-text("Manifest")').count();
-  const isEmpty = await page.locator('text=No upcoming trips').count();
-  expect(hasTrips + isEmpty).toBeGreaterThan(0);
+  // At least one Manifest link or "No upcoming trips" message should be present
+  const manifestLinks = page.getByRole("link", { name: "Manifest" });
+  const noTrips = page.getByText("No upcoming trips");
+  await expect(manifestLinks.or(noTrips).first()).toBeVisible();
 });
 
 test("admin trip detail + cancel dialog", async ({ page }, testInfo) => {
@@ -64,15 +64,13 @@ test("admin trip detail + cancel dialog", async ({ page }, testInfo) => {
     return;
   }
 
-  // Wait for client-side data to finish loading (spinner disappears)
-  await page.waitForSelector("h1:has-text('Trips')");
+  await page.getByRole("heading", { name: "Trips" }).waitFor();
   await page.waitForFunction(
-    () => !document.querySelector(".text-center.text-gray-400.py-16"),
+    () => !document.body.innerText.includes("Loading…"),
     { timeout: 10_000 },
   );
 
-  // Skip if no trips are listed after loading
-  const manifestLinks = page.locator('a:has-text("Manifest")');
+  const manifestLinks = page.getByRole("link", { name: "Manifest" });
   if ((await manifestLinks.count()) === 0) {
     test.skip(true, "No trips in the list. Run seed-test-trip.ts first.");
     return;
@@ -86,27 +84,29 @@ test("admin trip detail + cancel dialog", async ({ page }, testInfo) => {
   await page.waitForLoadState("networkidle");
   await page.screenshot({ path: shot("11-admin-trip-detail") });
 
-  // Trip detail page shows vessel name or departure info
-  const heading = page.locator("h1, h2").first();
-  await expect(heading).toBeVisible();
+  // Trip detail page has a heading
+  await expect(page.getByRole("heading").first()).toBeVisible();
 
   // ── Cancel trip dialog (open + dismiss without submitting) ────────────────
   await Promise.all([
     page.waitForURL("/admin/trips"),
     page.goto("/admin/trips"),
   ]);
-  await page.waitForSelector("h1:has-text('Trips')");
+  await page.getByRole("heading", { name: "Trips" }).waitFor();
 
-  const cancelBtn = page.locator('button:has-text("Cancel trip")').first();
-  if (!(await cancelBtn.isVisible().catch(() => false))) return; // all trips already cancelled
+  const cancelBtn = page.getByRole("button", { name: "Cancel trip" }).first();
+  if (!(await cancelBtn.isVisible().catch(() => false))) return;
 
   await cancelBtn.click();
-  // Modal should appear with a reason input
-  await page.waitForSelector('textarea, input[placeholder*="reason" i]', { timeout: 5_000 });
+  // Dialog should open — accessible via role="dialog"
+  const dialog = page.getByRole("dialog", { name: "Cancel trip?" });
+  await dialog.waitFor({ timeout: 5_000 });
+  await expect(page.getByLabel("Reason")).toBeVisible();
   await page.screenshot({ path: shot("12-cancel-trip-dialog") });
 
-  // Dismiss by pressing Escape or clicking away — don't submit
-  await page.keyboard.press("Escape");
+  // Dismiss without submitting
+  await page.getByRole("button", { name: "Never mind" }).click();
+  await expect(dialog).not.toBeVisible();
 });
 
 test("public fishing reports page renders", async ({ page }, testInfo) => {
@@ -116,8 +116,6 @@ test("public fishing reports page renders", async ({ page }, testInfo) => {
   await page.waitForLoadState("networkidle");
   await page.screenshot({ path: shot("13-fishing-reports-list") });
 
-  // Page always renders the heading — even with zero reports
-  await expect(page.locator("h1, h2").first()).toBeVisible();
-  // Should not be a Next.js error page
+  await expect(page.getByRole("heading").first()).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Application error");
 });

@@ -88,17 +88,20 @@ function Stepper({
   value,
   onChange,
   max,
+  label,
 }: {
   value: number;
   onChange: (n: number) => void;
   max: number;
+  label: string;
 }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3" role="group" aria-label={`${label} quantity`}>
       <button
         type="button"
         onClick={() => onChange(Math.max(0, value - 1))}
         disabled={value === 0}
+        aria-label={`Decrease ${label.toLowerCase()} count`}
         className={`w-9 h-9 rounded-pill flex items-center justify-center text-lg transition-colors ${
           value === 0
             ? "border border-hairline text-disabled-text cursor-default"
@@ -107,11 +110,18 @@ function Stepper({
       >
         −
       </button>
-      <span className="font-grotesk text-[17px] font-semibold w-5 text-center">{value}</span>
+      <span
+        className="font-grotesk text-[17px] font-semibold w-5 text-center"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {value}
+      </span>
       <button
         type="button"
         onClick={() => onChange(Math.min(max, value + 1))}
         disabled={value >= max}
+        aria-label={`Increase ${label.toLowerCase()} count`}
         className="w-9 h-9 rounded-pill bg-navy text-white flex items-center justify-center text-lg hover:bg-navy-medium transition-colors disabled:bg-disabled disabled:text-disabled-text"
       >
         +
@@ -134,10 +144,6 @@ function TripRow({
   const soldOut = trip.seatsRemaining === 0;
   const seats = trip.seatsRemaining;
   const threshold40 = Math.round(trip.capacity * 0.4);
-  const fromPrice =
-    trip.product.prices.length > 0
-      ? Math.min(...trip.product.prices.map((p) => p.priceCents))
-      : null;
 
   let badge: React.ReactNode = null;
   if (soldOut) {
@@ -166,11 +172,27 @@ function TripRow({
     );
   }
 
+  const fromPrice =
+    trip.product.prices.length > 0
+      ? Math.min(...trip.product.prices.map((p) => p.priceCents))
+      : null;
+  const tripLabel = [
+    soldOut ? "Sold out:" : null,
+    trip.product.displayName,
+    "on",
+    trip.vessel.name,
+    `${fmtTimeET(trip.startTime)}–${fmtTimeET(trip.endTime)}`,
+    fromPrice !== null ? `from ${dollars(fromPrice)}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
   return (
     <button
       type="button"
       onClick={onSelect}
       disabled={soldOut}
+      aria-label={tripLabel}
       className={`w-full text-left flex items-center gap-3 p-4 bg-white rounded-[16px] border transition-all ${
         soldOut
           ? "border-hairline opacity-60 cursor-not-allowed"
@@ -254,11 +276,17 @@ function MonthGrid({
           const hasTrips = trips.length > 0;
           const dayNum = parseInt(date.slice(-2));
 
+          const dayLabel = hasTrips
+            ? `${date}, ${trips.length} trip${trips.length !== 1 ? "s" : ""} available`
+            : `${date}, no trips`;
+
           return (
             <button
               key={date}
               onClick={() => hasTrips && onDaySelect(date)}
               disabled={!hasTrips}
+              aria-label={dayLabel}
+              aria-pressed={isSelected}
               className={`min-h-[80px] rounded-[14px] p-2.5 text-left transition-all ${
                 isSelected
                   ? "bg-navy shadow-day-selected"
@@ -328,25 +356,40 @@ function TicketSheet({
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", handleKey);
     return () => {
       document.body.style.overflow = "";
+      document.removeEventListener("keydown", handleKey);
     };
-  }, []);
+  }, [onClose]);
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-40 animate-fade-in" onClick={onClose} />
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[24px] shadow-2xl animate-slide-up max-h-[90dvh] flex flex-col md:left-auto md:right-0 md:top-[60px] md:bottom-0 md:w-[420px] md:rounded-none md:rounded-tl-[24px] md:rounded-bl-[24px] md:max-h-none md:shadow-[-8px_0_30px_rgba(0,0,0,0.08)]">
+      <div
+        className="fixed inset-0 bg-black/40 z-40 animate-fade-in"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ticket-sheet-title"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[24px] shadow-2xl animate-slide-up max-h-[90dvh] flex flex-col md:left-auto md:right-0 md:top-[60px] md:bottom-0 md:w-[420px] md:rounded-none md:rounded-tl-[24px] md:rounded-bl-[24px] md:max-h-none md:shadow-[-8px_0_30px_rgba(0,0,0,0.08)]"
+      >
         <div className="flex justify-center pt-3 pb-1 flex-shrink-0 md:hidden">
-          <div className="w-10 h-1 rounded-pill bg-hairline" />
+          <div className="w-10 h-1 rounded-pill bg-hairline" aria-hidden="true" />
         </div>
         <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-hairline flex-shrink-0">
-          <div className="font-grotesk text-[17px] font-semibold text-navy">Select tickets</div>
+          <div id="ticket-sheet-title" className="font-grotesk text-[17px] font-semibold text-navy">Select tickets</div>
           <button
             onClick={onClose}
+            aria-label="Close ticket selection"
             className="w-8 h-8 rounded-pill hover:bg-fill flex items-center justify-center text-muted transition-colors"
           >
-            ✕
+            <span aria-hidden="true">✕</span>
           </button>
         </div>
 
@@ -397,7 +440,7 @@ function TicketSheet({
                     {dollars(adultPrice.priceCents)} · 13+
                   </div>
                 </div>
-                <Stepper value={adultQty} onChange={onAdult} max={trip.seatsRemaining - childQty} />
+                <Stepper value={adultQty} onChange={onAdult} max={trip.seatsRemaining - childQty} label="Adult" />
               </div>
             )}
             {childPrice && (
@@ -408,7 +451,7 @@ function TicketSheet({
                     {dollars(childPrice.priceCents)} · 5–12
                   </div>
                 </div>
-                <Stepper value={childQty} onChange={onChild} max={trip.seatsRemaining - adultQty} />
+                <Stepper value={childQty} onChange={onChild} max={trip.seatsRemaining - adultQty} label="Child" />
               </div>
             )}
           </div>
@@ -778,6 +821,7 @@ export function BookingCalendar({
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
+                aria-pressed={viewMode === mode}
                 className={`px-3 py-1.5 rounded-[8px] text-[13px] font-semibold transition-all capitalize ${
                   viewMode === mode ? "bg-white/20 text-white" : "text-white/50 hover:text-white/70"
                 }`}
@@ -791,15 +835,17 @@ export function BookingCalendar({
           <div className="flex items-center gap-1.5">
             <button
               onClick={prevMonth}
+              aria-label={`Previous month, ${MONTHS[mon - 2 < 0 ? 11 : mon - 2]} ${mon - 1 < 1 ? year - 1 : year}`}
               className="w-8 h-8 rounded-[8px] border border-white/20 flex items-center justify-center text-white/70 hover:text-white hover:border-white/40 transition-colors"
             >
               <ChevronLeft />
             </button>
-            <span className="font-grotesk text-[13px] font-semibold text-white min-w-[90px] text-center">
+            <span className="font-grotesk text-[13px] font-semibold text-white min-w-[90px] text-center" aria-live="polite">
               {MONTHS[mon - 1]} {year}
             </span>
             <button
               onClick={nextMonth}
+              aria-label={`Next month, ${MONTHS[mon % 12]} ${mon === 12 ? year + 1 : year}`}
               className="w-8 h-8 rounded-[8px] border border-white/20 flex items-center justify-center text-white/70 hover:text-white hover:border-white/40 transition-colors"
             >
               <ChevronRight />
@@ -813,6 +859,7 @@ export function BookingCalendar({
         {/* Left: list or calendar */}
         <div
           className={`flex-1 overflow-y-auto transition-opacity ${loading ? "opacity-40 pointer-events-none" : ""}`}
+          aria-busy={loading}
         >
           {viewMode === "list" ? (
             <div className="max-w-2xl mx-auto px-4 py-5 pb-40 md:pb-8">
@@ -918,6 +965,7 @@ function AnchorIconSmall() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <circle cx="12" cy="5" r="3" />
       <line x1="12" y1="22" x2="12" y2="8" />
@@ -936,6 +984,7 @@ function ChevronLeft() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <path d="m15 18-6-6 6-6" />
     </svg>
@@ -952,6 +1001,7 @@ function ChevronRight() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <path d="m9 18 6-6-6-6" />
     </svg>
@@ -968,6 +1018,7 @@ function ArrowRight() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <path d="M5 12h14" />
       <path d="m12 5 7 7-7 7" />
@@ -985,6 +1036,7 @@ function CalendarIcon() {
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <rect width="18" height="18" x="3" y="4" rx="2" />
       <line x1="16" x2="16" y1="2" y2="6" />

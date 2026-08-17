@@ -206,9 +206,17 @@ export default function AdminTripsPage() {
 
       {/* Cancellation confirmation modal */}
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Cancel trip?</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" aria-hidden="true" />
+      )}
+      {modal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cancel-trip-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+        >
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 pointer-events-auto">
+            <h2 id="cancel-trip-title" className="text-lg font-semibold text-gray-900 mb-1">Cancel trip?</h2>
             <p className="text-sm text-gray-600 mb-4">
               <strong>{modal.trip.vessel.name}</strong> · {modal.trip.product.displayName}
               <br />
@@ -220,10 +228,11 @@ export default function AdminTripsPage() {
             </p>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="cancel-reason" className="block text-sm font-medium text-gray-700 mb-1">
                 Reason <span className="text-gray-400 font-normal">(optional)</span>
               </label>
               <select
+                id="cancel-reason"
                 value={modal.reason}
                 onChange={(e) => setModal((m) => m && { ...m, reason: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
