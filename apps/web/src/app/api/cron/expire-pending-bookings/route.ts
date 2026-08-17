@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { bookings, bookingItems, tickets, payments, trips } from "@openboat/db";
+import { sendPushToEmails } from "@/lib/push";
+import { bookings, bookingItems, tickets, payments, trips, rateLimits } from "@openboat/db";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,8 @@ export async function GET(req: NextRequest) {
       id: bookings.id,
       confirmationCode: bookings.confirmationCode,
       stripePaymentIntentId: bookings.stripePaymentIntentId,
+      customerEmail: bookings.customerEmail,
+      operatorId: bookings.operatorId,
     })
     .from(bookings)
     .leftJoin(payments, eq(payments.bookingId, bookings.id))
@@ -61,7 +64,15 @@ export async function GET(req: NextRequest) {
       if (booking.stripePaymentIntentId) {
         try {
           const pi = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
-          if (pi.status !== "canceled" && pi.status !== "succeeded") {
+          if (pi.status === "succeeded" || pi.status === "processing") {
+            // Payment went through — the payment_intent.succeeded webhook will confirm
+            // this booking. Do not restore seats here or we create an overbook window.
+            console.log(
+              `Skipping booking ${booking.id} — PI ${booking.stripePaymentIntentId} is ${pi.status}`,
+            );
+            continue;
+          }
+          if (pi.status !== "canceled") {
             await stripe.paymentIntents.cancel(booking.stripePaymentIntentId);
           }
         } catch (stripeErr) {
@@ -124,11 +135,27 @@ export async function GET(req: NextRequest) {
 
       console.log(`Expired stale pending booking ${booking.confirmationCode} (${booking.id})`);
       cancelled++;
+
+      if (booking.customerEmail) {
+        sendPushToEmails(
+          booking.operatorId,
+          [booking.customerEmail],
+          {
+            title: "Booking Expired",
+            body: `Your reservation (${booking.confirmationCode}) was released because payment wasn't completed.`,
+            data: { type: "booking_expired", bookingId: booking.id },
+          },
+          "cancellations",
+        ).catch((err) => console.error("Push error on booking expiry:", err));
+      }
     } catch (err) {
       console.error(`Failed to expire booking ${booking.id}:`, err);
       errors.push(booking.id);
     }
   }
+
+  // Purge rate-limit rows older than 1 day to keep the table bounded.
+  await db.delete(rateLimits).where(lt(rateLimits.windowStart, sql`NOW() - INTERVAL '1 day'`));
 
   return NextResponse.json({
     ok: errors.length === 0,

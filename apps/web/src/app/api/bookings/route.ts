@@ -14,50 +14,40 @@ import {
 } from "@openboat/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { randomBytes, randomUUID } from "crypto";
+import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
+import { z } from "zod";
 
 const PLATFORM_FEE_CENTS = 150; // $1.50 per ticket
 
-// --- wallet lookup rate limiting ---
-const WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 5;
+const WALLET_WINDOW_MS = 15 * 60 * 1000;
+const WALLET_MAX_ATTEMPTS = 5;
 const MIN_RESPONSE_MS = 150; // floor prevents email-existence timing oracle
 
-const rlStore = new Map<string, { count: number; windowStart: number; lockedUntil?: number }>();
+const BOOKING_RATE_WINDOW_MS = 15 * 60 * 1000;
+const BOOKING_RATE_MAX = 20; // per IP per 15 min
 
-setInterval(
-  () => {
-    const now = Date.now();
-    for (const [key, entry] of rlStore.entries()) {
-      if (now > (entry.lockedUntil ?? 0) && now - entry.windowStart > WINDOW_MS) {
-        rlStore.delete(key);
-      }
-    }
-  },
-  30 * 60 * 1000,
-).unref();
-
-function rlCheck(key: string): { allowed: boolean; retryAfterMs: number } {
-  const now = Date.now();
-  const entry = rlStore.get(key);
-  if (entry?.lockedUntil && now < entry.lockedUntil) {
-    return { allowed: false, retryAfterMs: entry.lockedUntil - now };
-  }
-  if (!entry || now - entry.windowStart > WINDOW_MS) {
-    rlStore.set(key, { count: 1, windowStart: now });
-    return { allowed: true, retryAfterMs: 0 };
-  }
-  if (entry.count >= MAX_ATTEMPTS) {
-    const lockedUntil = now + WINDOW_MS;
-    rlStore.set(key, { ...entry, lockedUntil });
-    return { allowed: false, retryAfterMs: WINDOW_MS };
-  }
-  entry.count++;
-  return { allowed: true, retryAfterMs: 0 };
-}
-
-function rlReset(key: string) {
-  rlStore.delete(key);
-}
+const bookingBodySchema = z.object({
+  customerEmail: z.string().email().max(254),
+  customerName: z.string().max(100).nullish(),
+  customerPhone: z.string().max(20).optional(),
+  cart: z
+    .array(
+      z.object({
+        tripId: z.string().uuid(),
+        tickets: z
+          .array(
+            z.object({
+              ticketType: z.enum(["adult", "child", "senior"]),
+              quantity: z.number().int().min(1).max(30),
+            }),
+          )
+          .min(1)
+          .max(10),
+      }),
+    )
+    .min(1)
+    .max(10),
+});
 
 async function enforceMinDelay(startMs: number) {
   const elapsed = Date.now() - startMs;
@@ -65,29 +55,25 @@ async function enforceMinDelay(startMs: number) {
     await new Promise((r) => setTimeout(r, MIN_RESPONSE_MS - elapsed));
   }
 }
-// --- end rate limiting ---
 
 function confirmationCode() {
   return randomBytes(3).toString("hex").toUpperCase();
 }
 
-type CartItem = {
-  tripId: string;
-  tickets: { ticketType: "adult" | "child" | "senior"; quantity: number }[];
-};
-
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { cart, customerName, customerEmail, customerPhone } = body as {
-    cart: CartItem[];
-    customerName?: string | null;
-    customerEmail: string;
-    customerPhone?: string;
-  };
+  const ip = clientIp(req);
+  const rl = await checkRateLimit(`booking-create:${ip}`, BOOKING_RATE_MAX, BOOKING_RATE_WINDOW_MS);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
-  if (!cart?.length || !customerEmail) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  const rawBody = await req.json().catch(() => null);
+  const parsed = bookingBodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid request", details: parsed.error.flatten().fieldErrors },
+      { status: 400 },
+    );
   }
+  const { cart, customerName, customerEmail, customerPhone } = parsed.data;
 
   const [operator] = await db.select().from(operators).limit(1);
   if (!operator) {
@@ -96,22 +82,9 @@ export async function POST(req: NextRequest) {
 
   const tripIds = cart.map((c) => c.tripId);
 
-  // Validate ticket types/quantities before touching the DB
   const seatRequestsByTrip: Record<string, number> = {};
   for (const item of cart) {
     for (const t of item.tickets) {
-      if (!["adult", "child", "senior"].includes(t.ticketType)) {
-        return NextResponse.json(
-          { error: `Invalid ticket type: ${t.ticketType}` },
-          { status: 400 },
-        );
-      }
-      if (!Number.isInteger(t.quantity) || t.quantity <= 0) {
-        return NextResponse.json(
-          { error: "Ticket quantity must be a positive integer" },
-          { status: 400 },
-        );
-      }
       seatRequestsByTrip[item.tripId] = (seatRequestsByTrip[item.tripId] ?? 0) + t.quantity;
     }
   }
@@ -392,15 +365,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing email or code" }, { status: 400 });
   }
 
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  const emailKey = `email:${email}`;
-  const ipKey = `ip:${ip}`;
+  const emailKey = `wallet-lookup:email:${email}`;
+  const ipKey = `wallet-lookup:ip:${clientIp(req)}`;
 
-  const emailCheck = rlCheck(emailKey);
-  const ipCheck = rlCheck(ipKey);
+  const [emailCheck, ipCheck] = await Promise.all([
+    checkRateLimit(emailKey, WALLET_MAX_ATTEMPTS, WALLET_WINDOW_MS),
+    checkRateLimit(ipKey, WALLET_MAX_ATTEMPTS, WALLET_WINDOW_MS),
+  ]);
 
   if (!emailCheck.allowed || !ipCheck.allowed) {
-    const retryAfterSec = Math.ceil(Math.max(emailCheck.retryAfterMs, ipCheck.retryAfterMs) / 1000);
+    const retryAfterSec = Math.max(emailCheck.retryAfterSec, ipCheck.retryAfterSec);
     await enforceMinDelay(start);
     return NextResponse.json(
       { error: "Too many attempts. Try again later." },
@@ -424,8 +398,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 
-  rlReset(emailKey);
-  rlReset(ipKey);
+  await Promise.all([resetRateLimit(emailKey), resetRateLimit(ipKey)]);
 
   const itemRows = await db
     .select()

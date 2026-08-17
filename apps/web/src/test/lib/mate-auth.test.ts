@@ -73,4 +73,17 @@ describe("signMateToken / requireMate", () => {
     expect("status" in result).toBe(true);
     if ("status" in result) expect(result.status).toBe(403);
   });
+
+  it("rejects a customer token (audience mismatch)", async () => {
+    const { signCustomerToken } = await import("@/lib/customer-auth");
+    const customerToken = signCustomerToken({
+      customerId: "cust-123",
+      operatorId: "op-456",
+      email: "x@test.com",
+      name: null,
+    });
+    const result = await requireMate(req(customerToken));
+    expect("status" in result).toBe(true);
+    if ("status" in result) expect(result.status).toBe(401);
+  });
 });

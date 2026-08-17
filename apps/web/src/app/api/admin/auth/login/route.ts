@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { staff, operators } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/session";
+import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const { email, password } = await req.json();
@@ -11,6 +12,11 @@ export async function POST(req: NextRequest) {
   if (!email || !password) {
     return NextResponse.json({ error: "Email and password required" }, { status: 400 });
   }
+
+  // 10 attempts per 15 min per IP. Admin login is low-volume and high-value —
+  // any legitimate operator will never hit this.
+  const rl = await checkRateLimit(`admin-login:${clientIp(req)}`, 10, 15 * 60 * 1000);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
   const [operator] = await db.select().from(operators).limit(1);
   if (!operator) {

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { staff, operators } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { signMateToken } from "@/lib/mate-auth";
+import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as { email?: string; pin?: string };
@@ -12,6 +13,11 @@ export async function POST(req: NextRequest) {
   if (!email || !pin) {
     return NextResponse.json({ error: "Email and PIN required" }, { status: 400 });
   }
+
+  // 4-digit PIN = 10,000 combinations. 5 per 15 min caps a sustained attack
+  // to ~480 guesses/day — ~21 days to brute-force without a lockout signal.
+  const rl = await checkRateLimit(`mate-auth:${email.toLowerCase().trim()}`, 5, 15 * 60 * 1000);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
   const [operator] = await db.select().from(operators).limit(1);
   if (!operator) {

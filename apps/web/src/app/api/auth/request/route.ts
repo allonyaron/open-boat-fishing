@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { operators, magicLinkOtps } from "@openboat/db";
 import { sendOtpEmail } from "@/lib/email";
 import { eq } from "drizzle-orm";
+import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as { email?: string };
@@ -11,6 +12,18 @@ export async function POST(req: NextRequest) {
 
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
+  }
+
+  // Rate limit by IP (20/hr) AND email (5/hr) — block if either trips.
+  // IP limit uses a wide bucket to avoid locking out NAT'd users; email limit
+  // is tight because each hit costs a transactional email send.
+  const ip = clientIp(req);
+  const [ipRl, emailRl] = await Promise.all([
+    checkRateLimit(`otp-request:ip:${ip}`, 20, 60 * 60 * 1000),
+    checkRateLimit(`otp-request:email:${email}`, 5, 60 * 60 * 1000),
+  ]);
+  if (!ipRl.allowed || !emailRl.allowed) {
+    return tooManyRequests(Math.max(ipRl.retryAfterSec, emailRl.retryAfterSec));
   }
 
   const [operator] = await db.select().from(operators).limit(1);

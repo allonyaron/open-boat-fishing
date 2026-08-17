@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { operators, magicLinkOtps, customers } from "@openboat/db";
 import { signCustomerToken } from "@/lib/customer-auth";
 import { and, eq, gt, desc } from "drizzle-orm";
+import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as { email?: string; otp?: string };
@@ -13,6 +14,11 @@ export async function POST(req: NextRequest) {
   if (!email || !otp) {
     return NextResponse.json({ error: "Email and code required" }, { status: 400 });
   }
+
+  // 10 attempts per 15 min per email. OTPs expire in 15 min anyway, so this
+  // caps guesses against any single code to 10 without blocking other emails.
+  const rl = await checkRateLimit(`otp-verify:${email}`, 10, 15 * 60 * 1000);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
   const [operator] = await db.select().from(operators).limit(1);
   if (!operator) return NextResponse.json({ error: "No operator" }, { status: 500 });

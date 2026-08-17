@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sendPushToEmails } from "@/lib/push";
 import { trips, bookingItems, bookings, vessels, products } from "@openboat/db";
-import { and, eq, gte, lte, inArray } from "drizzle-orm";
+import { and, eq, gte, lt, inArray } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 // Vercel cron: runs every hour via vercel.json
-// Finds trips departing in 23–25 hours and sends reminder pushes.
+// Finds trips departing in [+23h, +24h) and sends reminder pushes.
+// Half-open interval prevents double-firing when consecutive hourly runs overlap.
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
   const windowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
-  const windowEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+  const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
   const upcomingTrips = await db
     .select({
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
       and(
         eq(trips.status, "scheduled"),
         gte(trips.startTime, windowStart),
-        lte(trips.startTime, windowEnd),
+        lt(trips.startTime, windowEnd),
       ),
     );
 

@@ -17,7 +17,7 @@ function b64url(buf: Buffer): string {
 export function signMateToken(payload: MateTokenPayload): string {
   const secret = process.env.SESSION_SECRET!;
   const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24; // 24h
-  const data = b64url(Buffer.from(JSON.stringify({ ...payload, exp })));
+  const data = b64url(Buffer.from(JSON.stringify({ ...payload, aud: "mate", exp })));
   const sig = b64url(createHmac("sha256", secret).update(data).digest());
   return `${data}.${sig}`;
 }
@@ -41,6 +41,7 @@ function verifyMateToken(token: string): MateTokenPayload | null {
     return null;
   }
   if (typeof payload.exp !== "number" || payload.exp < Date.now() / 1000) return null;
+  if (payload.aud !== "mate") return null;
   return payload as unknown as MateTokenPayload;
 }
 

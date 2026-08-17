@@ -72,4 +72,17 @@ describe("signCustomerToken / requireCustomer", () => {
     expect("status" in result).toBe(true);
     if ("status" in result) expect(result.status).toBe(401);
   });
+
+  it("rejects a mate token (audience mismatch)", async () => {
+    const { signMateToken } = await import("@/lib/mate-auth");
+    const mateToken = signMateToken({
+      staffId: "staff-123",
+      operatorId: "op-456",
+      role: "mate",
+      name: "Test Mate",
+    });
+    const result = await requireCustomer(req(mateToken));
+    expect("status" in result).toBe(true);
+    if ("status" in result) expect(result.status).toBe(401);
+  });
 });

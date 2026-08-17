@@ -562,3 +562,14 @@ export const fishingReportsRelations = relations(fishingReports, ({ one }) => ({
   vessel: one(vessels, { fields: [fishingReports.vesselId], references: [vessels.id] }),
   staff: one(staff, { fields: [fishingReports.staffId], references: [staff.id] }),
 }));
+
+// ─── Rate Limits ───────────────────────────────────────────────────────────────
+// One row per rate-limit bucket (e.g. "otp-request:ip:1.2.3.4").
+// Cleaned up by the expire-pending-bookings cron via DELETE WHERE window_start
+// is older than 1 day. No relations — standalone lookup table.
+
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(1),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
+});

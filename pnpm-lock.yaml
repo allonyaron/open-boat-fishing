@@ -212,6 +212,9 @@ importers:
       stripe:
         specifier: ^22.3.0
         version: 22.3.2(@types/node@22.20.1)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/bcryptjs':
         specifier: ^3.0.0
@@ -5805,6 +5808,9 @@ packages:
 
   zod@4.1.11:
     resolution: {integrity: sha512-WPsqwxITS2tzx1bzhIKsEs19ABD5vmCVa4xBo2tq/SrV4RNZtfws1EnCWQXM6yh8bD08a1idvkB5MZSBiZsjwg==}
+
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
 snapshots:
 
@@ -11951,3 +11957,5 @@ snapshots:
       zod: 4.1.11
 
   zod@4.1.11: {}
+
+  zod@4.4.3: {}

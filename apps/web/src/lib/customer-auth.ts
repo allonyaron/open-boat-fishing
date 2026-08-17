@@ -17,7 +17,7 @@ function b64url(buf: Buffer): string {
 export function signCustomerToken(payload: CustomerTokenPayload): string {
   const secret = process.env.SESSION_SECRET!;
   const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 90; // 90 days
-  const data = b64url(Buffer.from(JSON.stringify({ ...payload, exp })));
+  const data = b64url(Buffer.from(JSON.stringify({ ...payload, aud: "customer", exp })));
   const sig = b64url(createHmac("sha256", secret).update(data).digest());
   return `${data}.${sig}`;
 }
@@ -39,6 +39,7 @@ function verifyCustomerToken(token: string): CustomerTokenPayload | null {
     return null;
   }
   if (typeof payload.exp !== "number" || payload.exp < Date.now() / 1000) return null;
+  if (payload.aud !== "customer") return null;
   return payload as unknown as CustomerTokenPayload;
 }
 

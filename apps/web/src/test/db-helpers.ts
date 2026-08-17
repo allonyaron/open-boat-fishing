@@ -20,6 +20,9 @@ import {
   checkIns,
   payments,
   fishingReports,
+  magicLinkOtps,
+  customers,
+  pushTokens,
 } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -243,7 +246,7 @@ export async function cleanupBookings(tripId: string, originalCapacity = 20) {
 
 /** Delete the entire operator subtree — call in afterAll. */
 export async function cleanupOperator(operatorId: string) {
-  // Cascade down the FK chain
+  // Cascade down the FK chain — order matters (children before parents)
   await testDb.delete(fishingReports).where(eq(fishingReports.operatorId, operatorId));
   await testDb.delete(checkIns).where(eq(checkIns.operatorId, operatorId));
   await testDb.delete(tickets).where(eq(tickets.operatorId, operatorId));
@@ -265,5 +268,8 @@ export async function cleanupOperator(operatorId: string) {
   await testDb.delete(products).where(eq(products.operatorId, operatorId));
   await testDb.delete(staff).where(eq(staff.operatorId, operatorId));
   await testDb.delete(vessels).where(eq(vessels.operatorId, operatorId));
+  await testDb.delete(magicLinkOtps).where(eq(magicLinkOtps.operatorId, operatorId));
+  await testDb.delete(pushTokens).where(eq(pushTokens.operatorId, operatorId));
+  await testDb.delete(customers).where(eq(customers.operatorId, operatorId));
   await testDb.delete(operators).where(eq(operators.id, operatorId));
 }

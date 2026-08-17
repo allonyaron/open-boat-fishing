@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
 import { bookings, trips } from "@openboat/db";
 import { eq } from "drizzle-orm";
+import { stripe } from "@/lib/stripe";
 
 // Mock Stripe so the cron doesn't make real API calls
 vi.mock("@/lib/stripe", () => ({
@@ -81,5 +82,42 @@ describe("GET /api/cron/expire-pending-bookings", () => {
       .from(trips)
       .where(eq(trips.id, ctx.tripId));
     expect(trip.seatsRemaining).toBe(20);
+  });
+
+  it("skips a stale pending booking whose PI has already succeeded (H1 race guard)", async () => {
+    // Simulate the race: payment went through but webhook not yet delivered.
+    // The cron must not restore seats or cancel the booking.
+    vi.mocked(stripe.paymentIntents.retrieve).mockResolvedValueOnce({
+      status: "succeeded",
+    } as any);
+
+    await testDb
+      .update(trips)
+      .set({ seatsRemaining: 19 })
+      .where(eq(trips.id, ctx.tripId));
+
+    const { bookingId } = await seedBooking(ctx, {
+      status: "pending",
+      holdExpiresAt: new Date(Date.now() - 60_000),
+      stripePaymentIntentId: "pi_test_h1_race",
+    });
+
+    const { GET } = await import("@/app/api/cron/expire-pending-bookings/route");
+    const res = await GET(cronReq());
+    expect(res.status).toBe(200);
+
+    // Booking must remain pending — the webhook will confirm it
+    const [updated] = await testDb
+      .select({ status: bookings.status })
+      .from(bookings)
+      .where(eq(bookings.id, bookingId));
+    expect(updated.status).toBe("pending");
+
+    // Seats must NOT be restored
+    const [trip] = await testDb
+      .select({ seatsRemaining: trips.seatsRemaining })
+      .from(trips)
+      .where(eq(trips.id, ctx.tripId));
+    expect(trip.seatsRemaining).toBe(19);
   });
 });
