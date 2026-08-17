@@ -10,11 +10,16 @@ sequenceDiagram
 
     Note over M,PG: LOGIN
     M->>App: Enter email + PIN
-    App->>API: POST /api/mate/auth
-    API->>PG: SELECT staff WHERE email
-    PG-->>API: staff row
-    API->>API: bcrypt compare PIN + sign HMAC JWT
-    API-->>App: token + name + role
+    App->>API: POST /api/mate/auth { email, pin }
+    API->>DB: checkRateLimit("mate-auth:<email>", 5, 15min)
+    Note over API: Returns 429 with Retry-After if limit exceeded
+    API->>PG: SELECT staff WHERE email = ? AND operatorId = ? AND active = true
+    PG-->>API: staff row (includes pinHash)
+    Note over API: Returns 401 if not found or role not allowed
+    API->>API: bcrypt.compare(pin, pinHash) — constant-time
+    Note over API: Returns 401 if PIN incorrect
+    API->>API: signMateToken({ staffId, operatorId, role, name, aud:"mate", exp:+24h })
+    API-->>App: { token, name, role }
 
     Note over M,PG: TRIPS SCREEN - on every focus
     App->>DB: getCachedTrips
@@ -92,4 +97,6 @@ sequenceDiagram
 | Manifest always current on open    | syncAndRefresh flushes queue then re-fetches on every screen focus |
 | Optimistic UI stays correct        | localCheckedIn merges server state and queued-but-unsynced events  |
 | Capacity cannot exceed certificate | API enforces ceiling; optimistic update reverts on rejection       |
-| Auth is stateless                  | HMAC-signed JWT verified on every request — no server session      |
+| Auth is stateless                  | HMAC-signed token verified on every request — no server session    |
+| Token audience separation          | `aud:"mate"` embedded and verified — customer tokens rejected      |
+| PIN brute-force protected          | 5 attempts/15min per email; returns 429 with Retry-After           |

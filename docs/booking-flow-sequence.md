@@ -19,8 +19,10 @@ sequenceDiagram
     C->>UI: Add tickets to cart
     C->>UI: Enter email + phone, submit
 
-    UI->>API: POST /api/bookings
-    Note over API: Validate ticket types + quantities
+    UI->>API: POST /api/bookings { cart, customerEmail, customerName, customerPhone }
+    API->>DB: checkRateLimit("booking-create:<ip>", 20, 15min)
+    Note over API: Returns 429 with Retry-After if limit exceeded
+    Note over API: Zod schema validates email format, cart size (1-10 trips), ticket types + quantities (1-30 each)
 
     API->>DB: BEGIN TRANSACTION
     API->>DB: SELECT trips FOR UPDATE
@@ -65,13 +67,37 @@ sequenceDiagram
     API-->>S: 200 OK
 
     Note over C,N: ABANDONMENT - payment_intent.canceled webhook
-    S->>API: payment_intent.canceled
+    S->>API: POST /api/webhooks/stripe (payment_intent.canceled)
     API->>DB: BEGIN TRANSACTION
-    API->>DB: SELECT booking FOR UPDATE
-    API->>DB: UPDATE trips SET seatsRemaining += N
+    API->>DB: SELECT booking FOR UPDATE (re-check status — skip if already cancelled)
+    API->>DB: SELECT bookingItems + count tickets per item
+    API->>DB: UPDATE trips SET seatsRemaining += ticketCount per trip
     API->>DB: UPDATE booking SET status=cancelled
     API->>DB: COMMIT
-    Note over API: Cron expire-pending-bookings runs every 10 min with same logic
+    API-->>N: sendPushToEmails "Booking Cancelled — payment wasn't completed" (waitUntil)
+    N-->>C: push notification delivered
+    Note over API: Cron expire-pending-bookings runs every 10 min with same logic + same push
+
+    Note over C,N: EXTERNAL REFUND - charge.refunded webhook (full refund only)
+    S->>API: POST /api/webhooks/stripe (charge.refunded)
+    Note over API: Skips partial refunds (amount_refunded lt amount) — only acts on full refunds
+    API->>DB: SELECT payments WHERE stripePaymentIntentId = pi.id
+    DB-->>API: payment row → bookingId
+    API->>DB: BEGIN TRANSACTION
+    API->>DB: SELECT booking FOR UPDATE (skip if not confirmed)
+    API->>DB: SELECT bookingItems + count tickets per item
+    API->>DB: UPDATE trips SET seatsRemaining += ticketCount per trip
+    API->>DB: UPDATE tickets SET voided=true, feeStatus=reversed
+    API->>DB: UPDATE booking SET status=cancelled
+    API->>DB: COMMIT
+
+    Note over C,N: DISPUTE - charge.dispute.created webhook
+    S->>API: POST /api/webhooks/stripe (charge.dispute.created)
+    API->>DB: SELECT payments WHERE stripePaymentIntentId = pi.id
+    DB-->>API: payment row → bookingId
+    API->>DB: SELECT bookingItems WHERE bookingId
+    API->>DB: UPDATE tickets SET voided=true (boarding blocked — booking stays confirmed)
+    Note over API: Logs error for manual review — dispute outcome unknown
 ```
 
 ## Key invariants

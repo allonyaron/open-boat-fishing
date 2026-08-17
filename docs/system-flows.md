@@ -67,11 +67,13 @@ sequenceDiagram
         W-->>C: 502 Payment service unavailable
     else Customer abandons checkout / Stripe cancels PI
         S->>W: POST /api/webhooks/stripe  (payment_intent.canceled)
-        W->>DB: SELECT booking_items for this booking
+        W->>DB: SELECT booking FOR UPDATE (re-check status inside lock)
+        W->>DB: SELECT booking_items + count tickets per item
         W->>DB: BEGIN TRANSACTION
         W->>DB: Restore seatsRemaining (per ticket count)
         W->>DB: UPDATE booking SET status=cancelled
         W->>DB: COMMIT
+        W-->>C: sendPushToEmails "Booking Cancelled — payment wasn't completed" (waitUntil)
         W-->>S: 200 OK
     end
 ```
@@ -137,10 +139,11 @@ stateDiagram-v2
 
 ## Webhook Event Coverage
 
-| Event                           | Handler        | Action                                                                                         |
-| ------------------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
-| `payment_intent.succeeded`      | ✅             | Confirm booking, record payment                                                                |
-| `payment_intent.canceled`       | ✅             | Restore seats, cancel booking                                                                  |
-| `payment_intent.payment_failed` | ❌ not handled | Customer can retry — no action needed                                                          |
-| `application_fee.refunded`      | ❌ not handled | fee_status → reversed is handled in-process by cancellation + refund routes; no webhook needed |
-| `charge.refunded`               | ❌ not handled | Future: trigger for cancellation flow                                                          |
+| Event                           | Handler        | Action                                                                                              |
+| ------------------------------- | -------------- | --------------------------------------------------------------------------------------------------- |
+| `payment_intent.succeeded`      | ✅             | Confirm booking, record payment, send confirmation email + push                                     |
+| `payment_intent.canceled`       | ✅             | Restore seats, cancel booking, send "payment wasn't completed" push to customer                     |
+| `charge.refunded`               | ✅             | Full refund only: void tickets, reverse fees, cancel booking, restore seats. Partial: log + skip    |
+| `charge.dispute.created`        | ✅             | Void tickets to block boarding while dispute is open; booking stays confirmed pending outcome       |
+| `payment_intent.payment_failed` | ❌ not handled | Customer can retry — no action needed                                                               |
+| `application_fee.refunded`      | ❌ not handled | fee_status → reversed handled in-process by cancellation + refund routes; no webhook needed        |

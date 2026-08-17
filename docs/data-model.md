@@ -16,34 +16,32 @@ operators → vessels → products → product_prices → schedules → trips �
 
 ---
 
-## Required Fields Not Yet in the Schema
+## Schema Fields — All Implemented
 
-Surfaced by competitor API analysis (`/docs/captree-booking-ux-audit.md` §6) and the fee decision:
+All fields surfaced by competitor API analysis (`/docs/captree-booking-ux-audit.md` §6) and the fee decision are in the schema:
 
 ```
-trips
-  + status              enum('scheduled','pending_settlement','sailed','cancelled')
-                                     not null default 'scheduled'
-  + sailed_at           timestamptz null
-  + cancelled_at        timestamptz null
-  + cancellation_reason text null          -- 'weather' | 'mechanical' | 'low_bookings' | free text
-  + boarding_time       time null          -- distinct from departure (06:30 board / 07:00 depart)
-  + duration_day        int not null default 0   -- multi-day trips: duration on the trip,
-  + duration_hr         int                      -- NOT a spanning calendar entity
-  + duration_min        int
-  + online_cutoff       timestamptz null   -- online booking closes
-  + deposit_percentage  int null           -- null = pay in full
+trips                                                       ✅ in schema
+  status              enum('scheduled','pending_settlement','sailed','cancelled') not null default 'scheduled'
+  sailed_at           timestamptz null
+  cancelled_at        timestamptz null
+  cancellation_reason text null          -- 'weather' | 'mechanical' | 'low_bookings' | free text
+  boarding_time       time null          -- distinct from departure (06:30 board / 07:00 depart)
+  duration_day        int not null default 0   -- multi-day trips: duration on the trip,
+  duration_hr         int                      -- NOT a spanning calendar entity
+  duration_min        int
+  online_cutoff       timestamptz null   -- online booking closes
+  deposit_percentage  int null           -- null = pay in full
 
-tickets
-  + fee_amount_cents    int not null default 150  -- SNAPSHOT at write time, never read
-                                                  -- from config at bill time
-  + fee_status          enum('held','earned','reversed') not null default 'held'
+tickets                                                     ✅ in schema
+  fee_amount_cents    int not null default 150  -- SNAPSHOT at write time, never read from config at bill time
+  fee_status          enum('held','earned','reversed') not null default 'held'
 
-operators
-  + fee_bearer          enum('passenger','operator') not null default 'passenger'
-  + fee_display         enum('itemized','folded')    not null default 'itemized'
-  + cancel_window_hrs   int not null default 48   -- customer self-cancel cutoff
-  + settle_grace_hrs    int not null default 48   -- departure → earned; absorbs late cancellations
+operators                                                   ✅ in schema
+  fee_bearer          enum('passenger','operator') not null default 'passenger'
+  fee_display         enum('itemized','folded')    not null default 'itemized'
+  cancel_window_hrs   int not null default 48   -- customer self-cancel cutoff
+  settle_grace_hrs    int not null default 48   -- departure → earned; absorbs late cancellations
 ```
 
 ---

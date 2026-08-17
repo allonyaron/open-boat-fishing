@@ -276,16 +276,20 @@ Repeat-customer levers, in order of expected impact: "book this trip again" deep
 
 ## 6. Notifications
 
-| Event                  | Email            | SMS            | Notes                                                                            |
-| ---------------------- | ---------------- | -------------- | -------------------------------------------------------------------------------- |
-| Booking confirmed      | ✓ (PDF attached) | ✓ link to pass | SMS auto-sends at booking                                                        |
-| 24 h reminder          | ✓                | ✓              | Includes passenger-name prompt if incomplete                                     |
-| Operator cancellation  | ✓                | ✓              | One-tap refund-or-credit choice                                                  |
-| Refund initiated       | ✓                | optional       |                                                                                  |
-| Refund processed       | ✓                | optional       | On Stripe settlement                                                             |
-| **Trip changed**       | ✓                | ✓              | _New._ Captains switch target species and swap vessels. Accept-or-refund action. |
-| Standby seat available | per opt-in       | per opt-in     | Claim window per §5.2                                                            |
-| Hold expiring          | —                | —              | In-page only                                                                     |
+_Implementation state as of 2026-08-17: **Push (Expo)** is live. **Email (Resend)** is live for booking confirmation. **SMS (Twilio)** is planned but not yet wired — the TODO is in the webhook handler. SMS cells below reflect the intended channel once Twilio is connected._
+
+| Event                  | Email            | Push       | SMS (planned)  | Notes                                                                                     |
+| ---------------------- | ---------------- | ---------- | -------------- | ----------------------------------------------------------------------------------------- |
+| Booking confirmed      | ✓ (PDF attached) | ✓          | link to pass   | Email + push sent via `payment_intent.succeeded` webhook                                  |
+| 24 h reminder          | —                | ✓          | ✓              | Cron window `[+23h, +24h)`. Includes passenger-name prompt if incomplete. Email planned.  |
+| Operator cancellation  | —                | ✓          | ✓              | Push fires on one-tap cancel. One-tap refund-or-credit choice planned for SMS.            |
+| Booking expired        | —                | ✓          | —              | Cron fires when a pending booking times out without payment.                              |
+| Payment abandoned      | —                | ✓          | —              | `payment_intent.canceled` webhook fires notification.                                     |
+| Refund initiated       | —                | —          | —              | Planned.                                                                                  |
+| Refund processed       | —                | —          | —              | Planned; on Stripe settlement.                                                            |
+| **Trip changed**       | —                | —          | —              | _Planned._ Species/vessel swap; accept-or-refund action.                                  |
+| Standby seat available | per opt-in       | per opt-in | per opt-in     | Claim window per §5.2.                                                                    |
+| Hold expiring          | —                | —          | —              | In-page only.                                                                             |
 
 ---
 
@@ -317,7 +321,7 @@ Everything above is decided. These five need outside input. Each has a working d
 - **Conversion:** High completion from calendar view to paid booking. Accounts reduce clicks for repeat customers without adding friction for new ones.
 - **Architecture:** Appropriately scoped, not over-engineered. Scales to the load of a fishing fleet.
 - **Design:** Polished and visually consistent — professional to customers, credible to operators.
-- **Security:** Stripe-native payments, signed tickets, unguessable boarding URLs, rate-limited sensitive endpoints, no PII leakage.
+- **Security:** Stripe-native payments, signed tickets (planned — QR currently encodes a bare UUID; HMAC signing required before launch), unguessable boarding URLs, rate-limited sensitive endpoints, no PII leakage.
 
 ---
 

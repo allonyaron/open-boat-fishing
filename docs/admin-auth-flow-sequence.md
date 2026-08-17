@@ -10,29 +10,31 @@ sequenceDiagram
 
     Note over A,S: LOGIN
     A->>UI: Enter email + password
-    UI->>API: POST /api/admin/auth/login
-    API->>DB: SELECT operator
-    DB-->>API: operator row
-    API->>DB: SELECT staff WHERE email
+    UI->>API: POST /api/admin/auth/login { email, password }
+    API->>DB: checkRateLimit("admin-login:<ip>", 10, 15min)
+    Note over API: Returns 429 with Retry-After if limit exceeded
+    API->>DB: SELECT operators LIMIT 1
+    DB-->>API: operator row (single-tenant)
+    API->>DB: SELECT staff WHERE email = ? AND operatorId = ?
     DB-->>API: staff row
-    Note over API: Returns 401 if not found or no passwordHash
-    Note over API: Returns 403 if role is not admin
-    Note over API: Returns 403 if account disabled
-    API->>API: bcrypt compare password vs passwordHash
+    Note over API: Returns 401 if not found or no passwordHash set
+    Note over API: Returns 403 if role != "admin"
+    Note over API: Returns 403 if active = false
+    API->>API: bcrypt.compare(password, passwordHash) — constant-time
     Note over API: Returns 401 if password incorrect
-    API->>S: getSession - read iron-session cookie
-    API->>S: set staffId + operatorId + role + name
-    API->>S: session.save - write encrypted cookie
-    S-->>A: Set-Cookie iron-session (HttpOnly, signed with SESSION_SECRET)
-    API-->>UI: name + role
+    API->>S: getIronSession(cookies, { password: SESSION_SECRET })
+    API->>S: session.staffId = id, operatorId, role="admin", name
+    API->>S: session.save() — AES-256 encrypts + signs cookie
+    S-->>A: Set-Cookie: openboat_admin (HttpOnly, SameSite=Lax, 8h)
+    API-->>UI: { name, role }
     UI-->>A: Admin dashboard
 
     Note over A,S: SUBSEQUENT REQUESTS
     A->>UI: Any admin action
-    UI->>API: request with session cookie
-    API->>S: getSession - decrypt + verify cookie
-    S-->>API: staffId + operatorId + role
-    Note over API: requireAdmin returns 401 if no staffId in session
+    UI->>API: request with session cookie (automatic browser behaviour)
+    API->>S: getIronSession — AES-decrypt + verify cookie integrity
+    S-->>API: { staffId, operatorId, role, name }
+    Note over API: requireAdmin returns 401 if staffId missing or role != "admin"
     API->>DB: scoped query WHERE operatorId = session.operatorId
     DB-->>API: result
     API-->>UI: response
@@ -61,6 +63,7 @@ sequenceDiagram
 | Invariant                               | Where enforced                                                   |
 | --------------------------------------- | ---------------------------------------------------------------- |
 | Password never stored in plaintext      | bcrypt hash stored in `staff.passwordHash`                       |
-| Session tamper-proof                    | iron-session encrypts + signs with `SESSION_SECRET`              |
+| Session tamper-proof                    | iron-session AES-256 encrypts + signs with `SESSION_SECRET`      |
 | All admin queries are operator-scoped   | `requireAdmin` returns `session.operatorId`; every query uses it |
-| Role checked at login, not just session | `member.role !== "admin"` check before session is written        |
+| Role checked at login, not just session | `role !== "admin"` check before session is written               |
+| Brute-force protected                   | 10 login attempts/15min per IP; returns 429 with Retry-After     |

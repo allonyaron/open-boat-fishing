@@ -22,6 +22,20 @@ Full audit findings in `security-audit-2026-08-05.md`.
 
 ---
 
+## Security Hardening (2026-08-17) — Pre-launch fixes
+
+- ✅ **H1 — Webhook + cron overbooking race:** Cron now skips bookings whose PI is `succeeded` or `processing` (customer paid, webhook in flight). Webhook adds `cancelled` guard — logs error requiring manual refund investigation if cron somehow cancelled first.
+- ✅ **H2/H3 — Auth rate limiting:** Postgres fixed-window rate limiter (`src/lib/rate-limit.ts`) on all auth routes. OTP request: 20/hr per IP + 5/hr per email. OTP verify: 10/15min per email. Mate PIN auth: 5/15min per email. Admin login: 10/15min per IP. All return 429 with `Retry-After`.
+- ✅ **H4 — Durable rate limiting on bookings wallet lookup:** In-memory `rlStore` Map (not durable across Vercel lambda instances) replaced with the same Postgres rate limiter. Keys prefixed `wallet-lookup:`.
+- ✅ **H5 — Trip reminders double-fire:** Window narrowed from `[+23h, +25h]` (2h wide, overlapped consecutive hourly cron runs) to `[+23h, +24h)` (exclusive upper bound, tiles exactly).
+- ✅ **M4 — Booking seat-hold DoS:** `POST /api/bookings` now validates with a Zod schema (email format, cart 1–10 trips, ticket types, quantities 1–30) and enforces an IP rate limit of 20 requests/15min.
+- ✅ **M6 — Token audience separation:** Mate tokens embed `aud:"mate"`, customer tokens `aud:"customer"`. Each `verify*` function rejects the other type — a mate token can no longer pass `requireCustomer` and vice versa.
+- ✅ **M8 — Webhook refund + dispute handling:** `charge.refunded` handler voids tickets, reverses fees, cancels booking, and restores seats on full refund (partial refunds logged for manual review). `charge.dispute.created` handler voids tickets to block boarding while dispute is open.
+- ✅ **M9 — Startup env validation:** `src/lib/env.ts` validates all required env vars with Zod at module load time. Wired into `src/instrumentation.ts` (Next.js server startup hook) so missing vars throw at boot with a clear message, not mid-request.
+- ✅ **M10 — Customer notification on cancellation:** Push notification sent when bookings expire via cron ("Booking Expired") and when `payment_intent.canceled` webhook fires ("Booking Cancelled — payment wasn't completed").
+
+---
+
 ## Expo Consumer App (Step 7 — complete)
 
 Trips tab (month calendar, vessel dots, trip cards, ticket bottom sheet, cart bar). Tickets tab (SQLite wallet, add-by-code+email, offline boarding pass QR at `/boarding/[ticketId]`, brightness boost, cancelled state). Account tab (email OTP sign-in, booking history, per-type notification preference toggles). Checkout flow (Reserve → `/checkout` → Stripe Payment Sheet → confirmation + wallet sync). Push notifications wired: cancellation push on trip cancel, booking confirmation push on webhook success, 24h reminder via Vercel cron.
