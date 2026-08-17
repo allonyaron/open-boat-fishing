@@ -4,13 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Steps 1–10 complete. Testing Phases 0–5 complete. Step 11 (production infra) is next.**
+**Steps 1–10 complete. All testing phases (0–6) complete. Step 11 (production infra) is next.**
 
 See `docs/build-status.md` for the full per-step build narrative.
 
-**Testing status:** Phases 0–5 done (Vitest scaffolding, utils/mobile unit tests, API integration tests, lib unit tests, Playwright E2E). Phase 6 (Maestro mobile E2E + BottomSheet extraction) not started — deferred until after production launch.
+**Testing status:** All phases done. Phase 6 (mobile lib unit tests) complete — 51 tests, 97.97% line coverage, committed `ffea43f`. Maestro mobile E2E and BottomSheet extraction deferred until after launch.
 
-**Known gaps blocking production:**
+**Security fixes required before launch (from Opus code review):**
+
+- **H1 (CRITICAL — money bug):** Webhook + cron race can overbook a paid trip. Fix: add `status === "cancelled"` guard in `webhooks/stripe/route.ts` idempotency check; make `expire-pending-bookings` cron skip if PI status is `succeeded`/`processing`.
+- **H2/H3:** No rate limiting on `/api/auth/request` (OTP send), `/api/auth/verify`, `/api/mate/auth` (PIN brute-forceable — 10,000 guesses), `/api/admin/auth/login`. Fix: Upstash Redis rate limiter.
+- **H4:** In-memory `rlStore` in `bookings/route.ts` is not durable across Vercel lambda instances. Fix: Upstash or Postgres-backed rate limiter.
+- **H5:** Trip reminders fire twice — 2-hour window overlaps two consecutive hourly cron runs. Fix: narrow window to 1 hour or add `reminderSentAt` column to trips.
+- **M4:** `POST /api/bookings` has no Zod validation and no rate limit — allows seat-hold DoS. Fix: add Zod schema + rate limit.
+- **M6:** Single `SESSION_SECRET` signs three token types (customer, mate, admin) with no audience separation. Fix: add `aud` field in payloads and verify in `require*` functions.
+- **M8:** Webhook doesn't handle `charge.refunded` or `charge.dispute.created` — refunded bookings stay `confirmed` with live tickets.
+- **M9:** No startup env validation — missing env vars produce 500s at request time, not boot time. Fix: Zod env schema at import time.
+- **M10:** No user notification when payment intent expires/is cancelled.
+
+**Known gaps blocking production (original list):**
 
 - SMS not sent (Twilio TODO in webhook)
 - QR payload is bare UUID — needs HMAC signing before launch
