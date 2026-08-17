@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { bookings, bookingItems, trips, products, vessels, operators } from "@openboat/db";
+import { fmtTimeET } from "@/lib/format";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
@@ -37,14 +38,6 @@ export default async function ConfirmationPage({
     .where(eq(bookingItems.bookingId, booking.id));
 
   const paymentSucceeded = redirect_status === "succeeded";
-
-  function fmtTime(iso: Date | string) {
-    return new Date(iso).toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: "America/New_York",
-    });
-  }
 
   function fmtDate(d: string) {
     return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {
@@ -133,7 +126,7 @@ export default async function ConfirmationPage({
                   </div>
                   <div className="text-[13px] text-muted mt-0.5">{fmtDate(item.tripDate)}</div>
                   <div className="text-[13px] text-muted">
-                    {fmtTime(item.startTime)} – {fmtTime(item.endTime)} · {item.vesselName}
+                    {fmtTimeET(item.startTime)} – {fmtTimeET(item.endTime)} · {item.vesselName}
                   </div>
                 </div>
               </div>

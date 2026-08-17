@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { bookings, bookingItems, tickets, trips, products, vessels, operators } from "@openboat/db";
+import { fmtTimeET } from "@/lib/format";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { PrintButton } from "./PrintButton";
@@ -55,14 +56,6 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
       month: "long",
       day: "numeric",
       year: "numeric",
-    });
-  }
-
-  function fmtTime(iso: Date | string) {
-    return new Date(iso).toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: "America/New_York",
     });
   }
 
@@ -183,11 +176,11 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
                 <div className="ticket-row">
                   <div>
                     <div className="ticket-section-label">DEPARTURE</div>
-                    <div className="ticket-value">{fmtTime(ticket.startTime)}</div>
+                    <div className="ticket-value">{fmtTimeET(ticket.startTime)}</div>
                   </div>
                   <div>
                     <div className="ticket-section-label">RETURN</div>
-                    <div className="ticket-value">{fmtTime(ticket.endTime)}</div>
+                    <div className="ticket-value">{fmtTimeET(ticket.endTime)}</div>
                   </div>
                   {fmtBoardingTime(ticket.boardingTime) && (
                     <div>

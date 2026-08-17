@@ -6,21 +6,10 @@ import { Elements } from "@stripe/react-stripe-js";
 import { CheckoutForm } from "./CheckoutForm";
 import posthog from "posthog-js";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
+import { dollars } from "@openboat/utils";
+import { fmtTimeET } from "@/lib/format";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
-
-function dollars(cents: number) {
-  const n = cents / 100;
-  return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
-}
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-  });
-}
 
 function fmtDate(d: string) {
   return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {
@@ -106,7 +95,7 @@ function TripCard({
           <div className="text-[13px] text-muted mt-0.5">{item.vesselName}</div>
           <div className="text-[13px] text-muted">{fmtDate(item.departureDate)}</div>
           <div className="text-[13px] text-muted">
-            {fmtTime(item.startTime)} – {fmtTime(item.endTime)}
+            {fmtTimeET(item.startTime)} – {fmtTimeET(item.endTime)}
           </div>
         </div>
         {!locked && (

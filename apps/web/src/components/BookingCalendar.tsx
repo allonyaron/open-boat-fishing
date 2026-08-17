@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import posthog from "posthog-js";
+import { dollars } from "@openboat/utils";
+import { fmtTimeET } from "@/lib/format";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,23 +67,12 @@ function parseMonth(month: string) {
   const [y, m] = month.split("-").map(Number);
   return { year: y, mon: m };
 }
-function fmtTime(iso: string | Date) {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-  });
-}
 function fmtDayHeader(dateStr: string) {
   return new Date(dateStr + "T12:00:00Z").toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
   });
-}
-function dollars(cents: number) {
-  const n = cents / 100;
-  return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
 }
 function fmtDuration(startIso: string, endIso: string) {
   const diffMs = new Date(endIso).getTime() - new Date(startIso).getTime();
@@ -200,7 +191,7 @@ function TripRow({
           {trip.product.displayName}
         </div>
         <div className="text-[13px] text-muted mt-0.5">
-          {trip.vessel.name} · {fmtTime(trip.startTime)} – {fmtTime(trip.endTime)} ·{" "}
+          {trip.vessel.name} · {fmtTimeET(trip.startTime)} – {fmtTimeET(trip.endTime)} ·{" "}
           {fmtDuration(trip.startTime, trip.endTime)}
         </div>
         {fromPrice !== null && (
@@ -374,7 +365,7 @@ function TicketSheet({
               {trip.product.displayName}
             </div>
             <div className="text-[13px] text-muted mt-1">
-              {fmtTime(trip.startTime)} – {fmtTime(trip.endTime)} ·{" "}
+              {fmtTimeET(trip.startTime)} – {fmtTimeET(trip.endTime)} ·{" "}
               {fmtDuration(trip.startTime, trip.endTime)}
             </div>
             <div className="text-[12px] text-success font-semibold mt-1.5">

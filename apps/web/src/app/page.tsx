@@ -1,15 +1,11 @@
 import { BookingCalendar, type Trip } from "@/components/BookingCalendar";
 import { db } from "@/lib/db";
 import { operators } from "@openboat/db";
+import { dollars } from "@openboat/utils";
 
 function currentMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function dollars(cents: number) {
-  const n = cents / 100;
-  return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
 }
 
 function AnchorIcon() {

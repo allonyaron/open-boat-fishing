@@ -1,11 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-
-function dollars(cents: number) {
-  const n = cents / 100;
-  return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
-}
+import { dollars } from "@openboat/utils";
 
 function ArrowRight() {
   return (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { db } from "@/lib/db";
+import { fmtTimeET } from "@/lib/format";
 import { stripe } from "@/lib/stripe";
 import { sendBookingConfirmation } from "@/lib/email";
 import { sendPushToEmails } from "@/lib/push";
@@ -210,15 +211,6 @@ async function sendConfirmationEmail(booking: typeof bookings.$inferSelect, book
     }
   }
 
-  function fmtTime(iso: string | Date) {
-    const d = new Date(iso);
-    const h = d.getHours(),
-      m = d.getMinutes(),
-      ampm = h >= 12 ? "PM" : "AM";
-    const h12 = h % 12 || 12;
-    return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-  }
-
   const ticketLines = [...lineMap.values()].map((l) => {
     const trip = tripRows.find((t) => t.id === l.tripId)!;
     const vessel = vesselRows.find((v) => v.id === trip.vesselId)!;
@@ -235,8 +227,8 @@ async function sendConfirmationEmail(booking: typeof bookings.$inferSelect, book
       }),
       vesselName: vessel.name,
       productName: product.displayName,
-      departs: fmtTime(trip.startTime),
-      returns: fmtTime(trip.endTime),
+      departs: fmtTimeET(trip.startTime),
+      returns: fmtTimeET(trip.endTime),
     };
   });
 

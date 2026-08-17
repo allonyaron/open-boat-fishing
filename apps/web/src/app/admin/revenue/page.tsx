@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { dollars } from "@openboat/utils";
+import { fmtTimeET } from "@/lib/format";
 
 type TripFeeRow = {
   tripId: string;
@@ -41,9 +43,6 @@ const RANGES = [
   { label: "Last 12 months", days: 365 },
 ];
 
-function dollars(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 function fmtDate(date: string) {
   const [y, m, d] = date.split("-").map(Number);
@@ -53,13 +52,6 @@ function fmtDate(date: string) {
   });
 }
 
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
 
 function toDateParam(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -186,7 +178,7 @@ export default function RevenuePage() {
                           </span>
                         </div>
                         <div className="text-xs text-gray-400">
-                          {fmtDate(row.departureDate)} {fmtTime(row.startTime)}
+                          {fmtDate(row.departureDate)} {fmtTimeET(row.startTime)}
                         </div>
                       </div>
                     </div>

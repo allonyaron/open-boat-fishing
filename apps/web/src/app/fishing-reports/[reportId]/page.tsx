@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { fishingReports, trips, vessels, products, operators } from "@openboat/db";
+import { fmtTimeET } from "@/lib/format";
 import { and, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -80,13 +81,6 @@ function fmtDate(date: string) {
   });
 }
 
-function fmtTime(d: Date | string) {
-  return new Date(d).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
 
 export default async function FishingReportPage({ params }: Props) {
   const { reportId } = await params;
@@ -114,7 +108,7 @@ export default async function FishingReportPage({ params }: Props) {
         <span className="text-gray-600">{row.productName}</span>
       </div>
       <p className="text-gray-500 text-sm mb-6">
-        {fmtDate(row.departureDate)} · {fmtTime(row.startTime)} – {fmtTime(row.endTime)}
+        {fmtDate(row.departureDate)} · {fmtTimeET(row.startTime)} – {fmtTimeET(row.endTime)}
       </p>
 
       {fishCounts.length > 0 && (

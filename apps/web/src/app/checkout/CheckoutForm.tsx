@@ -4,11 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import posthog from "posthog-js";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
-
-function dollars(cents: number) {
-  const n = cents / 100;
-  return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
-}
+import { dollars } from "@openboat/utils";
 
 function fmtCountdown(msLeft: number): string {
   const totalSecs = Math.max(0, Math.ceil(msLeft / 1000));

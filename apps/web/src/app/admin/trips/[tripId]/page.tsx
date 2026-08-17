@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { dollars } from "@openboat/utils";
+import { fmtTimeET } from "@/lib/format";
 import Link from "next/link";
 import { upload } from "@vercel/blob/client";
 import Image from "next/image";
@@ -58,14 +60,6 @@ type TripDetail = {
 
 type ApiResponse = { trip: TripDetail; bookings: BookingRow[] };
 
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
 function fmtDate(date: string) {
   const [y, m, d] = date.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", {
@@ -74,10 +68,6 @@ function fmtDate(date: string) {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function dollars(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
 }
 
 const TICKET_LABEL = { adult: "Adult", child: "Child", senior: "Senior" };
@@ -271,7 +261,7 @@ export default function TripDetailPage() {
               <span className="text-gray-600">{trip.product.displayName}</span>
             </div>
             <div className="text-gray-500 text-sm mt-1">
-              {fmtDate(trip.departureDate)} · {fmtTime(trip.startTime)} → {fmtTime(trip.endTime)}
+              {fmtDate(trip.departureDate)} · {fmtTimeET(trip.startTime)} → {fmtTimeET(trip.endTime)}
               {trip.boardingTime && (
                 <span className="ml-2 text-gray-400">Board {trip.boardingTime}</span>
               )}
@@ -523,7 +513,7 @@ export default function TripDetailPage() {
                       <div className="text-sm">
                         {ticket.checkedIn ? (
                           <span className="text-green-600 font-medium">
-                            ✓ Checked in {ticket.checkedInAt ? fmtTime(ticket.checkedInAt) : ""}
+                            ✓ Checked in {ticket.checkedInAt ? fmtTimeET(ticket.checkedInAt) : ""}
                           </span>
                         ) : (
                           <span className="text-gray-400">—</span>

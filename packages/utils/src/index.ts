@@ -1,5 +1,10 @@
 // Shared utilities: QR generation, PDF helpers, Zod schemas, confirmation codes
 
+export function dollars(cents: number): string {
+  const n = cents / 100;
+  return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
+}
+
 export function fmtTime(iso: string): string {
   const d = new Date(iso);
   const h = d.getHours();

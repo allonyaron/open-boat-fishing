@@ -3,19 +3,8 @@
 import { useState, useEffect } from "react";
 import { ContactOverlay } from "@/components/ContactOverlay";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
-
-function dollars(cents: number) {
-  const n = cents / 100;
-  return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
-}
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-  });
-}
+import { dollars } from "@openboat/utils";
+import { fmtTimeET } from "@/lib/format";
 
 function fmtDate(d: string) {
   return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {
@@ -103,7 +92,7 @@ function TripCard({
           <div className="text-[13px] text-muted mt-0.5">{item.vesselName}</div>
           <div className="text-[13px] text-muted">{fmtDate(item.departureDate)}</div>
           <div className="text-[13px] text-muted">
-            {fmtTime(item.startTime)} – {fmtTime(item.endTime)}
+            {fmtTimeET(item.startTime)} – {fmtTimeET(item.endTime)}
           </div>
         </div>
         <button
