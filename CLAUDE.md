@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Steps 1–10 complete. Step 11 (production infra) is next.**
+**Steps 1–10 complete. Testing Phases 0–5 complete. Step 11 (production infra) is next.**
 
 See `docs/build-status.md` for the full per-step build narrative.
+
+**Testing status:** Phases 0–5 done (Vitest scaffolding, utils/mobile unit tests, API integration tests, lib unit tests, Playwright E2E). Phase 6 (Maestro mobile E2E + BottomSheet extraction) not started — deferred until after production launch.
 
 **Known gaps blocking production:**
 
