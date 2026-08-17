@@ -81,6 +81,14 @@ function fmtDuration(startIso: string, endIso: string) {
   const mins = totalMins % 60;
   return mins === 0 ? `${hrs} hr` : `${hrs} hr ${mins} min`;
 }
+function tripDurationHours(trip: Trip) {
+  return (new Date(trip.endTime).getTime() - new Date(trip.startTime).getTime()) / 3600000;
+}
+function calCellStatus(t: Trip): { label: string; color: string } {
+  if (t.seatsRemaining === 0) return { label: "Sold out", color: "#c65b4e" };
+  if (t.seatsRemaining <= 5) return { label: `${t.seatsRemaining} left`, color: "#c9862f" };
+  return { label: `${t.seatsRemaining} left`, color: "#3f8f5e" };
+}
 
 // ─── Stepper ──────────────────────────────────────────────────────────────────
 
@@ -287,38 +295,50 @@ function MonthGrid({
               disabled={!hasTrips}
               aria-label={dayLabel}
               aria-pressed={isSelected}
-              className={`min-h-[80px] rounded-[14px] p-2.5 text-left transition-all ${
+              className={`min-h-[200px] rounded-[12px] p-[10px] text-left transition-all flex flex-col gap-[6px] ${
                 isSelected
-                  ? "bg-navy shadow-day-selected"
+                  ? "border-2 border-[#c99a3f] bg-[#fdf8ec]"
                   : hasTrips
-                    ? "bg-white border border-card-border hover:border-gold/50 shadow-card cursor-pointer"
+                    ? "bg-white border border-card-border hover:border-[#c99a3f]/40 shadow-card cursor-pointer"
                     : "bg-fill/60 border border-hairline cursor-default"
               } ${isToday && !isSelected ? "ring-2 ring-gold/40" : ""}`}
             >
               <div
-                className={`font-grotesk text-[14px] font-semibold mb-2 ${
-                  isSelected ? "text-white" : hasTrips ? "text-ink" : "text-faint"
-                }`}
+                className="font-manrope text-[14px] font-bold"
+                style={{ color: hasTrips ? "#1c2333" : "#9a9fac" }}
               >
                 {dayNum}
               </div>
               {hasTrips && (
-                <div className="flex flex-wrap gap-[3px]">
-                  {trips.slice(0, 5).map((t, j) => (
-                    <div
-                      key={j}
-                      className="w-[7px] h-[7px] rounded-pill"
-                      style={{ backgroundColor: isSelected ? "rgba(255,255,255,0.65)" : "#C9922A" }}
-                    />
-                  ))}
-                  {trips.length > 5 && (
-                    <span
-                      className={`text-[9px] font-bold leading-[7px] ${isSelected ? "text-white/65" : "text-faint"}`}
-                    >
-                      +{trips.length - 5}
+                <>
+                  {trips.slice(0, 3).map((t, j) => {
+                    const { label, color } = calCellStatus(t);
+                    return (
+                      <div key={j} className="flex gap-[6px] min-w-0">
+                        <div
+                          className="w-[2px] rounded-full flex-shrink-0 self-stretch"
+                          style={{ backgroundColor: t.vessel.color }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] font-bold leading-tight" style={{ color: "#14233d" }}>
+                            {fmtTimeET(t.startTime)}
+                          </div>
+                          <div className="text-[10px] leading-[1.25] truncate" style={{ color: "#3d4250" }}>
+                            {t.product.displayName}
+                          </div>
+                          <div className="text-[9px] font-bold" style={{ color }}>
+                            {label}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {trips.length > 3 && (
+                    <span className="text-[9px] font-semibold" style={{ color: "#9a9fac" }}>
+                      +{trips.length - 3} more
                     </span>
                   )}
-                </div>
+                </>
               )}
             </button>
           );
@@ -480,6 +500,54 @@ function TicketSheet({
   );
 }
 
+// ─── Step Indicator ───────────────────────────────────────────────────────────
+
+function StepIndicator({ step }: { step: 1 | 2 | 3 }) {
+  const steps = [
+    { label: "Date", icon: <CalendarIcon size={14} /> },
+    { label: "Tickets", icon: <TicketIcon /> },
+    { label: "Checkout", icon: <CardIcon /> },
+  ];
+  return (
+    <div className="px-5 pt-5 pb-4">
+      <div className="flex items-center">
+        {steps.map((s, i) => {
+          const num = i + 1;
+          const active = num === step;
+          const done = num < step;
+          return (
+            <div key={s.label} className="flex items-center flex-1 last:flex-none">
+              <div className="flex flex-col items-center gap-1">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                  style={{
+                    background: active || done ? "#c99a3f" : "#f1f4f3",
+                    color: active || done ? "#182337" : "#9a9fac",
+                  }}
+                >
+                  {done ? <CheckIcon /> : s.icon}
+                </div>
+                <span
+                  className="text-[10px] font-semibold"
+                  style={{ color: active ? "#c99a3f" : done ? "#c99a3f" : "#9a9fac" }}
+                >
+                  {s.label}
+                </span>
+              </div>
+              {i < 2 && (
+                <div
+                  className="flex-1 h-px mx-2 mb-4"
+                  style={{ background: num < step ? "rgba(201,154,63,0.4)" : "#ecefee" }}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Desktop Right Sidebar ────────────────────────────────────────────────────
 
 function DesktopSidebar({
@@ -501,8 +569,11 @@ function DesktopSidebar({
   onCheckout: () => void;
   tripQty: (id: string) => number;
 }) {
+  const step: 1 | 2 | 3 = totalTickets > 0 ? 3 : selectedDay ? 2 : 1;
   return (
     <div className="hidden md:flex flex-col w-[360px] border-l border-hairline bg-white sticky top-[60px] h-[calc(100vh-60px)]">
+      <StepIndicator step={step} />
+      <div className="border-t border-hairline flex-shrink-0" />
       {viewMode === "calendar" ? (
         selectedDay ? (
           <>
@@ -539,7 +610,7 @@ function DesktopSidebar({
         ) : (
           <div className="flex flex-col items-center justify-center flex-1 text-center px-8">
             <div className="w-11 h-11 rounded-[13px] bg-navy-tint flex items-center justify-center mb-3">
-              <CalendarIcon />
+              <CalendarIcon size={22} />
             </div>
             <div className="font-grotesk text-[15px] font-semibold text-ink mb-1">
               Select a date
@@ -582,21 +653,27 @@ function SidebarCartFooter({
 }) {
   return (
     <div className="border-t border-hairline p-5 flex-shrink-0">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-baseline justify-between mb-4">
         <div>
-          <div className="text-[12px] font-bold uppercase tracking-wide text-gold mb-0.5">
+          <div
+            className="text-[12px] font-bold uppercase mb-1"
+            style={{ color: "#c99a3f", letterSpacing: "0.08em" }}
+          >
             Total
           </div>
-          <div className="font-grotesk text-[24px] font-bold text-ink">{dollars(totalCents)}</div>
+          <div className="font-manrope text-[28px] font-extrabold" style={{ color: "#1c2333" }}>
+            {dollars(totalCents)}
+          </div>
         </div>
-        <div className="text-[13px] text-muted">
+        <div className="text-[12px]" style={{ color: "#9a9fac" }}>
           {totalTickets} ticket{totalTickets !== 1 ? "s" : ""}
         </div>
       </div>
       <button
         type="button"
         onClick={onCheckout}
-        className="w-full py-4 rounded-btn bg-gold text-navy font-grotesk text-[15px] font-bold hover:bg-gold-hover transition-colors flex items-center justify-center gap-2"
+        className="w-full py-3.5 font-manrope text-[14px] font-bold transition-opacity hover:opacity-90 flex items-center justify-center gap-2"
+        style={{ background: "#c99a3f", color: "#182337", borderRadius: "10px" }}
       >
         Checkout <ArrowRight />
       </button>
@@ -657,6 +734,8 @@ export function BookingCalendar({
   const [sheetTripId, setSheetTripId] = useState<string | null>(null);
   const [sheetAdult, setSheetAdult] = useState(0);
   const [sheetChild, setSheetChild] = useState(0);
+  const [tripTypeFilter, setTripTypeFilter] = useState<"all" | "half-day" | "full-day" | "weekend">("all");
+  const [vesselFilter, setVesselFilter] = useState<string | null>(null);
 
   // Default to calendar view on desktop after hydration
   useEffect(() => {
@@ -791,7 +870,22 @@ export function BookingCalendar({
     window.location.href = "/checkout";
   }
 
-  const byDate = trips.reduce<Record<string, Trip[]>>((acc, t) => {
+  // Unique vessels for filter chips (derived from full trips, stable across filters)
+  const uniqueVessels = [...new Map(trips.map((t) => [t.vessel.name, t.vessel])).values()];
+
+  // Apply filters
+  const filteredTrips = trips.filter((t) => {
+    if (tripTypeFilter === "half-day" && tripDurationHours(t) >= 6) return false;
+    if (tripTypeFilter === "full-day" && tripDurationHours(t) < 6) return false;
+    if (tripTypeFilter === "weekend") {
+      const dow = new Date(t.departureDate + "T12:00:00Z").getUTCDay();
+      if (dow !== 0 && dow !== 6) return false;
+    }
+    if (vesselFilter && t.vessel.name !== vesselFilter) return false;
+    return true;
+  });
+
+  const byDate = filteredTrips.reduce<Record<string, Trip[]>>((acc, t) => {
     (acc[t.departureDate] ??= []).push(t);
     return acc;
   }, {});
@@ -804,7 +898,7 @@ export function BookingCalendar({
       {/* App bar */}
       <header
         className="sticky top-0 z-20 h-[60px] flex items-center justify-between px-5"
-        style={{ backgroundColor: "#0D1B2A" }}
+        style={{ backgroundColor: "#14233d" }}
       >
         <div className="flex items-center gap-2.5">
           <AnchorIconSmall />
@@ -823,7 +917,7 @@ export function BookingCalendar({
                 onClick={() => setViewMode(mode)}
                 aria-pressed={viewMode === mode}
                 className={`px-3 py-1.5 rounded-[8px] text-[13px] font-semibold transition-all capitalize ${
-                  viewMode === mode ? "bg-white/20 text-white" : "text-white/50 hover:text-white/70"
+                  viewMode === mode ? "bg-white text-navy" : "text-white/50 hover:text-white/70"
                 }`}
               >
                 {mode}
@@ -853,6 +947,57 @@ export function BookingCalendar({
           </div>
         </div>
       </header>
+
+      {/* Filter chips bar */}
+      <div className="bg-white border-b border-hairline px-4 py-2.5 flex items-center gap-2 overflow-x-auto no-scrollbar">
+        {/* Trip type chips */}
+        {(["all", "half-day", "full-day", "weekend"] as const).map((f) => {
+          const label = { all: "All trips", "half-day": "Half-day", "full-day": "Full-day", weekend: "Weekend" }[f];
+          const active = tripTypeFilter === f;
+          return (
+            <button
+              key={f}
+              onClick={() => setTripTypeFilter(f)}
+              className="flex-shrink-0 px-3 py-1 rounded-full text-[13px] font-semibold transition-colors"
+              style={
+                active
+                  ? { background: "#14233d", color: "#fff", border: "1px solid #14233d" }
+                  : { background: "#fff", color: "#1c2333", border: "1px solid #d1d5db" }
+              }
+            >
+              {label}
+            </button>
+          );
+        })}
+
+        {/* Divider */}
+        {uniqueVessels.length > 1 && (
+          <div className="w-px h-5 bg-hairline flex-shrink-0 mx-1" />
+        )}
+
+        {/* Vessel chips */}
+        {uniqueVessels.length > 1 && uniqueVessels.map((v) => {
+          const active = vesselFilter === v.name;
+          return (
+            <button
+              key={v.name}
+              onClick={() => setVesselFilter(active ? null : v.name)}
+              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-[13px] font-semibold transition-colors"
+              style={
+                active
+                  ? { background: "#14233d", color: "#fff", border: "1px solid #14233d" }
+                  : { background: "#fff", color: "#1c2333", border: "1px solid #d1d5db" }
+              }
+            >
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: v.color }}
+              />
+              {v.name}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Body: left content + right sidebar */}
       <div className="md:flex md:h-[calc(100vh-60px)]">
@@ -1025,14 +1170,14 @@ function ArrowRight() {
     </svg>
   );
 }
-function CalendarIcon() {
+function CalendarIcon({ size = 22 }: { size?: number }) {
   return (
     <svg
-      width="22"
-      height="22"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
-      stroke="#C9922A"
+      stroke="currentColor"
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -1042,6 +1187,28 @@ function CalendarIcon() {
       <line x1="16" x2="16" y1="2" y2="6" />
       <line x1="8" x2="8" y1="2" y2="6" />
       <line x1="3" x2="21" y1="10" y2="10" />
+    </svg>
+  );
+}
+function TicketIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/>
+    </svg>
+  );
+}
+function CardIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect width="20" height="14" x="2" y="5" rx="2"/>
+      <line x1="2" x2="22" y1="10" y2="10"/>
+    </svg>
+  );
+}
+function CheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="20 6 9 17 4 12"/>
     </svg>
   );
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, Plus_Jakarta_Sans } from "next/font/google";
+import { Space_Grotesk, Plus_Jakarta_Sans, Manrope } from "next/font/google";
 import "./globals.css";
 import { db } from "@/lib/db";
 import { operators } from "@openboat/db";
@@ -17,6 +17,13 @@ const plusJakarta = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+const manrope = Manrope({
+  subsets: ["latin"],
+  weight: ["700", "800"],
+  variable: "--font-manrope",
+  display: "swap",
+});
+
 export async function generateMetadata(): Promise<Metadata> {
   const [operator] = await db.select({ name: operators.name }).from(operators).limit(1);
   const name = operator?.name ?? "Fishing Charter";
@@ -28,7 +35,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${spaceGrotesk.variable} ${plusJakarta.variable}`}>
+    <html lang="en" className={`${spaceGrotesk.variable} ${plusJakarta.variable} ${manrope.variable}`}>
       <body className="font-jakarta">
         <PostHogProvider>{children}</PostHogProvider>
       </body>
