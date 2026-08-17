@@ -49,6 +49,7 @@ e2e/.fixtures.json
 coverage/
 
 # Test env (contains real DB credentials)
+.env.test
 .env.test.local
 
 # Operator-specific planning docs (not for public repo)
