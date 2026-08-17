@@ -10,17 +10,17 @@ See `docs/build-status.md` for the full per-step build narrative.
 
 **Testing status:** All phases done. Phase 6 (mobile lib unit tests) complete — 51 tests, 97.97% line coverage, committed `ffea43f`. Maestro mobile E2E and BottomSheet extraction deferred until after launch.
 
-**Security fixes required before launch (from Opus code review):**
+**Security fixes — all complete (committed `424392e`):**
 
-- **H1 (CRITICAL — money bug):** Webhook + cron race can overbook a paid trip. Fix: add `status === "cancelled"` guard in `webhooks/stripe/route.ts` idempotency check; make `expire-pending-bookings` cron skip if PI status is `succeeded`/`processing`.
-- **H2/H3:** No rate limiting on `/api/auth/request` (OTP send), `/api/auth/verify`, `/api/mate/auth` (PIN brute-forceable — 10,000 guesses), `/api/admin/auth/login`. Fix: Upstash Redis rate limiter.
-- **H4:** In-memory `rlStore` in `bookings/route.ts` is not durable across Vercel lambda instances. Fix: Upstash or Postgres-backed rate limiter.
-- **H5:** Trip reminders fire twice — 2-hour window overlaps two consecutive hourly cron runs. Fix: narrow window to 1 hour or add `reminderSentAt` column to trips.
-- **M4:** `POST /api/bookings` has no Zod validation and no rate limit — allows seat-hold DoS. Fix: add Zod schema + rate limit.
-- **M6:** Single `SESSION_SECRET` signs three token types (customer, mate, admin) with no audience separation. Fix: add `aud` field in payloads and verify in `require*` functions.
-- **M8:** Webhook doesn't handle `charge.refunded` or `charge.dispute.created` — refunded bookings stay `confirmed` with live tickets.
-- **M9:** No startup env validation — missing env vars produce 500s at request time, not boot time. Fix: Zod env schema at import time.
-- **M10:** No user notification when payment intent expires/is cancelled.
+- ✅ **H1 (CRITICAL — money bug):** Cron skips bookings whose PI is `succeeded`/`processing`; webhook guards against already-cancelled bookings.
+- ✅ **H2/H3:** Postgres-backed fixed-window rate limiter (`src/lib/rate-limit.ts`) on all auth routes — OTP request (20/hr IP + 5/hr email), OTP verify (10/15min email), mate PIN (5/15min email), admin login (10/15min IP).
+- ✅ **H4:** In-memory `rlStore` replaced with Postgres rate limiter (durable across Vercel lambda instances).
+- ✅ **H5:** Trip reminders window narrowed from `[+23h, +25h]` to `[+23h, +24h)` — exclusive upper bound tiles hourly cron runs with no overlap.
+- ✅ **M4:** `POST /api/bookings` — Zod schema validates cart/email/tickets; IP rate limit (20/15min) blocks seat-hold DoS.
+- ✅ **M6:** Audience separation — mate tokens embed `aud:"mate"`, customer tokens `aud:"customer"`; each verify function rejects the other type.
+- ✅ **M8:** Webhook handles `charge.refunded` (full refund → void tickets, cancel booking, restore seats) and `charge.dispute.created` (void tickets to block boarding).
+- ✅ **M9:** Startup env validation via `src/lib/env.ts` + `src/instrumentation.ts` — missing vars throw at boot, not at request time.
+- ✅ **M10:** Push notifications fire when bookings expire (cron) or PI is cancelled (webhook).
 
 **Known gaps blocking production (original list):**
 
