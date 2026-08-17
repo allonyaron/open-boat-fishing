@@ -56,3 +56,13 @@ coverage/
 CONTEXT.md
 ARCHITECTURE.md
 docs/captree-booking-ux-audit.md
+
+# Playwright screenshots
+screenshots/
+
+# Code analysis reports
+jscpd-report/
+report-*.html
+
+# Local session logs
+*.txt
