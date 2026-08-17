@@ -37,6 +37,7 @@ export type SeedResult = {
   scheduleId: string;
   tripId: string;
   staffId: string;
+  staffEmail: string;
   /** A valid mate Bearer token for this operator */
   mateToken: string;
 };
@@ -115,13 +116,14 @@ export async function seedOperator(): Promise<SeedResult> {
     })
     .returning({ id: trips.id });
 
+  const staffEmail = `mate-${randomUUID().slice(0, 8)}@test.com`;
   const pinHash = await bcrypt.hash("1234", 10);
   const [staffRow] = await testDb
     .insert(staff)
     .values({
       operatorId: op.id,
       name: "Test Mate",
-      email: `mate-${randomUUID()}@test.com`,
+      email: staffEmail,
       pinHash,
       role: "mate",
       active: true,
@@ -144,6 +146,7 @@ export async function seedOperator(): Promise<SeedResult> {
     scheduleId: schedule.id,
     tripId: trip.id,
     staffId: staffRow.id,
+    staffEmail,
     mateToken,
   };
 }
