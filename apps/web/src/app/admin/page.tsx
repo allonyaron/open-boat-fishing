@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-
+// Middleware at src/middleware.ts redirects /admin → /admin/trips before React renders.
 export default function AdminRoot() {
-  redirect("/admin/trips");
+  return null;
 }
