@@ -93,7 +93,7 @@ export default async function FishingReportPage({ params }: Props) {
     <main className="max-w-2xl mx-auto px-4 py-10">
       <Link
         href="/fishing-reports"
-        className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-6"
+        className="text-sm text-muted hover:text-ink flex items-center gap-1 mb-6 transition-colors"
       >
         ← Fishing Reports
       </Link>
@@ -103,24 +103,24 @@ export default async function FishingReportPage({ params }: Props) {
           className="w-3 h-3 rounded-full flex-shrink-0"
           style={{ backgroundColor: row.vesselColor }}
         />
-        <h1 className="text-2xl font-bold text-gray-900">{row.vesselName}</h1>
-        <span className="text-gray-400">·</span>
-        <span className="text-gray-600">{row.productName}</span>
+        <h1 className="text-2xl font-bold text-ink">{row.vesselName}</h1>
+        <span className="text-faint">·</span>
+        <span className="text-muted">{row.productName}</span>
       </div>
-      <p className="text-gray-500 text-sm mb-6">
+      <p className="text-muted text-sm mb-6">
         {fmtDate(row.departureDate)} · {fmtTimeET(row.startTime)} – {fmtTimeET(row.endTime)}
       </p>
 
       {fishCounts.length > 0 && (
-        <div className="bg-blue-50 rounded-xl p-4 mb-6">
-          <h2 className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-3">
+        <div className="bg-teal-tint rounded-xl p-4 mb-6">
+          <h2 className="text-xs font-semibold text-teal uppercase tracking-label mb-3">
             Today&apos;s Catch
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {fishCounts.map((fc, i) => (
               <div key={i} className="bg-white rounded-lg p-3 text-center shadow-sm">
-                <div className="text-2xl font-bold text-gray-900">{fc.count}</div>
-                <div className="text-xs text-gray-500 mt-0.5 capitalize">{fc.species}</div>
+                <div className="text-2xl font-bold text-ink">{fc.count}</div>
+                <div className="text-xs text-faint mt-0.5 capitalize">{fc.species}</div>
               </div>
             ))}
           </div>
@@ -129,15 +129,15 @@ export default async function FishingReportPage({ params }: Props) {
 
       {row.catchSummary && (
         <div className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-2">Captain&apos;s Report</h2>
-          <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{row.catchSummary}</p>
+          <h2 className="text-sm font-semibold text-ink mb-2">Captain&apos;s Report</h2>
+          <p className="text-ink leading-relaxed whitespace-pre-wrap">{row.catchSummary}</p>
         </div>
       )}
 
       {row.photoUrls.length > 0 && (
         <div className="grid grid-cols-2 gap-3 mb-6">
           {row.photoUrls.map((url, i) => (
-            <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100">
+            <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-fill">
               <Image
                 src={url}
                 alt={`Trip photo ${i + 1}`}
@@ -150,10 +150,10 @@ export default async function FishingReportPage({ params }: Props) {
         </div>
       )}
 
-      <div className="border-t border-gray-100 pt-6">
+      <div className="border-t border-hairline pt-6">
         <Link
           href="/"
-          className="inline-block bg-blue-600 text-white text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors"
+          className="inline-block bg-gold text-navy font-grotesk text-15 font-semibold px-5 py-2.5 rounded-btn hover:bg-gold-hover transition-colors"
         >
           Book a Trip
         </Link>

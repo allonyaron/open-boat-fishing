@@ -51,32 +51,32 @@ export default async function FishingReportsPage() {
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">Fishing Reports</h1>
-      <p className="text-gray-500 mb-8">See what&apos;s been biting on recent trips.</p>
+      <h1 className="text-3xl font-bold text-ink mb-2">Fishing Reports</h1>
+      <p className="text-muted mb-8">See what&apos;s been biting on recent trips.</p>
 
       {rows.length === 0 ? (
-        <p className="text-gray-400 text-center py-16">No reports posted yet.</p>
+        <p className="text-faint text-center py-16">No reports posted yet.</p>
       ) : (
         <div className="space-y-5">
           {rows.map((r) => (
             <Link
               key={r.id}
               href={`/fishing-reports/${r.id}`}
-              className="block bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow"
+              className="block bg-white rounded-xl border border-card-border p-5 hover:shadow-card-selected transition-shadow"
             >
               <div className="flex items-center gap-3 mb-3">
                 <div
                   className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                   style={{ backgroundColor: r.vesselColor }}
                 />
-                <span className="font-semibold text-gray-900">{r.vesselName}</span>
-                <span className="text-gray-400 text-sm">·</span>
-                <span className="text-gray-500 text-sm">{r.productName}</span>
+                <span className="font-semibold text-ink">{r.vesselName}</span>
+                <span className="text-faint text-sm">·</span>
+                <span className="text-muted text-sm">{r.productName}</span>
               </div>
-              <p className="text-sm text-gray-500 mb-2">{fmtDate(r.departureDate)}</p>
+              <p className="text-sm text-muted mb-2">{fmtDate(r.departureDate)}</p>
 
               {r.catchSummary && (
-                <p className="text-gray-700 text-sm line-clamp-3 mb-3">{r.catchSummary}</p>
+                <p className="text-ink text-sm line-clamp-3 mb-3">{r.catchSummary}</p>
               )}
 
               {(r.fishCounts as { species: string; count: number }[]).length > 0 && (
@@ -84,7 +84,7 @@ export default async function FishingReportsPage() {
                   {(r.fishCounts as { species: string; count: number }[]).map((fc, i) => (
                     <span
                       key={i}
-                      className="text-xs bg-blue-50 text-blue-700 font-medium px-2 py-0.5 rounded-full"
+                      className="text-xs bg-teal-tint text-teal font-medium px-2 py-0.5 rounded-full"
                     >
                       {fc.count} {fc.species}
                     </span>
@@ -93,7 +93,7 @@ export default async function FishingReportsPage() {
               )}
 
               {r.photoUrls.length > 0 && (
-                <p className="text-xs text-gray-400 mt-2">
+                <p className="text-xs text-faint mt-2">
                   {r.photoUrls.length} photo{r.photoUrls.length !== 1 ? "s" : ""}
                 </p>
               )}
