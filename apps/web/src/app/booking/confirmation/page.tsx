@@ -51,9 +51,9 @@ export default async function ConfirmationPage({
   return (
     <div className="min-h-screen bg-surface font-jakarta">
       {/* App bar */}
-      <header className="bg-white border-b border-hairline h-[66px] flex items-center px-5 md:px-8 gap-3">
+      <header className="bg-white border-b border-hairline h-masthead flex items-center px-5 md:px-8 gap-3">
         <a href="/" className="flex items-center gap-3">
-          <div className="w-[34px] h-[34px] rounded-[10px] bg-teal flex items-center justify-center">
+          <div className="w-logo h-logo rounded-icon bg-navy flex items-center justify-center">
             <svg
               width="18"
               height="18"
@@ -70,19 +70,19 @@ export default async function ConfirmationPage({
               <path d="M8 8h8" />
             </svg>
           </div>
-          <span className="font-grotesk text-[17px] font-semibold text-ink">{operatorName}</span>
+          <span className="font-grotesk text-17 font-semibold text-ink">{operatorName}</span>
         </a>
       </header>
 
       <div className="max-w-lg mx-auto px-5 py-10">
         {/* Status banner */}
         <div
-          className={`rounded-[20px] p-6 mb-6 text-center ${
-            paymentSucceeded ? "bg-success-bg" : "bg-yellow-50 border border-yellow-200"
+          className={`rounded-card p-6 mb-6 text-center ${
+            paymentSucceeded ? "bg-success-bg" : "bg-gold-tint border border-gold/30"
           }`}
         >
           <div className="text-4xl mb-3">{paymentSucceeded ? "🎣" : "⏳"}</div>
-          <h1 className="font-grotesk text-[24px] font-semibold text-ink mb-1">
+          <h1 className="font-grotesk text-24 font-semibold text-ink mb-1">
             {paymentSucceeded ? "You're booked!" : "Payment processing…"}
           </h1>
           <p className="text-muted text-sm">
@@ -97,7 +97,7 @@ export default async function ConfirmationPage({
           <div className="text-xs font-bold uppercase tracking-widest text-faint mb-2">
             Confirmation Code
           </div>
-          <div className="font-grotesk text-[32px] font-bold text-teal tracking-widest">
+          <div className="font-grotesk text-32 font-bold text-gold tracking-widest">
             {booking.confirmationCode}
           </div>
           <p className="text-xs text-faint mt-1">
@@ -118,14 +118,14 @@ export default async function ConfirmationPage({
                   style={{ backgroundColor: item.vesselColor }}
                 />
                 <div>
-                  <div className="text-xs font-bold uppercase tracking-wide text-teal mb-0.5">
+                  <div className="text-xs font-bold uppercase tracking-wide text-gold mb-0.5">
                     {item.category}
                   </div>
-                  <div className="font-grotesk text-[15px] font-semibold text-ink">
+                  <div className="font-grotesk text-15 font-semibold text-ink">
                     {item.productName}
                   </div>
-                  <div className="text-[13px] text-muted mt-0.5">{fmtDate(item.tripDate)}</div>
-                  <div className="text-[13px] text-muted">
+                  <div className="text-13 text-muted mt-0.5">{fmtDate(item.tripDate)}</div>
+                  <div className="text-13 text-muted">
                     {fmtTimeET(item.startTime)} – {fmtTimeET(item.endTime)} · {item.vesselName}
                   </div>
                 </div>
@@ -148,7 +148,7 @@ export default async function ConfirmationPage({
             </div>
             <div className="flex justify-between border-t border-hairline pt-2 mt-2">
               <span className="text-muted">Total paid</span>
-              <span className="font-grotesk text-[18px] font-bold text-ink">
+              <span className="font-grotesk text-18 font-bold text-ink">
                 ${(booking.totalCents / 100).toFixed(2)}
               </span>
             </div>
@@ -159,7 +159,7 @@ export default async function ConfirmationPage({
         <div className="space-y-3">
           <a
             href={`/boarding/${booking.id}`}
-            className="w-full bg-teal text-white font-grotesk font-semibold py-4 rounded-btn flex items-center justify-center gap-2 hover:bg-teal-hover transition-colors"
+            className="w-full bg-gold text-navy font-grotesk font-semibold py-4 rounded-btn flex items-center justify-center gap-2 hover:bg-gold-hover transition-colors"
           >
             View Boarding Passes
             <svg

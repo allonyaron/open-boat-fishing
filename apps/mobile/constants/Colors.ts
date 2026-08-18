@@ -1,7 +1,3 @@
-/**
- * Design system colors — matches the web app palette.
- * Teal is the primary brand color; adjust per operator deployment.
- */
 export const Colors = {
   // Brand
   teal: "#0E7C7B",
@@ -17,6 +13,7 @@ export const Colors = {
   surface: "#FFFFFF",
   surfaceAlt: "#F4F8F8",
   border: "#D1E0DF",
+  successTint: "#F0FDF4",
 
   // Semantic
   success: "#22C55E",
@@ -24,12 +21,25 @@ export const Colors = {
   error: "#EF4444",
   info: "#3B82F6",
 
+  // Utility
+  shadow: "#000000",
+  scrim: "#000000",
+  white: "#FFFFFF",
+  backdrop: "rgba(0,0,0,0.45)",
+  whiteA75: "rgba(255,255,255,0.75)",
+  whiteA85: "rgba(255,255,255,0.85)",
+  whiteA90: "rgba(255,255,255,0.90)",
+
+  // Semantic state colors (darker variants for solid backgrounds)
+  successDark: "#16A34A",
+  warningDark: "#D97706",
+
   // Tab bar
   tabIconDefault: "#6B8A89",
   tabIconSelected: "#0E7C7B",
   tabBackground: "#FFFFFF",
 
-  // Example vessel accent colors — actual colors are stored on the vessels row in DB
+  // Vessel accent colors — actual values come from the vessels DB row
   boatBlue: "#1D4ED8",
   boatRed: "#DC2626",
   boatAmber: "#D97706",

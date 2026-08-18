@@ -597,7 +597,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -631,7 +631,7 @@ const s = StyleSheet.create({
     paddingVertical: 2,
   },
   inCartText: {
-    color: "#fff",
+    color: Colors.white,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -717,7 +717,7 @@ const cal = StyleSheet.create({
     fontWeight: "500",
   },
   dayNumSelected: {
-    color: "#fff",
+    color: Colors.white,
     fontWeight: "700",
   },
   dots: {
@@ -741,7 +741,7 @@ const cal = StyleSheet.create({
 const sh = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: Colors.backdrop,
   },
   sheet: {
     position: "absolute",
@@ -795,7 +795,7 @@ const sh = StyleSheet.create({
     paddingVertical: 2,
   },
   soldOutText: {
-    color: "#fff",
+    color: Colors.white,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -896,7 +896,7 @@ const cb = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    shadowColor: "#000",
+    shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -922,7 +922,7 @@ const cb = StyleSheet.create({
     borderRadius: 12,
   },
   btnText: {
-    color: "#fff",
+    color: Colors.white,
     fontSize: 16,
     fontWeight: "700",
     letterSpacing: 0.3,

@@ -55,7 +55,7 @@ export function ContactOverlay({
         role="dialog"
         aria-modal="true"
         aria-labelledby="contact-overlay-title"
-        className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[24px] shadow-2xl animate-slide-up md:left-1/2 md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:w-[440px] md:rounded-[24px] md:max-h-[90vh] md:overflow-y-auto"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl animate-slide-up md:left-1/2 md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:w-[440px] md:rounded-3xl md:max-h-[90vh] md:overflow-y-auto"
       >
         <div className="flex justify-center pt-3 pb-1 md:hidden" aria-hidden="true">
           <div className="w-10 h-1 rounded-pill bg-hairline" />
@@ -68,7 +68,7 @@ export function ContactOverlay({
           className="px-5 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))] md:pb-6"
         >
           <div className="hidden md:flex items-center justify-between mb-5">
-            <div id="contact-overlay-title" className="font-grotesk text-[20px] font-semibold text-ink">Your details</div>
+            <div id="contact-overlay-title" className="font-grotesk text-20 font-semibold text-ink">Your details</div>
             <button
               type="button"
               onClick={onClose}
@@ -79,16 +79,16 @@ export function ContactOverlay({
             </button>
           </div>
           <div className="mb-5 md:hidden">
-            <div className="font-grotesk text-[20px] font-semibold text-ink">Your details</div>
-            <div className="text-[13px] text-muted mt-1">
+            <div className="font-grotesk text-20 font-semibold text-ink">Your details</div>
+            <div className="text-13 text-muted mt-1">
               {ticketCount} ticket{ticketCount !== 1 ? "s" : ""} · {dollars(totalCents)}
             </div>
           </div>
-          <div className="hidden md:flex items-center justify-between mb-4 p-3 bg-fill rounded-[12px]">
-            <span className="text-[13px] text-muted">
+          <div className="hidden md:flex items-center justify-between mb-4 p-3 bg-fill rounded-xl">
+            <span className="text-13 text-muted">
               {ticketCount} ticket{ticketCount !== 1 ? "s" : ""}
             </span>
-            <span className="font-grotesk text-[18px] font-bold text-ink">
+            <span className="font-grotesk text-18 font-bold text-ink">
               {dollars(totalCents)}
             </span>
           </div>
@@ -132,7 +132,7 @@ export function ContactOverlay({
                 <div key={id}>
                   <label
                     htmlFor={id}
-                    className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5"
+                    className="text-11 font-bold uppercase tracking-wide text-faint block mb-1.5"
                   >
                     {label}
                   </label>
@@ -145,22 +145,22 @@ export function ContactOverlay({
                     value={value}
                     onChange={(e) => setter(e.target.value)}
                     placeholder={placeholder}
-                    className="w-full px-4 py-3 rounded-[12px] border border-card-border text-[15px] text-ink placeholder:text-faint focus:outline-none focus:border-teal transition-colors"
+                    className="w-full px-4 py-3 rounded-xl border border-card-border text-15 text-ink placeholder:text-faint focus:outline-none focus:border-gold transition-colors"
                   />
                 </div>
               ),
             )}
           </div>
-          <p className="text-[11px] text-faint text-center mt-5">
+          <p className="text-11 text-faint text-center mt-5">
             Purchasing tickets means you accept the{" "}
-            <a href="/terms" className="underline text-teal">
+            <a href="/terms" className="underline text-gold">
               terms and conditions
             </a>
             .
           </p>
           <button
             type="submit"
-            className="mt-3 w-full py-4 rounded-btn font-grotesk text-[15px] font-semibold bg-teal text-white hover:bg-teal-hover transition-colors flex items-center justify-center gap-2"
+            className="mt-3 w-full py-4 rounded-btn font-grotesk text-15 font-semibold bg-gold text-navy hover:bg-gold-hover transition-colors flex items-center justify-center gap-2"
           >
             Continue to payment <ArrowRight />
           </button>

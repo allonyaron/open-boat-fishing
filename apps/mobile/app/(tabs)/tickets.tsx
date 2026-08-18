@@ -152,7 +152,7 @@ function AddBookingSheet({
             activeOpacity={0.85}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={Colors.white} />
             ) : (
               <Text style={add.btnText}>Find My Tickets</Text>
             )}
@@ -387,7 +387,7 @@ const s = StyleSheet.create({
     borderRadius: 8,
   },
   addBtnText: {
-    color: "#fff",
+    color: Colors.white,
     fontSize: 14,
     fontWeight: "700",
   },
@@ -426,7 +426,7 @@ const s = StyleSheet.create({
     borderRadius: 12,
   },
   emptyBtnText: {
-    color: "#fff",
+    color: Colors.white,
     fontSize: 16,
     fontWeight: "700",
   },
@@ -457,7 +457,7 @@ const bic = StyleSheet.create({
     borderColor: Colors.border,
     overflow: "hidden",
     marginBottom: 12,
-    shadowColor: "#000",
+    shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -491,7 +491,7 @@ const bic = StyleSheet.create({
     paddingVertical: 2,
   },
   cancelBadgeText: {
-    color: "#fff",
+    color: Colors.white,
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.3,
@@ -553,7 +553,7 @@ const tr = StyleSheet.create({
 const add = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: Colors.backdrop,
   },
   kav: {
     position: "absolute",
@@ -627,7 +627,7 @@ const add = StyleSheet.create({
     opacity: 0.75,
   },
   btnText: {
-    color: "#fff",
+    color: Colors.white,
     fontSize: 16,
     fontWeight: "700",
   },

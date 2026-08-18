@@ -196,7 +196,7 @@ const c = StyleSheet.create({
     borderColor: Colors.border,
     padding: 14,
     gap: 8,
-    shadowColor: "#000",
+    shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,

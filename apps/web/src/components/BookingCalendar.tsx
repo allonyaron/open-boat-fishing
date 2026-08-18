@@ -113,13 +113,13 @@ function Stepper({
         className={`w-9 h-9 rounded-pill flex items-center justify-center text-lg transition-colors ${
           value === 0
             ? "border border-hairline text-disabled-text cursor-default"
-            : "border-[1.5px] border-gold text-gold"
+            : "border-1.5 border-gold text-gold"
         }`}
       >
         −
       </button>
       <span
-        className="font-grotesk text-[17px] font-semibold w-5 text-center"
+        className="font-grotesk text-17 font-semibold w-5 text-center"
         aria-live="polite"
         aria-atomic="true"
       >
@@ -156,25 +156,25 @@ function TripRow({
   let badge: React.ReactNode = null;
   if (soldOut) {
     badge = (
-      <span className="text-[11px] font-semibold text-warning bg-warning-bg px-2 py-0.5 rounded-pill">
+      <span className="text-11 font-semibold text-warning bg-warning-bg px-2 py-0.5 rounded-pill">
         Sold out
       </span>
     );
   } else if (seats <= 3) {
     badge = (
-      <span className="text-[11px] font-semibold text-warning bg-warning-bg px-2 py-0.5 rounded-pill">
+      <span className="text-11 font-semibold text-warning bg-warning-bg px-2 py-0.5 rounded-pill">
         {seats} left
       </span>
     );
   } else if (seats <= threshold40) {
     badge = (
-      <span className="text-[11px] font-semibold text-faint bg-fill px-2 py-0.5 rounded-pill">
+      <span className="text-11 font-semibold text-faint bg-fill px-2 py-0.5 rounded-pill">
         {seats} seats left
       </span>
     );
   } else {
     badge = (
-      <span className="text-[11px] font-semibold text-success bg-success-bg px-2 py-0.5 rounded-pill">
+      <span className="text-11 font-semibold text-success bg-success-bg px-2 py-0.5 rounded-pill">
         {seats} seats left
       </span>
     );
@@ -201,7 +201,7 @@ function TripRow({
       onClick={onSelect}
       disabled={soldOut}
       aria-label={tripLabel}
-      className={`w-full text-left flex items-center gap-3 p-4 bg-white rounded-[16px] border transition-all ${
+      className={`w-full text-left flex items-center gap-3 p-4 bg-white rounded-2xl border transition-all ${
         soldOut
           ? "border-hairline opacity-60 cursor-not-allowed"
           : cartQty > 0
@@ -214,23 +214,23 @@ function TripRow({
         style={{ backgroundColor: trip.vessel.color }}
       />
       <div className="flex-1 min-w-0">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-gold mb-0.5">
+        <div className="text-11 font-bold uppercase tracking-wide text-gold mb-0.5">
           {trip.product.category}
         </div>
-        <div className="font-grotesk text-[15px] font-bold text-navy truncate">
+        <div className="font-grotesk text-15 font-bold text-navy truncate">
           {trip.product.displayName}
         </div>
-        <div className="text-[13px] text-muted mt-0.5">
+        <div className="text-13 text-muted mt-0.5">
           {trip.vessel.name} · {fmtTimeET(trip.startTime)} – {fmtTimeET(trip.endTime)} ·{" "}
           {fmtDuration(trip.startTime, trip.endTime)}
         </div>
         {fromPrice !== null && (
-          <div className="text-[13px] text-ink font-semibold mt-0.5">from {dollars(fromPrice)}</div>
+          <div className="text-13 text-ink font-semibold mt-0.5">from {dollars(fromPrice)}</div>
         )}
       </div>
       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
         {cartQty > 0 && (
-          <span className="text-[11px] font-bold text-gold bg-gold/10 border border-gold/30 px-2 py-0.5 rounded-pill">
+          <span className="text-11 font-bold text-gold bg-gold/10 border border-gold/30 px-2 py-0.5 rounded-pill">
             {cartQty} in cart
           </span>
         )}
@@ -270,7 +270,7 @@ function MonthGrid({
     <div>
       <div className="grid grid-cols-7 mb-2">
         {DAYS_SHORT.map((d) => (
-          <div key={d} className="text-center text-[11px] font-bold text-faint uppercase py-2">
+          <div key={d} className="text-center text-11 font-bold text-faint uppercase py-2">
             {d}
           </div>
         ))}
@@ -295,16 +295,16 @@ function MonthGrid({
               disabled={!hasTrips}
               aria-label={dayLabel}
               aria-pressed={isSelected}
-              className={`min-h-[200px] rounded-[12px] p-[10px] text-left transition-all flex flex-col gap-[6px] ${
+              className={`min-h-[200px] rounded-xl p-[10px] text-left transition-all flex flex-col gap-[6px] ${
                 isSelected
-                  ? "border-2 border-[#c99a3f] bg-[#fdf8ec]"
+                  ? "border-2 border-gold bg-gold-tint"
                   : hasTrips
-                    ? "bg-white border border-card-border hover:border-[#c99a3f]/40 shadow-card cursor-pointer"
+                    ? "bg-white border border-card-border hover:border-gold/40 shadow-card cursor-pointer"
                     : "bg-fill/60 border border-hairline cursor-default"
               } ${isToday && !isSelected ? "ring-2 ring-gold/40" : ""}`}
             >
               <div
-                className="font-manrope text-[14px] font-bold"
+                className="font-manrope text-14 font-bold"
                 style={{ color: hasTrips ? "#1c2333" : "#9a9fac" }}
               >
                 {dayNum}
@@ -320,13 +320,13 @@ function MonthGrid({
                           style={{ backgroundColor: t.vessel.color }}
                         />
                         <div className="min-w-0 flex-1">
-                          <div className="text-[10px] font-bold leading-tight" style={{ color: "#14233d" }}>
+                          <div className="text-10 font-bold leading-tight" style={{ color: "#14233d" }}>
                             {fmtTimeET(t.startTime)}
                           </div>
-                          <div className="text-[10px] leading-[1.25] truncate" style={{ color: "#3d4250" }}>
+                          <div className="text-10 leading-[1.25] truncate" style={{ color: "#3d4250" }}>
                             {t.product.displayName}
                           </div>
-                          <div className="text-[9px] font-bold" style={{ color }}>
+                          <div className="text-9 font-bold" style={{ color }}>
                             {label}
                           </div>
                         </div>
@@ -334,7 +334,7 @@ function MonthGrid({
                     );
                   })}
                   {trips.length > 3 && (
-                    <span className="text-[9px] font-semibold" style={{ color: "#9a9fac" }}>
+                    <span className="text-9 font-semibold" style={{ color: "#9a9fac" }}>
                       +{trips.length - 3} more
                     </span>
                   )}
@@ -397,13 +397,13 @@ function TicketSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby="ticket-sheet-title"
-        className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[24px] shadow-2xl animate-slide-up max-h-[90dvh] flex flex-col md:left-auto md:right-0 md:top-[60px] md:bottom-0 md:w-[420px] md:rounded-none md:rounded-tl-[24px] md:rounded-bl-[24px] md:max-h-none md:shadow-[-8px_0_30px_rgba(0,0,0,0.08)]"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl animate-slide-up max-h-[90dvh] flex flex-col md:left-auto md:right-0 md:top-[60px] md:bottom-0 md:w-[420px] md:rounded-none md:rounded-tl-3xl md:rounded-bl-3xl md:max-h-none md:shadow-[-8px_0_30px_rgba(0,0,0,0.08)]"
       >
         <div className="flex justify-center pt-3 pb-1 flex-shrink-0 md:hidden">
           <div className="w-10 h-1 rounded-pill bg-hairline" aria-hidden="true" />
         </div>
         <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-hairline flex-shrink-0">
-          <div id="ticket-sheet-title" className="font-grotesk text-[17px] font-semibold text-navy">Select tickets</div>
+          <div id="ticket-sheet-title" className="font-grotesk text-17 font-semibold text-navy">Select tickets</div>
           <button
             onClick={onClose}
             aria-label="Close ticket selection"
@@ -420,21 +420,21 @@ function TicketSheet({
                 className="w-2 h-2 rounded-pill"
                 style={{ backgroundColor: trip.vessel.color }}
               />
-              <span className="text-[12px] font-bold uppercase tracking-wide text-gold">
+              <span className="text-12 font-bold uppercase tracking-wide text-gold">
                 {trip.vessel.name}
               </span>
             </div>
-            <div className="font-grotesk text-[20px] font-semibold text-navy">
+            <div className="font-grotesk text-20 font-semibold text-navy">
               {trip.product.displayName}
             </div>
-            <div className="text-[13px] text-muted mt-1">
+            <div className="text-13 text-muted mt-1">
               {fmtTimeET(trip.startTime)} – {fmtTimeET(trip.endTime)} ·{" "}
               {fmtDuration(trip.startTime, trip.endTime)}
             </div>
-            <div className="text-[12px] text-success font-semibold mt-1.5">
+            <div className="text-12 text-success font-semibold mt-1.5">
               {trip.seatsRemaining} tickets available
             </div>
-            <div className="text-[12px] text-muted mt-1.5">
+            <div className="text-12 text-muted mt-1.5">
               Weather cancellations receive a full refund.{" "}
               {termsUrl && (
                 <a
@@ -449,14 +449,14 @@ function TicketSheet({
             </div>
           </div>
           <div className="py-4 space-y-5 pb-2">
-            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-faint">
+            <div className="text-11 font-bold uppercase tracking-caps text-faint">
               Tickets
             </div>
             {adultPrice && (
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-[15px] font-semibold text-ink">Adult</div>
-                  <div className="text-[13px] text-faint">
+                  <div className="text-15 font-semibold text-ink">Adult</div>
+                  <div className="text-13 text-faint">
                     {dollars(adultPrice.priceCents)} · 13+
                   </div>
                 </div>
@@ -466,8 +466,8 @@ function TicketSheet({
             {childPrice && (
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-[15px] font-semibold text-ink">Child</div>
-                  <div className="text-[13px] text-faint">
+                  <div className="text-15 font-semibold text-ink">Child</div>
+                  <div className="text-13 text-faint">
                     {dollars(childPrice.priceCents)} · 5–12
                   </div>
                 </div>
@@ -480,17 +480,17 @@ function TicketSheet({
         <div className="px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] border-t border-hairline flex-shrink-0">
           {ticketCount > 0 && (
             <div className="flex justify-between items-baseline mb-3">
-              <span className="text-[14px] text-muted">
+              <span className="text-14 text-muted">
                 {ticketCount} ticket{ticketCount !== 1 ? "s" : ""}
               </span>
-              <span className="font-grotesk text-[22px] font-bold text-ink">{dollars(total)}</span>
+              <span className="font-grotesk text-22 font-bold text-ink">{dollars(total)}</span>
             </div>
           )}
           <button
             type="button"
             onClick={onAdd}
             disabled={ticketCount === 0}
-            className="w-full py-4 rounded-btn font-grotesk text-[15px] font-bold transition-colors bg-gold text-navy hover:bg-gold-hover disabled:bg-disabled disabled:text-disabled-text"
+            className="w-full py-4 rounded-btn font-grotesk text-15 font-bold transition-colors bg-gold text-navy hover:bg-gold-hover disabled:bg-disabled disabled:text-disabled-text"
           >
             {ticketCount === 0 ? "Select tickets" : "Add to cart"}
           </button>
@@ -528,7 +528,7 @@ function StepIndicator({ step }: { step: 1 | 2 | 3 }) {
                   {done ? <CheckIcon /> : s.icon}
                 </div>
                 <span
-                  className="text-[10px] font-semibold"
+                  className="text-10 font-semibold"
                   style={{ color: active ? "#c99a3f" : done ? "#c99a3f" : "#9a9fac" }}
                 >
                   {s.label}
@@ -578,16 +578,16 @@ function DesktopSidebar({
         selectedDay ? (
           <>
             <div className="px-5 py-4 border-b border-hairline flex-shrink-0">
-              <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-faint mb-0.5">
+              <div className="text-11 font-bold uppercase tracking-caps text-faint mb-0.5">
                 Trips
               </div>
-              <div className="font-grotesk text-[17px] font-semibold text-ink">
+              <div className="font-grotesk text-17 font-semibold text-ink">
                 {fmtDayHeader(selectedDay)}
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {dayTrips.length === 0 ? (
-                <div className="text-center py-10 text-[13px] text-faint">No trips this day</div>
+                <div className="text-center py-10 text-13 text-faint">No trips this day</div>
               ) : (
                 dayTrips.map((t) => (
                   <TripRow
@@ -612,10 +612,10 @@ function DesktopSidebar({
             <div className="w-11 h-11 rounded-[13px] bg-navy-tint flex items-center justify-center mb-3">
               <CalendarIcon size={22} />
             </div>
-            <div className="font-grotesk text-[15px] font-semibold text-ink mb-1">
+            <div className="font-grotesk text-15 font-semibold text-ink mb-1">
               Select a date
             </div>
-            <div className="text-[13px] text-faint">Click a highlighted day to see trips</div>
+            <div className="text-13 text-faint">Click a highlighted day to see trips</div>
             {totalTickets > 0 && (
               <SidebarCartFooter
                 totalCents={totalCents}
@@ -628,8 +628,8 @@ function DesktopSidebar({
       ) : // List mode sidebar: cart summary
       totalTickets === 0 ? (
         <div className="flex flex-col items-center justify-center flex-1 text-center px-8">
-          <div className="font-grotesk text-[15px] font-semibold text-ink mb-1">Your cart</div>
-          <div className="text-[13px] text-faint">Select a trip to add tickets</div>
+          <div className="font-grotesk text-15 font-semibold text-ink mb-1">Your cart</div>
+          <div className="text-13 text-faint">Select a trip to add tickets</div>
         </div>
       ) : (
         <SidebarCartFooter
@@ -656,23 +656,23 @@ function SidebarCartFooter({
       <div className="flex items-baseline justify-between mb-4">
         <div>
           <div
-            className="text-[12px] font-bold uppercase mb-1"
+            className="text-12 font-bold uppercase mb-1"
             style={{ color: "#c99a3f", letterSpacing: "0.08em" }}
           >
             Total
           </div>
-          <div className="font-manrope text-[28px] font-extrabold" style={{ color: "#1c2333" }}>
+          <div className="font-manrope text-28 font-extrabold" style={{ color: "#1c2333" }}>
             {dollars(totalCents)}
           </div>
         </div>
-        <div className="text-[12px]" style={{ color: "#9a9fac" }}>
+        <div className="text-12" style={{ color: "#9a9fac" }}>
           {totalTickets} ticket{totalTickets !== 1 ? "s" : ""}
         </div>
       </div>
       <button
         type="button"
         onClick={onCheckout}
-        className="w-full py-3.5 font-manrope text-[14px] font-bold transition-opacity hover:opacity-90 flex items-center justify-center gap-2"
+        className="w-full py-3.5 font-manrope text-14 font-bold transition-opacity hover:opacity-90 flex items-center justify-center gap-2"
         style={{ background: "#c99a3f", color: "#182337", borderRadius: "10px" }}
       >
         Checkout <ArrowRight />
@@ -694,17 +694,17 @@ function CartBar({
 }) {
   if (ticketCount === 0) return null;
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-30 md:hidden bg-white/92 backdrop-blur-[14px] border-t border-hairline px-5 pt-3.5 pb-[max(1.5rem,env(safe-area-inset-bottom))] flex items-center justify-between">
+    <div className="fixed bottom-0 left-0 right-0 z-30 md:hidden bg-white/92 backdrop-blur-glass border-t border-hairline px-5 pt-3.5 pb-[max(1.5rem,env(safe-area-inset-bottom))] flex items-center justify-between">
       <div>
-        <div className="font-grotesk text-[22px] font-bold text-ink">{dollars(totalCents)}</div>
-        <div className="text-[12px] text-faint">
+        <div className="font-grotesk text-22 font-bold text-ink">{dollars(totalCents)}</div>
+        <div className="text-12 text-faint">
           {ticketCount} ticket{ticketCount !== 1 ? "s" : ""}
         </div>
       </div>
       <button
         type="button"
         onClick={onCheckout}
-        className="flex items-center gap-2 px-6 py-3.5 rounded-btn bg-gold text-navy font-grotesk text-[15px] font-bold hover:bg-gold-hover transition-colors"
+        className="flex items-center gap-2 px-6 py-3.5 rounded-btn bg-gold text-navy font-grotesk text-15 font-bold hover:bg-gold-hover transition-colors"
       >
         Checkout <ArrowRight />
       </button>
@@ -897,18 +897,18 @@ export function BookingCalendar({
     <div className="min-h-screen bg-surface font-jakarta">
       {/* App bar */}
       <header
-        className="sticky top-0 z-20 h-[60px] flex items-center justify-between px-5"
+        className="sticky top-0 z-20 h-navbar flex items-center justify-between px-5"
         style={{ backgroundColor: "#14233d" }}
       >
         <div className="flex items-center gap-2.5">
           <AnchorIconSmall />
-          <span className="font-grotesk text-[17px] font-semibold text-white">{operatorName}</span>
+          <span className="font-grotesk text-17 font-semibold text-white">{operatorName}</span>
         </div>
 
         <div className="flex items-center gap-3">
           {/* View toggle — desktop only */}
           <div
-            className="hidden md:flex items-center gap-0.5 rounded-[10px] p-0.5"
+            className="hidden md:flex items-center gap-0.5 rounded-icon p-0.5"
             style={{ background: "rgba(255,255,255,0.1)" }}
           >
             {(["list", "calendar"] as ViewMode[]).map((mode) => (
@@ -916,7 +916,7 @@ export function BookingCalendar({
                 key={mode}
                 onClick={() => setViewMode(mode)}
                 aria-pressed={viewMode === mode}
-                className={`px-3 py-1.5 rounded-[8px] text-[13px] font-semibold transition-all capitalize ${
+                className={`px-3 py-1.5 rounded-lg text-13 font-semibold transition-all capitalize ${
                   viewMode === mode ? "bg-white text-navy" : "text-white/50 hover:text-white/70"
                 }`}
               >
@@ -930,17 +930,17 @@ export function BookingCalendar({
             <button
               onClick={prevMonth}
               aria-label={`Previous month, ${MONTHS[mon - 2 < 0 ? 11 : mon - 2]} ${mon - 1 < 1 ? year - 1 : year}`}
-              className="w-8 h-8 rounded-[8px] border border-white/20 flex items-center justify-center text-white/70 hover:text-white hover:border-white/40 transition-colors"
+              className="w-8 h-8 rounded-lg border border-white/20 flex items-center justify-center text-white/70 hover:text-white hover:border-white/40 transition-colors"
             >
               <ChevronLeft />
             </button>
-            <span className="font-grotesk text-[13px] font-semibold text-white min-w-[90px] text-center" aria-live="polite">
+            <span className="font-grotesk text-13 font-semibold text-white min-w-[90px] text-center" aria-live="polite">
               {MONTHS[mon - 1]} {year}
             </span>
             <button
               onClick={nextMonth}
               aria-label={`Next month, ${MONTHS[mon % 12]} ${mon === 12 ? year + 1 : year}`}
-              className="w-8 h-8 rounded-[8px] border border-white/20 flex items-center justify-center text-white/70 hover:text-white hover:border-white/40 transition-colors"
+              className="w-8 h-8 rounded-lg border border-white/20 flex items-center justify-center text-white/70 hover:text-white hover:border-white/40 transition-colors"
             >
               <ChevronRight />
             </button>
@@ -958,7 +958,7 @@ export function BookingCalendar({
             <button
               key={f}
               onClick={() => setTripTypeFilter(f)}
-              className="flex-shrink-0 px-3 py-1 rounded-full text-[13px] font-semibold transition-colors"
+              className="flex-shrink-0 px-3 py-1 rounded-full text-13 font-semibold transition-colors"
               style={
                 active
                   ? { background: "#14233d", color: "#fff", border: "1px solid #14233d" }
@@ -982,7 +982,7 @@ export function BookingCalendar({
             <button
               key={v.name}
               onClick={() => setVesselFilter(active ? null : v.name)}
-              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-[13px] font-semibold transition-colors"
+              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-13 font-semibold transition-colors"
               style={
                 active
                   ? { background: "#14233d", color: "#fff", border: "1px solid #14233d" }
@@ -1014,7 +1014,7 @@ export function BookingCalendar({
                 <div className="space-y-6">
                   {dates.map((date) => (
                     <div key={date}>
-                      <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-faint mb-2.5 px-1">
+                      <div className="text-12 font-bold uppercase tracking-caps text-faint mb-2.5 px-1">
                         {fmtDayHeader(date)}
                       </div>
                       <div className="space-y-2">
@@ -1089,10 +1089,10 @@ function EmptyState() {
       <div className="w-12 h-12 rounded-[14px] bg-navy-tint flex items-center justify-center mb-3">
         <CalendarIcon />
       </div>
-      <div className="font-grotesk text-[16px] font-semibold text-ink mb-1">
+      <div className="font-grotesk text-16 font-semibold text-ink mb-1">
         No trips this month
       </div>
-      <div className="text-[13px] text-faint">Try the next month →</div>
+      <div className="text-13 text-faint">Try the next month →</div>
     </div>
   );
 }

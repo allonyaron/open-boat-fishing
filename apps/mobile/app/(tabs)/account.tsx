@@ -223,7 +223,7 @@ function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
           activeOpacity={0.85}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={Colors.white} />
           ) : (
             <Text style={f.btnText}>{step === "email" ? "Send Code" : "Verify Code"}</Text>
           )}
@@ -332,7 +332,7 @@ function NotificationSettings({
             value={prefs[item.key]}
             onValueChange={(v) => updatePref(item.key, v)}
             trackColor={{ true: Colors.teal, false: Colors.border }}
-            thumbColor="#fff"
+            thumbColor={Colors.white}
           />
         </View>
       ))}
@@ -483,9 +483,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
-  headerTitle: { fontSize: 22, fontWeight: "800", color: "#fff" },
-  headerEmail: { fontSize: 13, color: "rgba(255,255,255,0.75)", marginTop: 2 },
-  signOut: { fontSize: 14, color: "rgba(255,255,255,0.85)", fontWeight: "600" },
+  headerTitle: { fontSize: 22, fontWeight: "800", color: Colors.white },
+  headerEmail: { fontSize: 13, color: Colors.whiteA75, marginTop: 2 },
+  signOut: { fontSize: 14, color: Colors.whiteA85, fontWeight: "600" },
   sectionLabel: {
     fontSize: 12,
     fontWeight: "700",
@@ -570,7 +570,7 @@ const f = StyleSheet.create({
     justifyContent: "center",
   },
   btnLoading: { opacity: 0.7 },
-  btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  btnText: { color: Colors.white, fontSize: 16, fontWeight: "700" },
   back: { fontSize: 13, color: Colors.teal, textAlign: "center" },
 });
 

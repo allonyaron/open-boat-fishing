@@ -76,9 +76,9 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
   return (
     <>
       {/* Print button — hidden when printing */}
-      <div className="no-print bg-gray-100 border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+      <div className="no-print bg-fill border-b border-hairline px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#0E7C7B] flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-navy flex items-center justify-center">
             <svg
               width="16"
               height="16"
@@ -96,10 +96,10 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
             </svg>
           </div>
           <div>
-            <div className="font-semibold text-sm text-gray-900">
+            <div className="font-semibold text-sm text-ink">
               {operatorName} — Boarding Passes
             </div>
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-muted">
               Confirmation: {booking.confirmationCode} · {ticketRows.length} ticket
               {ticketRows.length !== 1 ? "s" : ""}
             </div>
@@ -198,7 +198,7 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
                         {operator.dockMapsUrl ? (
                           <a
                             href={operator.dockMapsUrl}
-                            style={{ color: "#0E7C7B", textDecoration: "underline" }}
+                            style={{ color: "#c99a3f", textDecoration: "underline" }}
                           >
                             {operator.dockAddress}
                           </a>
@@ -234,7 +234,7 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
                   {operator?.termsUrl && (
                     <>
                       {" "}
-                      <a href={operator.termsUrl} style={{ color: "#0E7C7B" }}>
+                      <a href={operator.termsUrl} style={{ color: "#c99a3f" }}>
                         Weather &amp; cancellation policy
                       </a>
                       .
@@ -376,7 +376,7 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
           font-size: 1.25rem;
           font-weight: 800;
           letter-spacing: 0.1em;
-          color: #0E7C7B;
+          color: #c99a3f;
         }
 
         .ticket-notice {

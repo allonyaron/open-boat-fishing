@@ -142,7 +142,7 @@ export default function MateLoginScreen() {
             >
               {loading ? (
                 <View style={s.btnRow}>
-                  <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
+                  <ActivityIndicator color={Colors.white} style={{ marginRight: 8 }} />
                   <Text style={s.btnText}>{status ?? "Loading..."}</Text>
                 </View>
               ) : (
@@ -180,7 +180,7 @@ const s = StyleSheet.create({
   logoTitle: {
     fontSize: 28,
     fontWeight: "800",
-    color: "#fff",
+    color: Colors.white,
     letterSpacing: -0.5,
   },
   logoSub: {
@@ -237,7 +237,7 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   btnText: {
-    color: "#fff",
+    color: Colors.white,
     fontSize: 16,
     fontWeight: "700",
   },

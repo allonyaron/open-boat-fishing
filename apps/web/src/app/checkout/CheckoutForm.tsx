@@ -101,18 +101,18 @@ export function CheckoutForm({
   if (expired) {
     return (
       <div className="space-y-5">
-        <div className="bg-amber-50 border border-amber-200 rounded-[12px] px-4 py-4">
-          <div className="font-grotesk text-[15px] font-semibold text-amber-900 mb-1">
+        <div className="bg-gold-tint border border-gold/30 rounded-xl px-4 py-4">
+          <div className="font-grotesk text-15 font-semibold text-navy mb-1">
             Your reservation timed out
           </div>
-          <div className="text-[13px] text-amber-800">
+          <div className="text-13 text-ink">
             Your seats have been released. Check if they're still available below.
           </div>
         </div>
 
         <div className="space-y-2">
           {cartItems.map((item) => (
-            <div key={item.tripId} className="text-[13px] text-muted flex gap-2 items-start">
+            <div key={item.tripId} className="text-13 text-muted flex gap-2 items-start">
               <div
                 className="w-2 h-2 rounded-full mt-1 flex-shrink-0"
                 style={{ backgroundColor: item.vesselColor }}
@@ -135,7 +135,7 @@ export function CheckoutForm({
 
         <a
           href="/"
-          className="block w-full py-4 rounded-btn bg-teal text-white font-grotesk text-[15px] font-semibold text-center hover:bg-teal-hover transition-colors"
+          className="block w-full py-4 rounded-btn bg-gold text-navy font-grotesk text-15 font-semibold text-center hover:bg-gold-hover transition-colors"
         >
           Check availability →
         </a>
@@ -149,9 +149,9 @@ export function CheckoutForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {showCountdown && (
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-[12px] px-4 py-3">
+        <div className="flex items-center gap-2 bg-gold-tint border border-gold/30 rounded-xl px-4 py-3">
           <svg
-            className="text-amber-600 flex-shrink-0"
+            className="text-gold flex-shrink-0"
             width="16"
             height="16"
             viewBox="0 0 24 24"
@@ -162,7 +162,7 @@ export function CheckoutForm({
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
           </svg>
-          <span className="text-[13px] text-amber-900 font-medium">
+          <span className="text-13 text-navy font-medium">
             Reservation held for{" "}
             <span className="font-grotesk font-bold">{fmtCountdown(msLeft)}</span>
           </span>
@@ -172,14 +172,14 @@ export function CheckoutForm({
       <PaymentElement options={{ layout: "tabs" }} />
 
       {error && (
-        <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+        <div className="text-warning text-sm bg-warning-bg border border-warning/20 rounded-lg px-4 py-3">
           {error}
         </div>
       )}
 
       <p className="text-xs text-faint text-center">
         By completing this purchase you accept the{" "}
-        <a href="/terms" className="underline text-teal">
+        <a href="/terms" className="underline text-gold">
           terms and conditions
         </a>
         . Payments processed securely by Stripe.
@@ -188,7 +188,7 @@ export function CheckoutForm({
       <button
         type="submit"
         disabled={!stripe || processing || expired}
-        className="w-full bg-teal text-white font-grotesk font-semibold py-4 rounded-btn hover:bg-teal-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        className="w-full bg-gold text-navy font-grotesk font-semibold py-4 rounded-btn hover:bg-gold-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {processing ? "Processing…" : `Pay ${dollars(totalCents)}`}
       </button>

@@ -54,10 +54,10 @@ type ScanResult = {
 function ScanResultOverlay({ result }: { result: ScanResult }) {
   const bg =
     result.kind === "success"
-      ? "#16A34A"
+      ? Colors.successDark
       : result.kind === "already_checked_in"
-        ? "#D97706"
-        : "#EF4444";
+        ? Colors.warningDark
+        : Colors.error;
   const icon = result.kind === "success" ? "✓" : result.kind === "already_checked_in" ? "⚠" : "✕";
 
   return (
@@ -652,7 +652,7 @@ const s = StyleSheet.create({
     paddingVertical: 7,
     marginLeft: 10,
   },
-  reportBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  reportBtnText: { color: Colors.white, fontSize: 13, fontWeight: "700" },
 
   capacityBar: {
     backgroundColor: Colors.surface,
@@ -766,7 +766,7 @@ const bc = StyleSheet.create({
   },
   cardChecked: {
     borderColor: Colors.success + "55",
-    backgroundColor: "#F0FDF4",
+    backgroundColor: Colors.successTint,
   },
   header: {
     flexDirection: "row",
@@ -823,11 +823,11 @@ const tr = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
   },
-  btnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  btnText: { color: Colors.white, fontSize: 14, fontWeight: "700" },
 });
 
 const cam = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
+  container: { flex: 1, backgroundColor: Colors.scrim },
   reticle: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
@@ -839,10 +839,10 @@ const cam = StyleSheet.create({
     height: 220,
     borderRadius: 12,
     borderWidth: 3,
-    borderColor: "rgba(255,255,255,0.75)",
+    borderColor: Colors.whiteA75,
   },
   reticleHint: {
-    color: "rgba(255,255,255,0.85)",
+    color: Colors.whiteA85,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -855,7 +855,7 @@ const cam = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  closeBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  closeBtnText: { color: Colors.white, fontSize: 16, fontWeight: "700" },
 });
 
 const ov = StyleSheet.create({
@@ -867,13 +867,13 @@ const ov = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     alignItems: "center",
-    shadowColor: "#000",
+    shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 8,
   },
-  icon: { fontSize: 32, color: "#fff", marginBottom: 4 },
-  name: { fontSize: 18, fontWeight: "800", color: "#fff", marginBottom: 2 },
-  msg: { fontSize: 14, color: "rgba(255,255,255,0.9)", fontWeight: "600" },
+  icon: { fontSize: 32, color: Colors.white, marginBottom: 4 },
+  name: { fontSize: 18, fontWeight: "800", color: Colors.white, marginBottom: 2 },
+  msg: { fontSize: 14, color: Colors.whiteA90, fontWeight: "600" },
 });

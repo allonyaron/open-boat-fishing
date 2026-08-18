@@ -252,16 +252,16 @@ const s = StyleSheet.create({
   greeting: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#fff",
+    color: Colors.white,
   },
   date: {
     fontSize: 13,
-    color: "rgba(255,255,255,0.75)",
+    color: Colors.whiteA75,
     marginTop: 2,
   },
   logoutText: {
     fontSize: 14,
-    color: "rgba(255,255,255,0.85)",
+    color: Colors.whiteA85,
     fontWeight: "600",
   },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -296,7 +296,7 @@ const c = StyleSheet.create({
     borderColor: Colors.border,
     overflow: "hidden",
     marginBottom: 12,
-    shadowColor: "#000",
+    shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,

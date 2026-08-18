@@ -216,12 +216,12 @@ const s = StyleSheet.create({
   headerVessel: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#fff",
+    color: Colors.white,
     marginBottom: 4,
   },
   headerProduct: {
     fontSize: 15,
-    color: "rgba(255,255,255,0.85)",
+    color: Colors.whiteA85,
     fontWeight: "500",
   },
   cancelBanner: {
@@ -230,7 +230,7 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   cancelBannerText: {
-    color: "#fff",
+    color: Colors.white,
     fontSize: 14,
     fontWeight: "800",
     letterSpacing: 1,
@@ -246,7 +246,7 @@ const s = StyleSheet.create({
     padding: 24,
     borderWidth: 1,
     borderColor: Colors.border,
-    shadowColor: "#000",
+    shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,

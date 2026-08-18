@@ -56,12 +56,12 @@ function Stepper({
         onClick={() => onChange(Math.max(0, value - 1))}
         disabled={value === 0}
         aria-label={`Decrease ${label.toLowerCase()} count`}
-        className={`w-9 h-9 rounded-pill flex items-center justify-center text-lg transition-colors ${value === 0 ? "border border-hairline text-disabled-text cursor-default" : "border-[1.5px] border-teal text-teal"}`}
+        className={`w-9 h-9 rounded-pill flex items-center justify-center text-lg transition-colors ${value === 0 ? "border border-hairline text-disabled-text cursor-default" : "border-1.5 border-gold text-gold"}`}
       >
         −
       </button>
       <span
-        className="font-grotesk text-[17px] font-semibold w-5 text-center"
+        className="font-grotesk text-17 font-semibold w-5 text-center"
         aria-live="polite"
         aria-atomic="true"
       >
@@ -72,7 +72,7 @@ function Stepper({
         onClick={() => onChange(Math.min(max, value + 1))}
         disabled={value >= max}
         aria-label={`Increase ${label.toLowerCase()} count`}
-        className="w-9 h-9 rounded-pill bg-teal text-white flex items-center justify-center text-lg hover:bg-teal-hover transition-colors disabled:bg-disabled disabled:text-disabled-text"
+        className="w-9 h-9 rounded-pill bg-gold text-navy flex items-center justify-center text-lg hover:bg-gold-hover transition-colors disabled:bg-disabled disabled:text-disabled-text"
       >
         +
       </button>
@@ -99,13 +99,13 @@ function TripCard({
           style={{ backgroundColor: item.vesselColor }}
         />
         <div className="flex-1 min-w-0">
-          <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-teal mb-0.5">
+          <div className="text-11 font-bold uppercase tracking-label text-gold mb-0.5">
             {item.category}
           </div>
-          <div className="font-grotesk text-[15px] font-semibold text-ink">{item.productName}</div>
-          <div className="text-[13px] text-muted mt-0.5">{item.vesselName}</div>
-          <div className="text-[13px] text-muted">{fmtDate(item.departureDate)}</div>
-          <div className="text-[13px] text-muted">
+          <div className="font-grotesk text-15 font-semibold text-ink">{item.productName}</div>
+          <div className="text-13 text-muted mt-0.5">{item.vesselName}</div>
+          <div className="text-13 text-muted">{fmtDate(item.departureDate)}</div>
+          <div className="text-13 text-muted">
             {fmtTimeET(item.startTime)} – {fmtTimeET(item.endTime)}
           </div>
         </div>
@@ -114,7 +114,7 @@ function TripCard({
             type="button"
             onClick={onRemove}
             aria-label={`Remove ${item.productName} from cart`}
-            className="text-[13px] text-faint hover:text-error transition-colors flex-shrink-0"
+            className="text-13 text-faint hover:text-error transition-colors flex-shrink-0"
           >
             Remove
           </button>
@@ -129,13 +129,13 @@ function TripCard({
           return (
             <div key={ticket.ticketType} className="flex items-center justify-between gap-4">
               <div className="flex-shrink-0">
-                <div className="text-[14px] font-semibold text-ink capitalize">
+                <div className="text-14 font-semibold text-ink capitalize">
                   {ticket.ticketType}
                 </div>
-                <div className="text-[12px] text-faint">{dollars(ticket.priceCents)} each</div>
+                <div className="text-12 text-faint">{dollars(ticket.priceCents)} each</div>
               </div>
               {locked ? (
-                <div className="font-grotesk text-[15px] font-semibold text-ink">
+                <div className="font-grotesk text-15 font-semibold text-ink">
                   {ticket.quantity} × {dollars(ticket.priceCents)}
                 </div>
               ) : (
@@ -146,7 +146,7 @@ function TripCard({
                     max={item.seatsRemaining - otherQty}
                     label={ticket.ticketType.charAt(0).toUpperCase() + ticket.ticketType.slice(1)}
                   />
-                  <div className="w-[64px] text-right font-grotesk text-[15px] font-semibold text-ink">
+                  <div className="w-[64px] text-right font-grotesk text-15 font-semibold text-ink">
                     {dollars(ticket.priceCents * ticket.quantity)}
                   </div>
                 </div>
@@ -276,9 +276,9 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
   }
 
   const nav = (
-    <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-[14px] border-b border-hairline h-[60px] flex items-center px-5 md:px-8 gap-3">
+    <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-glass border-b border-hairline h-navbar flex items-center px-5 md:px-8 gap-3">
       <a href="/" className="flex items-center gap-3" aria-label={`${operatorName} home`}>
-        <div className="w-[34px] h-[34px] rounded-[10px] bg-teal flex items-center justify-center" aria-hidden="true">
+        <div className="w-logo h-logo rounded-icon bg-navy flex items-center justify-center" aria-hidden="true">
           <svg
             width="18"
             height="18"
@@ -295,7 +295,7 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
             <path d="M8 8h8" />
           </svg>
         </div>
-        <span className="font-grotesk text-[17px] font-semibold text-ink">{operatorName}</span>
+        <span className="font-grotesk text-17 font-semibold text-ink">{operatorName}</span>
       </a>
     </header>
   );
@@ -305,13 +305,13 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
       <div className="min-h-screen bg-surface font-jakarta">
         {nav}
         <div className="flex flex-col items-center justify-center py-24 text-center px-5">
-          <div className="font-grotesk text-[18px] font-semibold text-ink mb-2">
+          <div className="font-grotesk text-18 font-semibold text-ink mb-2">
             Your cart is empty
           </div>
-          <div className="text-[14px] text-muted mb-6">Select a trip to add tickets.</div>
+          <div className="text-14 text-muted mb-6">Select a trip to add tickets.</div>
           <a
             href="/"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-btn bg-teal text-white font-grotesk font-semibold hover:bg-teal-hover transition-colors"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-btn bg-gold text-navy font-grotesk font-semibold hover:bg-gold-hover transition-colors"
           >
             Browse trips <ArrowRight />
           </a>
@@ -326,7 +326,7 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
 
       <div className="max-w-lg mx-auto px-5 py-8 pb-16">
         {/* ── Order summary ────────────────────────────────────────── */}
-        <h1 className="font-grotesk text-[22px] font-semibold text-ink mb-5">Checkout</h1>
+        <h1 className="font-grotesk text-22 font-semibold text-ink mb-5">Checkout</h1>
 
         <div className="space-y-4 mb-6">
           {items.map((item) => (
@@ -343,14 +343,14 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
         <div className="bg-white rounded-card border border-card-border p-5 mb-8">
           <div className="flex justify-between items-center">
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-widest text-faint mb-0.5">
+              <div className="text-11 font-bold uppercase tracking-widest text-faint mb-0.5">
                 Order total
               </div>
-              <div className="font-grotesk text-[28px] font-bold text-ink">
+              <div className="font-grotesk text-28 font-bold text-ink">
                 {dollars(meta?.totalCents ?? totalCents)}
               </div>
             </div>
-            <div className="text-[13px] text-muted">
+            <div className="text-13 text-muted">
               {meta?.ticketCount ?? totalTickets} ticket
               {(meta?.ticketCount ?? totalTickets) !== 1 ? "s" : ""}
             </div>
@@ -360,11 +360,11 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
         {/* ── Contact form ─────────────────────────────────────────── */}
         {phase === "order" && (
           <form onSubmit={handleContactSubmit} className="mb-8">
-            <h2 className="font-grotesk text-[18px] font-semibold text-ink mb-4">Your details</h2>
+            <h2 className="font-grotesk text-18 font-semibold text-ink mb-4">Your details</h2>
 
             <div className="space-y-3 mb-4">
               <div>
-                <label htmlFor="checkout-email" className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5">
+                <label htmlFor="checkout-email" className="text-11 font-bold uppercase tracking-wide text-faint block mb-1.5">
                   Email
                 </label>
                 <input
@@ -375,11 +375,11 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="jane@example.com"
-                  className="w-full px-4 py-3 rounded-[12px] border border-card-border text-[15px] text-ink placeholder:text-faint focus:outline-none focus:border-teal transition-colors"
+                  className="w-full px-4 py-3 rounded-xl border border-card-border text-15 text-ink placeholder:text-faint focus:outline-none focus:border-gold transition-colors"
                 />
               </div>
               <div>
-                <label htmlFor="checkout-phone" className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5">
+                <label htmlFor="checkout-phone" className="text-11 font-bold uppercase tracking-wide text-faint block mb-1.5">
                   Mobile (for text updates)
                 </label>
                 <input
@@ -390,13 +390,13 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="(555) 000-0000"
-                  className="w-full px-4 py-3 rounded-[12px] border border-card-border text-[15px] text-ink placeholder:text-faint focus:outline-none focus:border-teal transition-colors"
+                  className="w-full px-4 py-3 rounded-xl border border-card-border text-15 text-ink placeholder:text-faint focus:outline-none focus:border-gold transition-colors"
                 />
               </div>
 
               {showName ? (
                 <div>
-                  <label htmlFor="checkout-name" className="text-[11px] font-bold uppercase tracking-wide text-faint block mb-1.5">
+                  <label htmlFor="checkout-name" className="text-11 font-bold uppercase tracking-wide text-faint block mb-1.5">
                     Full name (optional)
                   </label>
                   <input
@@ -406,14 +406,14 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Jane Smith"
-                    className="w-full px-4 py-3 rounded-[12px] border border-card-border text-[15px] text-ink placeholder:text-faint focus:outline-none focus:border-teal transition-colors"
+                    className="w-full px-4 py-3 rounded-xl border border-card-border text-15 text-ink placeholder:text-faint focus:outline-none focus:border-gold transition-colors"
                   />
                 </div>
               ) : (
                 <button
                   type="button"
                   onClick={() => setShowName(true)}
-                  className="text-[13px] text-teal underline underline-offset-2"
+                  className="text-13 text-gold underline underline-offset-2"
                 >
                   + Add a name (optional)
                 </button>
@@ -421,7 +421,7 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
             </div>
 
             {submitError && (
-              <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
+              <div className="text-warning text-sm bg-warning-bg border border-warning/20 rounded-lg px-4 py-3 mb-4">
                 {submitError}
               </div>
             )}
@@ -429,7 +429,7 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-4 rounded-btn bg-teal text-white font-grotesk text-[15px] font-semibold hover:bg-teal-hover transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-4 rounded-btn bg-gold text-navy font-grotesk text-15 font-semibold hover:bg-gold-hover transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 "Preparing payment…"
@@ -442,7 +442,7 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
 
             <a
               href="/"
-              className="block text-center text-[13px] text-muted mt-4 underline hover:text-ink transition-colors"
+              className="block text-center text-13 text-muted mt-4 underline hover:text-ink transition-colors"
             >
               ← Continue shopping
             </a>
@@ -452,7 +452,7 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
         {/* ── Payment ──────────────────────────────────────────────── */}
         {phase === "payment" && clientSecret && meta && (
           <div ref={paymentRef}>
-            <h2 className="font-grotesk text-[18px] font-semibold text-ink mb-4">Payment</h2>
+            <h2 className="font-grotesk text-18 font-semibold text-ink mb-4">Payment</h2>
             <div className="bg-white rounded-card border border-card-border p-5">
               <Elements
                 stripe={stripePromise}
@@ -461,7 +461,7 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
                   appearance: {
                     theme: "stripe",
                     variables: {
-                      colorPrimary: "#0E7C7B",
+                      colorPrimary: "#c99a3f",
                       borderRadius: "12px",
                       fontFamily: "Plus Jakarta Sans, sans-serif",
                     },

@@ -273,7 +273,7 @@ export default function TripReportScreen() {
             disabled={saving || uploadingPhoto}
           >
             {saving ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={Colors.white} />
             ) : (
               <Text style={s.saveBtnText}>{existing ? "Update Report" : "Post Report"}</Text>
             )}
@@ -297,8 +297,8 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  back: { color: "#fff", fontSize: 15, fontWeight: "600", width: 60 },
-  title: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  back: { color: Colors.white, fontSize: 15, fontWeight: "600", width: 60 },
+  title: { color: Colors.white, fontSize: 18, fontWeight: "700" },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 4 },
   label: {
@@ -380,7 +380,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  removePhotoText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  removePhotoText: { color: Colors.white, fontSize: 11, fontWeight: "700" },
   saveBtn: {
     backgroundColor: Colors.teal,
     borderRadius: 12,
@@ -390,7 +390,7 @@ const s = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: {
-    color: "#fff",
+    color: Colors.white,
     fontSize: 16,
     fontWeight: "700",
   },
