@@ -50,6 +50,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <a href="/admin/revenue" className="text-gray-600 hover:text-gray-900">
               Revenue
             </a>
+            <a href="/admin/settings" className="text-gray-600 hover:text-gray-900">
+              Settings
+            </a>
           </nav>
         </div>
         {me && (
