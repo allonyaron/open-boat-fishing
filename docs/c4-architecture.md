@@ -1,82 +1,84 @@
-# C4 Architecture Diagrams
+# Architecture Diagrams
 
-Two levels: **Context** (who uses the system and what it talks to) and **Container** (how the technical pieces fit together). Level 3 (Component) and Level 4 (Code) are omitted — too granular to justify maintenance at this project size.
+Two levels: **Context** (who uses the system and what it talks to) and **Container** (how the technical pieces fit together).
 
 ---
 
 ## Level 1 — System Context
 
-Who uses the platform and what external systems does it depend on.
-
 ```mermaid
-C4Context
-  title System Context — Open Boat Fishing Platform
+graph TD
+    C["Customer<br/><small>web + iOS/Android mobile app</small>"]
+    A["Operator / Admin<br/><small>web dashboard</small>"]
+    M["Mate<br/><small>tablet check-in app</small>"]
 
-  Person(customer, "Customer", "Books fishing trips via web or mobile app")
-  Person(admin, "Operator / Admin", "Manages trips, manifests, revenue, and settings")
-  Person(mate, "Mate", "Checks in passengers at the gangway using a tablet")
+    P["Open Boat Fishing Platform<br/><small>one Vercel + Neon Postgres deployment per operator</small>"]
 
-  System(platform, "Open Boat Fishing Platform", "Booking and operations platform. One dedicated Vercel + Neon deployment per operator.")
+    stripe["Stripe Connect<br/><small>payment processing</small>"]
+    push["Expo Push Service<br/><small>mobile notifications</small>"]
+    twilio["Twilio<br/><small>SMS reminders — planned</small>"]
 
-  System_Ext(stripe, "Stripe Connect", "Payment processing via destination charges")
-  System_Ext(expo_push, "Expo Push Service", "Push notifications to customer mobile devices")
-  System_Ext(twilio, "Twilio", "SMS reminders — planned, not yet wired")
+    C -->|"books trips · views boarding passes"| P
+    A -->|"manages trips · revenue · settings"| P
+    M -->|"views manifests · scans QR codes"| P
 
-  Rel(customer, platform, "Books trips, views boarding passes", "HTTPS / mobile app")
-  Rel(admin, platform, "Manages trips, staff, schedules, revenue", "HTTPS")
-  Rel(mate, platform, "Views manifests, scans QR codes", "HTTPS")
+    P -->|"creates payment intents · issues refunds"| stripe
+    stripe -->|"webhook: payment events"| P
+    P -->|"booking & cancellation notifications"| push
+    P -.->|"SMS reminders"| twilio
 
-  Rel(platform, stripe, "Creates payment intents, issues refunds", "REST")
-  Rel(stripe, platform, "Payment events: succeeded, refunded, disputed", "Webhook")
-  Rel(platform, expo_push, "Sends booking and cancellation notifications", "REST")
-  Rel(platform, twilio, "Sends SMS reminders", "REST")
+    classDef person fill:#1168bd,stroke:#0b4c8c,color:#fff
+    classDef system fill:#1168bd,stroke:#0b4c8c,color:#fff
+    classDef ext fill:#6b6b6b,stroke:#4a4a4a,color:#fff
+
+    class C,A,M person
+    class P system
+    class stripe,push,twilio ext
 ```
 
 ---
 
 ## Level 2 — Container
 
-The internal technical building blocks and how they communicate.
-
 ```mermaid
-C4Container
-  title Container Diagram — Open Boat Fishing Platform
+graph TD
+    C["Customer"]
+    A["Admin"]
+    M["Mate"]
 
-  Person(customer, "Customer", "Web or mobile")
-  Person(admin, "Admin", "Web dashboard")
-  Person(mate, "Mate", "Tablet app")
+    stripe["Stripe Connect<br/><small>payment processing</small>"]
+    push["Expo Push Service<br/><small>mobile notifications</small>"]
 
-  System_Ext(stripe, "Stripe Connect", "Payment processing")
-  System_Ext(expo_push, "Expo Push Service", "Mobile push notifications")
+    subgraph platform["  Open Boat Fishing Platform  "]
+        web["Next.js Web App<br/><small>TypeScript · Next.js 14 · Vercel</small><br/><small>booking UI · admin dashboard · all API routes</small>"]
+        consumer["Consumer Mobile App<br/><small>React Native · Expo · iOS/Android</small><br/><small>trip browsing · checkout · offline ticket wallet</small>"]
+        mate_app["Mate Tablet App<br/><small>React Native · Expo · same codebase</small><br/><small>PIN auth · offline manifest · QR scanner</small>"]
+        db[("Neon Postgres<br/><small>PostgreSQL · Drizzle ORM</small><br/><small>trips · bookings · tickets · staff</small>")]
+        cron["Vercel Cron Jobs<br/><small>expire holds · send reminders · settle fees</small>"]
+    end
 
-  System_Boundary(platform, "Open Boat Fishing Platform") {
+    C -->|"browse & book"| web
+    C -->|"browse & checkout"| consumer
+    A -->|"trips · manifests · revenue"| web
+    M -->|"manifest & check-in"| mate_app
 
-    Container(web, "Next.js Web App", "TypeScript, Next.js 14, Vercel", "Public booking calendar, checkout, boarding passes, admin dashboard, all API routes")
+    consumer -->|"booking · auth · push tokens"| web
+    mate_app -->|"manifest fetch · check-in sync"| web
 
-    Container(consumer_app, "Consumer Mobile App", "React Native, Expo, iOS/Android", "Trip browsing, checkout, offline ticket wallet, email OTP auth, push notifications")
+    web <-->|"SQL / TLS"| db
+    cron -->|"HTTPS + CRON_SECRET"| web
 
-    Container(mate_app, "Mate Tablet App", "React Native, Expo, iOS/Android", "PIN auth, offline manifest cache, QR scanner, keyboard check-in, sync")
+    web -->|"create intents · refunds"| stripe
+    stripe -->|"webhook events"| web
+    web -->|"send notifications"| push
 
-    ContainerDb(db, "Neon Postgres", "PostgreSQL, Drizzle ORM", "All operator data: trips, bookings, tickets, staff, customers, check-ins, push tokens")
+    classDef person fill:#1168bd,stroke:#0b4c8c,color:#fff
+    classDef container fill:#1168bd,stroke:#0b4c8c,color:#fff
+    classDef ext fill:#6b6b6b,stroke:#4a4a4a,color:#fff
 
-    Container(cron, "Vercel Cron Jobs", "Node.js, Vercel Cron", "expire-pending-bookings, trip-reminders, settle-trips")
-
-  }
-
-  Rel(customer, web, "Browse and book trips", "HTTPS")
-  Rel(customer, consumer_app, "Browse, checkout, view tickets", "Mobile")
-  Rel(admin, web, "Trips, manifests, revenue, settings", "HTTPS")
-  Rel(mate, mate_app, "Manifest and check-in", "Mobile")
-
-  Rel(consumer_app, web, "Booking, auth, push token registration", "HTTPS/JSON")
-  Rel(mate_app, web, "Manifest fetch, check-in sync", "HTTPS/JSON")
-
-  Rel(web, db, "Read and write all operator data", "SQL/TLS")
-  Rel(cron, web, "Trigger scheduled jobs", "HTTPS + CRON_SECRET")
-
-  Rel(web, stripe, "Create payment intents, issue refunds", "REST")
-  Rel(stripe, web, "Payment lifecycle events", "Webhook")
-  Rel(web, expo_push, "Send notifications to customer devices", "REST")
+    class C,A,M person
+    class web,consumer,mate_app,cron container
+    class stripe,push ext
 ```
 
 ---
