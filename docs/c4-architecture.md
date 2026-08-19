@@ -8,24 +8,24 @@ Two levels: **Context** (who uses the system and what it talks to) and **Contain
 
 ```mermaid
 graph TD
-    C["Customer<br/><small>web + iOS/Android mobile app</small>"]
-    A["Operator / Admin<br/><small>web dashboard</small>"]
-    M["Mate<br/><small>tablet check-in app</small>"]
+    C["Customer<br/>web + iOS/Android"]
+    A["Operator / Admin<br/>web dashboard"]
+    M["Mate<br/>tablet app"]
 
-    P["Open Boat Fishing Platform<br/><small>one Vercel + Neon Postgres deployment per operator</small>"]
+    P["Open Boat Fishing Platform<br/>Vercel + Neon · one deployment per operator"]
 
-    stripe["Stripe Connect<br/><small>payment processing</small>"]
-    push["Expo Push Service<br/><small>mobile notifications</small>"]
-    twilio["Twilio<br/><small>SMS reminders — planned</small>"]
+    stripe["Stripe Connect<br/>payment processing"]
+    push["Expo Push Service<br/>mobile notifications"]
+    twilio["Twilio<br/>SMS — planned"]
 
-    C -->|"books trips · views boarding passes"| P
-    A -->|"manages trips · revenue · settings"| P
-    M -->|"views manifests · scans QR codes"| P
+    C -->|books trips, views boarding passes| P
+    A -->|manages trips, revenue, settings| P
+    M -->|views manifests, scans QR codes| P
 
-    P -->|"creates payment intents · issues refunds"| stripe
-    stripe -->|"webhook: payment events"| P
-    P -->|"booking & cancellation notifications"| push
-    P -.->|"SMS reminders"| twilio
+    P -->|creates payment intents, refunds| stripe
+    stripe -->|webhook: payment events| P
+    P -->|booking & cancellation notifications| push
+    P -.->|SMS reminders| twilio
 
     classDef person fill:#1168bd,stroke:#0b4c8c,color:#fff
     classDef system fill:#1168bd,stroke:#0b4c8c,color:#fff
@@ -46,31 +46,31 @@ graph TD
     A["Admin"]
     M["Mate"]
 
-    stripe["Stripe Connect<br/><small>payment processing</small>"]
-    push["Expo Push Service<br/><small>mobile notifications</small>"]
+    stripe["Stripe Connect<br/>payment processing"]
+    push["Expo Push Service<br/>mobile notifications"]
 
-    subgraph platform["  Open Boat Fishing Platform  "]
-        web["Next.js Web App<br/><small>TypeScript · Next.js 14 · Vercel</small><br/><small>booking UI · admin dashboard · all API routes</small>"]
-        consumer["Consumer Mobile App<br/><small>React Native · Expo · iOS/Android</small><br/><small>trip browsing · checkout · offline ticket wallet</small>"]
-        mate_app["Mate Tablet App<br/><small>React Native · Expo · same codebase</small><br/><small>PIN auth · offline manifest · QR scanner</small>"]
-        db[("Neon Postgres<br/><small>PostgreSQL · Drizzle ORM</small><br/><small>trips · bookings · tickets · staff</small>")]
-        cron["Vercel Cron Jobs<br/><small>expire holds · send reminders · settle fees</small>"]
+    subgraph platform["Open Boat Fishing Platform"]
+        web["Next.js Web App<br/>TypeScript · Next.js 14 · Vercel"]
+        consumer["Consumer Mobile App<br/>React Native · Expo · iOS/Android"]
+        mate_app["Mate Tablet App<br/>React Native · Expo · same codebase"]
+        db[("Neon Postgres<br/>PostgreSQL · Drizzle ORM")]
+        cron["Vercel Cron Jobs<br/>expire holds · reminders · settle fees"]
     end
 
-    C -->|"browse & book"| web
-    C -->|"browse & checkout"| consumer
-    A -->|"trips · manifests · revenue"| web
-    M -->|"manifest & check-in"| mate_app
+    C -->|browse & book| web
+    C -->|browse & checkout| consumer
+    A -->|trips, manifests, revenue| web
+    M -->|manifest & check-in| mate_app
 
-    consumer -->|"booking · auth · push tokens"| web
-    mate_app -->|"manifest fetch · check-in sync"| web
+    consumer -->|booking, auth, push tokens| web
+    mate_app -->|manifest fetch, check-in sync| web
 
-    web <-->|"SQL / TLS"| db
-    cron -->|"HTTPS + CRON_SECRET"| web
+    web <-->|SQL / TLS| db
+    cron -->|HTTPS + CRON_SECRET| web
 
-    web -->|"create intents · refunds"| stripe
-    stripe -->|"webhook events"| web
-    web -->|"send notifications"| push
+    web -->|create intents, refunds| stripe
+    stripe -->|webhook events| web
+    web -->|send notifications| push
 
     classDef person fill:#1168bd,stroke:#0b4c8c,color:#fff
     classDef container fill:#1168bd,stroke:#0b4c8c,color:#fff
