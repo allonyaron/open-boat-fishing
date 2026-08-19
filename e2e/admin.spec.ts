@@ -14,18 +14,24 @@ function screenshotter(testInfo: TestInfo) {
 
 async function adminLogin(page: Parameters<Parameters<typeof test>[1]>[0]) {
   await page.goto("/admin/login");
-  await page.waitForLoadState("networkidle");
 
-  // Labels aren't associated via for/id — select by input type instead
+  // AdminLayout fetches /api/admin/auth/me before rendering children, so the
+  // login form only appears after that check resolves. Wait for the input
+  // explicitly rather than relying on networkidle (which can fire while the
+  // layout is still in its undefined/loading state).
   const emailInput = page.locator('input[type="email"]');
-  if (!(await emailInput.isVisible().catch(() => false))) return false;
+  try {
+    await emailInput.waitFor({ timeout: 10_000 });
+  } catch {
+    return false;
+  }
 
   await emailInput.fill(ADMIN_EMAIL);
   await page.locator('input[type="password"]').fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
 
   try {
-    await page.waitForURL("/admin/trips", { timeout: 8_000 });
+    await page.waitForURL("/admin/trips", { timeout: 10_000 });
     return true;
   } catch {
     return false;
@@ -89,11 +95,13 @@ test("admin trip detail + cancel dialog", async ({ page }, testInfo) => {
   await expect(page.getByRole("heading").first()).toBeVisible();
 
   // ── Cancel trip dialog (open + dismiss without submitting) ────────────────
-  await Promise.all([
-    page.waitForURL("/admin/trips"),
-    page.goto("/admin/trips"),
-  ]);
+  await page.goto("/admin/trips");
   await page.getByRole("heading", { name: "Trips" }).waitFor();
+  // Wait for the client-side trip list to finish loading before looking for the button
+  await page.waitForFunction(
+    () => !document.body.innerText.includes("Loading…"),
+    { timeout: 10_000 },
+  );
 
   const cancelBtn = page.getByRole("button", { name: "Cancel trip" }).first();
   if (!(await cancelBtn.isVisible().catch(() => false))) return;
@@ -273,14 +281,11 @@ test("admin fishing report form — sailed trip", async ({ page }, testInfo) => 
       page.waitForURL(/\/admin\/trips\/.+/),
       links.nth(i).click(),
     ]);
-    await page.waitForLoadState("domcontentloaded");
-    await page.waitForFunction(
-      () => !document.body.innerText.includes("Loading…"),
-      { timeout: 10_000 },
-    );
+    // networkidle waits for both the trip fetch and the follow-up report fetch
+    await page.waitForLoadState("networkidle");
 
     const reportTextarea = page.getByPlaceholder("Describe today's catch…");
-    if (await reportTextarea.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    if (await reportTextarea.isVisible({ timeout: 8_000 }).catch(() => false)) {
       await page.screenshot({ path: shot("17-admin-report-form") });
       await expect(reportTextarea).toBeVisible();
       await expect(page.getByRole("button", { name: /Post Report|Update Report/ })).toBeVisible();
