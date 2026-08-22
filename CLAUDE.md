@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Steps 1–10 complete. All testing phases (0–6) complete. Step 11 (production infra) is next.**
+**Steps 1–10 complete. All testing phases (0–6) complete. Step 11 (production infra) is in progress — first target is `openboatfishing.com` as combined production sandbox + public demo.**
 
 See `docs/build-status.md` for the full per-step build narrative.
+
+**openboatfishing.com deployment (Step 11a — in progress):** Code work landed; user infra provisioning (domain, Neon, Vercel Pro, Stripe test Connect) is the next unblock. See `docs/openboatfishing-demo-deploy.md` for the full deploy checklist. Demo operator is **MV Open Boat** (3 vessels, 6 products, schedules through 2035). `DEMO_MODE=true` env flag enables the yellow banner, the nightly reset cron (`/api/cron/reset-demo-data`, wipes bookings but preserves customers + fishing reports), and the "Clear demo customers" admin button in `/admin/settings`.
 
 **Testing status:** All phases done. Phase 6 (mobile lib unit tests) complete — 51 tests, 97.97% line coverage, committed `ffea43f`. Maestro mobile E2E and BottomSheet extraction deferred until after launch.
 

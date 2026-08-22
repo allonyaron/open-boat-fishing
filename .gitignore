@@ -66,3 +66,7 @@ report-*.html
 
 # Local session logs
 *.txt
+
+# Claude Code local state (personal overrides, transcript memory, etc.)
+.claude/settings.local.json
+.claude/projects/

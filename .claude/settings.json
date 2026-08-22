@@ -8,6 +8,21 @@
       "Bash(npm view *)",
       "Bash(xcrun simctl list *)"
     ],
-    "ask": ["Bash(rm *)", "Bash(mv *)", "Bash(git push *)"]
+    "ask": ["Bash(rm *)", "Bash(mv *)"],
+    "deny": ["Bash(git push *)"]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // empty' | grep -E '[.](ts|tsx|js|jsx)$' | xargs -I{} pnpm exec eslint --fix {} 2>/dev/null || true",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   }
 }

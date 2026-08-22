@@ -1,6 +1,6 @@
-"use client";
-
 import Link from "next/link";
+import { env } from "@/lib/env";
+import { ClearDemoCustomers } from "@/components/admin/ClearDemoCustomers";
 
 const sections = [
   {
@@ -55,6 +55,7 @@ export default function SettingsPage() {
           </Link>
         ))}
       </div>
+      {env.DEMO_MODE === "true" && <ClearDemoCustomers />}
     </div>
   );
 }

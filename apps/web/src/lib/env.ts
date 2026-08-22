@@ -13,6 +13,10 @@ const envSchema = z.object({
   STRIPE_CONNECTED_ACCOUNT_ID: z.string().min(1),
   CRON_SECRET: z.string().min(1),
   RESEND_API_KEY: z.string().min(1),
+  // Marks this deployment as the public demo (openboatfishing.com). Enables the
+  // demo banner in the UI and gates the nightly data-reset cron. Any value other
+  // than "true" is treated as off.
+  DEMO_MODE: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -4,6 +4,7 @@ import "./globals.css";
 import { db } from "@/lib/db";
 import { operators } from "@openboat/db";
 import { PostHogProvider } from "@/components/PostHogProvider";
+import { DemoBanner } from "@/components/DemoBanner";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${spaceGrotesk.variable} ${plusJakarta.variable} ${manrope.variable}`}>
       <body className="font-jakarta">
+        <DemoBanner />
         <PostHogProvider>{children}</PostHogProvider>
       </body>
     </html>
