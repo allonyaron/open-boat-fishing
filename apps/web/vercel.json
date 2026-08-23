@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/expire-pending-bookings",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/reset-demo-data",
