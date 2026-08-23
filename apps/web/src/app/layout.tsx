@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import type { Metadata } from "next";
 import { Space_Grotesk, Plus_Jakarta_Sans, Manrope } from "next/font/google";
 import "./globals.css";
