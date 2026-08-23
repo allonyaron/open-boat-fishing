@@ -3,7 +3,22 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "dist/**"]
+      "outputs": [".next/**", "dist/**"],
+      "env": [
+        "DATABASE_URL",
+        "SESSION_SECRET",
+        "STRIPE_SECRET_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "STRIPE_CONNECTED_ACCOUNT_ID",
+        "CRON_SECRET",
+        "RESEND_API_KEY",
+        "DEMO_MODE",
+        "NEXT_PUBLIC_BASE_URL",
+        "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
+        "NEXT_PUBLIC_POSTHOG_KEY",
+        "NEXT_PUBLIC_POSTHOG_HOST",
+        "POSTHOG_KEY"
+      ]
     },
     "dev": {
       "cache": false,
