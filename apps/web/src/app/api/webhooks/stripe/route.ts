@@ -38,6 +38,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
+  // Centralized mode: platform-level Connect webhooks carry event.account
+  // (the connected account that generated the event). Validate it against a
+  // known operator before processing — rejects events from unknown accounts.
+  // Single-deploy webhooks are registered on the connected account directly
+  // and do not carry event.account; skip this check in that case.
+  if (event.account) {
+    const [operator] = await db
+      .select({ id: operators.id })
+      .from(operators)
+      .where(eq(operators.stripeAccountId, event.account));
+    if (!operator) {
+      console.error(`Webhook from unknown connected account: ${event.account}`);
+      return NextResponse.json({ error: "Unknown account" }, { status: 400 });
+    }
+  }
+
   if (event.type === "payment_intent.succeeded") {
     await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
   } else if (event.type === "payment_intent.canceled") {
