@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@openboat/db": "workspace:*",
     "@openboat/types": "workspace:*",
     "@openboat/utils": "workspace:*",
