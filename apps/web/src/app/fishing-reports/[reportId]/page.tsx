@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { fishingReports, trips, vessels, products, operators } from "@openboat/db";
 import { fmtTimeET } from "@/lib/format";
 import { and, eq } from "drizzle-orm";
+import { getOperatorIdFromHeaders } from "@/lib/operator";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -12,10 +13,13 @@ export const revalidate = 300;
 type Props = { params: Promise<{ reportId: string }> };
 
 async function fetchReport(reportId: string) {
-  const [operator] = await db
-    .select({ id: operators.id, name: operators.name })
-    .from(operators)
-    .limit(1);
+  const operatorId = await getOperatorIdFromHeaders();
+  const [operator] = operatorId
+    ? await db
+        .select({ id: operators.id, name: operators.name })
+        .from(operators)
+        .where(eq(operators.id, operatorId))
+    : [];
   if (!operator) return null;
 
   const [row] = await db

@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { neon } from "@neondatabase/serverless";
 
+function withOperatorId(request: NextRequest, operatorId: string) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-operator-id", operatorId);
+  return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
 export async function middleware(request: NextRequest) {
   if (request.nextUrl.pathname === "/admin") {
     return NextResponse.redirect(new URL("/admin/trips", request.url));
@@ -16,9 +22,7 @@ export async function middleware(request: NextRequest) {
   // Set this on per-operator deployments so existing deployments need no code changes.
   const envOperatorId = process.env.OPERATOR_ID;
   if (envOperatorId) {
-    const res = NextResponse.next();
-    res.headers.set("x-operator-id", envOperatorId);
-    return res;
+    return withOperatorId(request, envOperatorId);
   }
 
   // Centralized mode: resolve hostname → operator_id via the `domains` table.
@@ -33,9 +37,7 @@ export async function middleware(request: NextRequest) {
     return new NextResponse("No operator configured for this domain", { status: 404 });
   }
 
-  const res = NextResponse.next();
-  res.headers.set("x-operator-id", rows[0].operator_id as string);
-  return res;
+  return withOperatorId(request, rows[0].operator_id as string);
 }
 
 export const config = {

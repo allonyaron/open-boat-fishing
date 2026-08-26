@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Expo } from "expo-server-sdk";
 import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/customer-auth";
-import { operators, pushTokens } from "@openboat/db";
+import { getOperatorId } from "@/lib/operator";
+import { pushTokens } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
@@ -24,13 +25,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid Expo push token" }, { status: 400 });
   }
 
-  const [operator] = await db.select({ id: operators.id }).from(operators).limit(1);
-  if (!operator) return NextResponse.json({ error: "No operator" }, { status: 500 });
+  const operatorId = getOperatorId(req);
+  if (!operatorId) return NextResponse.json({ error: "No operator" }, { status: 500 });
 
   await db
     .insert(pushTokens)
     .values({
-      operatorId: operator.id,
+      operatorId,
       expoToken,
       customerId: customer.customerId,
       customerEmail: customer.email,
@@ -67,15 +68,15 @@ export async function DELETE(req: NextRequest) {
   const expoToken = searchParams.get("token");
   if (!expoToken) return NextResponse.json({ error: "Missing token" }, { status: 400 });
 
-  const [operator] = await db.select({ id: operators.id }).from(operators).limit(1);
-  if (!operator) return NextResponse.json({ error: "No operator" }, { status: 500 });
+  const operatorId = getOperatorId(req);
+  if (!operatorId) return NextResponse.json({ error: "No operator" }, { status: 500 });
 
   await db
     .update(pushTokens)
     .set({ active: false, updatedAt: new Date() })
     .where(
       and(
-        eq(pushTokens.operatorId, operator.id),
+        eq(pushTokens.operatorId, operatorId),
         eq(pushTokens.expoToken, expoToken),
         eq(pushTokens.customerEmail, customer.email),
       ),

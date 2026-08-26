@@ -2,14 +2,15 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { fishingReports, trips, vessels, products, operators } from "@openboat/db";
+import { fishingReports, trips, vessels, products } from "@openboat/db";
 import { and, desc, eq, lte } from "drizzle-orm";
+import { getOperatorId } from "@/lib/operator";
 
 const PAGE_SIZE = 20;
 
 export async function GET(req: NextRequest) {
-  const [operator] = await db.select().from(operators).limit(1);
-  if (!operator) {
+  const operatorId = getOperatorId(req);
+  if (!operatorId) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
 
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
     .innerJoin(products, eq(trips.productId, products.id))
     .where(
       and(
-        eq(fishingReports.operatorId, operator.id),
+        eq(fishingReports.operatorId, operatorId),
         cursor ? lte(fishingReports.createdAt, new Date(cursor)) : undefined,
         vesselId ? eq(fishingReports.vesselId, vesselId) : undefined,
       ),

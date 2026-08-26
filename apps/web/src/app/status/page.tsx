@@ -1,11 +1,15 @@
 import { db } from "@/lib/db";
 import { operators, vessels, products, productPrices, domains } from "@openboat/db";
 import { eq, count } from "drizzle-orm";
+import { getOperatorIdFromHeaders } from "@/lib/operator";
 
 export const dynamic = "force-dynamic";
 
 export default async function StatusPage() {
-  const [operator] = await db.select().from(operators).limit(1);
+  const operatorId = await getOperatorIdFromHeaders();
+  const [operator] = operatorId
+    ? await db.select().from(operators).where(eq(operators.id, operatorId))
+    : [];
 
   if (!operator) {
     return (

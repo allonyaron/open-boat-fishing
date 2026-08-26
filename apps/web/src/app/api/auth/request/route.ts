@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { operators, magicLinkOtps } from "@openboat/db";
 import { sendOtpEmail } from "@/lib/email";
 import { eq } from "drizzle-orm";
+import { getOperatorId } from "@/lib/operator";
 import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
@@ -26,7 +27,10 @@ export async function POST(req: NextRequest) {
     return tooManyRequests(Math.max(ipRl.retryAfterSec, emailRl.retryAfterSec));
   }
 
-  const [operator] = await db.select().from(operators).limit(1);
+  const operatorId = getOperatorId(req);
+  if (!operatorId) return NextResponse.json({ error: "No operator" }, { status: 500 });
+
+  const [operator] = await db.select().from(operators).where(eq(operators.id, operatorId));
   if (!operator) return NextResponse.json({ error: "No operator" }, { status: 500 });
 
   // Generate 6-digit OTP

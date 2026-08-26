@@ -15,6 +15,7 @@ import {
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { randomBytes, randomUUID } from "crypto";
 import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
+import { getOperatorId } from "@/lib/operator";
 import { z } from "zod";
 
 const PLATFORM_FEE_CENTS = 150; // $1.50 per ticket
@@ -75,7 +76,14 @@ export async function POST(req: NextRequest) {
   }
   const { cart, customerName, customerEmail, customerPhone } = parsed.data;
 
-  const [operator] = await db.select().from(operators).limit(1);
+  const operatorId = getOperatorId(req);
+  if (!operatorId) {
+    return NextResponse.json({ error: "No operator configured" }, { status: 500 });
+  }
+  const [operator] = await db
+    .select({ id: operators.id, termsUrl: operators.termsUrl })
+    .from(operators)
+    .where(eq(operators.id, operatorId));
   if (!operator) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { compare } from "bcryptjs";
 import { db } from "@/lib/db";
-import { staff, operators } from "@openboat/db";
+import { staff } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { signMateToken } from "@/lib/mate-auth";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { getOperatorId } from "@/lib/operator";
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as { email?: string; pin?: string };
@@ -19,14 +20,14 @@ export async function POST(req: NextRequest) {
   const rl = await checkRateLimit(`mate-auth:${email.toLowerCase().trim()}`, 5, 15 * 60 * 1000);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
-  const [operator] = await db.select().from(operators).limit(1);
-  if (!operator) {
+  const operatorId = getOperatorId(req);
+  if (!operatorId) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
 
   const [member] = await db.select().from(staff).where(eq(staff.email, email.toLowerCase().trim()));
 
-  if (!member || member.operatorId !== operator.id) {
+  if (!member || member.operatorId !== operatorId) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 

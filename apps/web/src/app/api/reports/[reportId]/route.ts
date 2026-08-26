@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { fishingReports, trips, vessels, products, operators } from "@openboat/db";
+import { fishingReports, trips, vessels, products } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
+import { getOperatorId } from "@/lib/operator";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ reportId: string }> },
 ) {
-  const [operator] = await db.select().from(operators).limit(1);
-  if (!operator) {
+  const operatorId = getOperatorId(req);
+  if (!operatorId) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
 
@@ -37,7 +38,7 @@ export async function GET(
     .innerJoin(trips, eq(fishingReports.tripId, trips.id))
     .innerJoin(vessels, eq(fishingReports.vesselId, vessels.id))
     .innerJoin(products, eq(trips.productId, products.id))
-    .where(and(eq(fishingReports.id, reportId), eq(fishingReports.operatorId, operator.id)));
+    .where(and(eq(fishingReports.id, reportId), eq(fishingReports.operatorId, operatorId)));
 
   if (!row) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

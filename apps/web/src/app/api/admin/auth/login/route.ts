@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { compare } from "bcryptjs";
 import { db } from "@/lib/db";
-import { staff, operators } from "@openboat/db";
+import { staff } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/session";
 import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
+import { getOperatorId } from "@/lib/operator";
 
 export async function POST(req: NextRequest) {
   const { email, password } = await req.json();
@@ -18,14 +19,14 @@ export async function POST(req: NextRequest) {
   const rl = await checkRateLimit(`admin-login:${clientIp(req)}`, 10, 15 * 60 * 1000);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
-  const [operator] = await db.select().from(operators).limit(1);
-  if (!operator) {
+  const operatorId = getOperatorId(req);
+  if (!operatorId) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
 
   const [member] = await db.select().from(staff).where(eq(staff.email, email.toLowerCase().trim()));
 
-  if (!member || !member.passwordHash || member.operatorId !== operator.id) {
+  if (!member || !member.passwordHash || member.operatorId !== operatorId) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 

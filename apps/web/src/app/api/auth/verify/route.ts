@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { compare } from "bcryptjs";
 import { db } from "@/lib/db";
-import { operators, magicLinkOtps, customers } from "@openboat/db";
+import { magicLinkOtps, customers } from "@openboat/db";
 import { signCustomerToken } from "@/lib/customer-auth";
 import { and, eq, gt, desc } from "drizzle-orm";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { getOperatorId } from "@/lib/operator";
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as { email?: string; otp?: string };
@@ -20,8 +21,8 @@ export async function POST(req: NextRequest) {
   const rl = await checkRateLimit(`otp-verify:${email}`, 10, 15 * 60 * 1000);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
-  const [operator] = await db.select().from(operators).limit(1);
-  if (!operator) return NextResponse.json({ error: "No operator" }, { status: 500 });
+  const operatorId = getOperatorId(req);
+  if (!operatorId) return NextResponse.json({ error: "No operator" }, { status: 500 });
 
   // Find the most recent unused, unexpired OTP for this email
   const [pending] = await db
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
     .from(magicLinkOtps)
     .where(
       and(
-        eq(magicLinkOtps.operatorId, operator.id),
+        eq(magicLinkOtps.operatorId, operatorId),
         eq(magicLinkOtps.email, email),
         eq(magicLinkOtps.used, false),
         gt(magicLinkOtps.expiresAt, new Date()),
@@ -54,20 +55,20 @@ export async function POST(req: NextRequest) {
   const [existing] = await db
     .select()
     .from(customers)
-    .where(and(eq(customers.operatorId, operator.id), eq(customers.email, email)));
+    .where(and(eq(customers.operatorId, operatorId), eq(customers.email, email)));
 
   let customer = existing;
   if (!customer) {
     const [created] = await db
       .insert(customers)
-      .values({ operatorId: operator.id, email })
+      .values({ operatorId, email })
       .returning();
     customer = created;
   }
 
   const token = signCustomerToken({
     customerId: customer.id,
-    operatorId: operator.id,
+    operatorId,
     email: customer.email,
     name: customer.firstName ?? null,
   });

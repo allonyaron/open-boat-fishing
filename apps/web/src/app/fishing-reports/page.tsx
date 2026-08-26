@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { fishingReports, trips, vessels, products, operators } from "@openboat/db";
 import { and, desc, eq } from "drizzle-orm";
+import { getOperatorIdFromHeaders } from "@/lib/operator";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -22,10 +23,13 @@ function fmtDate(date: string) {
 }
 
 export default async function FishingReportsPage() {
-  const [operator] = await db
-    .select({ id: operators.id, name: operators.name })
-    .from(operators)
-    .limit(1);
+  const operatorId = await getOperatorIdFromHeaders();
+  const [operator] = operatorId
+    ? await db
+        .select({ id: operators.id, name: operators.name })
+        .from(operators)
+        .where(eq(operators.id, operatorId))
+    : [];
   if (!operator) return null;
 
   const rows = await db
