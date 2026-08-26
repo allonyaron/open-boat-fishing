@@ -81,11 +81,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
   const [operator] = await db
-    .select({ id: operators.id, termsUrl: operators.termsUrl })
+    .select({ id: operators.id, termsUrl: operators.termsUrl, stripeAccountId: operators.stripeAccountId })
     .from(operators)
     .where(eq(operators.id, operatorId));
   if (!operator) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
+  }
+  if (!operator.stripeAccountId) {
+    return NextResponse.json({ error: "Stripe not configured for this operator" }, { status: 500 });
   }
 
   const tripIds = cart.map((c) => c.tripId);
@@ -315,12 +318,11 @@ export async function POST(req: NextRequest) {
   // and cancel the booking so no ghost holds accumulate.
   let paymentIntent;
   try {
-    const connectedAccountId = process.env.STRIPE_CONNECTED_ACCOUNT_ID!;
     paymentIntent = await stripe.paymentIntents.create({
       amount: totalCents,
       currency: "usd",
       automatic_payment_methods: { enabled: true },
-      transfer_data: { destination: connectedAccountId },
+      transfer_data: { destination: operator.stripeAccountId },
       application_fee_amount: booking.platformFeeCents,
       metadata: {
         bookingId: booking.id,
