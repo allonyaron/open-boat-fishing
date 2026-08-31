@@ -15,6 +15,8 @@ const envSchema = z.object({
   // Platform Connect client_id (ca_xxx). Required in centralized mode to generate
   // the Stripe OAuth authorization URL. Not needed in single-deploy mode.
   STRIPE_CLIENT_ID: z.string().optional(),
+  // Password protecting the platform admin (/platform). Required in centralized mode.
+  PLATFORM_SECRET: z.string().optional(),
   // Marks this deployment as the public demo (openboatfishing.com). Enables the
   // demo banner in the UI and gates the nightly data-reset cron. Any value other
   // than "true" is treated as off.
