@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Centralized architecture work (items 1–8) complete.** The codebase now supports both single-deploy (per-operator `OPERATOR_ID` env var) and centralized multi-tenant (domain → operator_id via `domains` table + Edge middleware). See `docs/centralized-architecture.md` for the full work item list and design notes.
 
-**Refactoring backlog captured** in `docs/refactoring-backlog.md` — domain-driven module structure, operator resolution consolidation, session factory, API route consistency, and general cleanup. Prioritized; start with cleanup (item 5) before Step 11 resumes.
+**Refactoring backlog (items 2–5 complete):** Session factory, `OperatorContext` helper, general env-var cleanup, and booking-cancel domain extraction all landed. Remaining: item 1 (full domain modules — booking creation still inline), item 2 partial (server-component `getOperatorRecord()` helper not yet added), item 6 (middleware caching — post-launch). See `docs/refactoring-backlog.md`.
 
 See `docs/build-status.md` for the full per-step build narrative.
 
@@ -79,8 +79,8 @@ open-boat-fishing/
 7. ✅ Expo consumer app — Trips, Tickets (offline SQLite wallet), Checkout, Account (OTP), push notifications
 8. ✅ Expo mate app — PIN auth, offline manifest, QR scanner + keyboard mode, check-in queue sync
 9. ✅ Admin dashboard — staff auth, trips list, cancellation, manifest, per-ticket refund, revenue, capacity edit
-10. **Next:** Fishing reports — captain posts after each trip (web admin + mate app). Fields: date/vessel/trip auto-populated, catch summary, photos, structured fish counts. Displayed publicly on marketing site + consumer app.
-11. Production infra → DNS migration → SEO → load test (k6) → go live
+10. ✅ Fishing reports — captain posts after each trip (web admin + mate app). Catch summary, fish counts, Vercel Blob photos. Public list + detail pages with ISR. Consumer app Reports tab. See `docs/build-status.md` for full detail.
+11. **Next:** Production infra → DNS migration → SEO → load test (k6) → go live
 
 ## Key Architecture Decisions
 
