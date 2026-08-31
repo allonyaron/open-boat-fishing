@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Steps 1–10 complete. All testing phases (0–6) complete. Step 11 (production infra) is in progress — first target is `openboatfishing.com` as combined production sandbox + public demo.**
 
+**Centralized architecture work (items 1–8) complete.** The codebase now supports both single-deploy (per-operator `OPERATOR_ID` env var) and centralized multi-tenant (domain → operator_id via `domains` table + Edge middleware). See `docs/centralized-architecture.md` for the full work item list and design notes.
+
+**Refactoring backlog captured** in `docs/refactoring-backlog.md` — domain-driven module structure, operator resolution consolidation, session factory, API route consistency, and general cleanup. Prioritized; start with cleanup (item 5) before Step 11 resumes.
+
 See `docs/build-status.md` for the full per-step build narrative.
 
 **openboatfishing.com deployment (Step 11a — in progress):** Code work landed; user infra provisioning (domain, Neon, Vercel Pro, Stripe test Connect) is the next unblock. See `docs/openboatfishing-demo-deploy.md` for the full deploy checklist. Demo operator is **MV Open Boat** (3 vessels, 6 products, schedules through 2035). `DEMO_MODE=true` env flag enables the yellow banner, the nightly reset cron (`/api/cron/reset-demo-data`, wipes bookings but preserves customers + fishing reports), and the "Clear demo customers" admin button in `/admin/settings`.
@@ -42,11 +46,12 @@ See `docs/build-status.md` for the full per-step build narrative.
 
 ## What This Is
 
-A **multi-tenant codebase, single-tenant deployment** platform for party fishing boat operators. Each client gets their own dedicated Vercel + Neon Postgres deployment. Their database has exactly one row in `operators`.
+A platform for party fishing boat operators. Two deployment models coexist:
 
-**Onboarding a new operator = fork repo + configure env vars + deploy. ~2-3 hours. No shared infrastructure.**
+- **Single-deploy (enterprise/white-label):** Each operator gets their own Vercel + Neon Postgres deployment. One `operators` row per database. Set `OPERATOR_ID` env var — middleware short-circuits the DB lookup. Onboarding = fork repo + configure env vars + deploy (~2–3 hours).
+- **Centralized (platform mode):** One shared Vercel + Neon deployment. Multiple operators in the same database, all queries scoped by `operator_id`. Hostname → operator resolved via `domains` table in Edge middleware. New operators created via `/platform` (gated by `PLATFORM_SECRET`). Stripe Connect Destination Charges — each operator has their own connected account.
 
-See `docs/competitive-position.md` for market context.
+See `docs/centralized-architecture.md` for architecture details and `docs/competitive-position.md` for market context.
 
 ## Monorepo Structure
 

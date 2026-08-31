@@ -35,12 +35,12 @@ Items are ordered by dependency. Core architecture is ~1 week; platform admin pa
 | 1 | **`domains` table** — hostname → operator_id mapping | ✅ Done | — | Already in schema since `0000_safe_kingpin`. |
 | 2 | **Vercel Edge middleware:** read hostname → lookup `operator_id` → inject `x-operator-id` header | ✅ Done | — | `apps/web/src/middleware.ts`. Uses `@neondatabase/serverless` HTTP driver (required for Edge runtime). `OPERATOR_ID` env var short-circuits the DB lookup for single-deploy mode. |
 | 3 | **`src/lib/operator.ts`:** `getOperatorId(req)` helper | ✅ Done | — | Reads `x-operator-id` header. API routes call this instead of doing a DB lookup themselves. |
-| 4 | **Replace `db.select().from(operators).limit(1)`** across all API routes | ⬜ Todo | ~1 day | Every route that does `limit(1)` needs to call `getOperatorId(req)` instead. ~15 routes. |
-| 5 | **Replace `process.env.STRIPE_CONNECTED_ACCOUNT_ID`** with per-operator lookup | ⬜ Todo | ~half day | Load from `operators.stripeAccountId` after resolving `operator_id`. Two callsites: `POST /api/bookings` and the Stripe webhook. |
-| 6 | **Stripe webhook routing:** route by `account` field in payload | ⬜ Todo | ~1 day | Webhook currently validates against one fixed connected account. Needs to verify the `account` field against any known `operators.stripeAccountId`. |
-| 7 | **Stripe Connect OAuth flow:** UI for operator to connect their Stripe account at onboarding | ⬜ Todo | ~2 days | Standard Connect OAuth (`/oauth/authorize` → redirect → token exchange → store `stripeAccountId` on operator row). |
-| 8 | **Operator onboarding UI:** form to create operator row, set domain, upload logo | ⬜ Todo | ~2–3 days | Admin-only page (platform owner). Creates `operators` row, inserts into `domains`, triggers Stripe Connect OAuth. |
-| 9 | **Platform owner admin panel:** view all operators, aggregate revenue, suspend accounts | ⬜ Todo | ~1–2 weeks | Separate workstream. Not a blocker for the routing plumbing. |
+| 4 | **Replace `db.select().from(operators).limit(1)`** across all API routes | ✅ Done | — | 21 call sites replaced. API routes call `getOperatorId(req)`; server components call `getOperatorIdFromHeaders()`. |
+| 5 | **Replace `process.env.STRIPE_CONNECTED_ACCOUNT_ID`** with per-operator lookup | ✅ Done | — | `POST /api/bookings` now loads `stripeAccountId` from the resolved operator row. Env var removed from schema validation. |
+| 6 | **Stripe webhook routing:** route by `account` field in payload | ✅ Done | — | Gate added: if `event.account` is present, validates it against a known `operators.stripeAccountId`. Rejects unknown accounts with 400. |
+| 7 | **Stripe Connect OAuth flow:** UI for operator to connect their Stripe account at onboarding | ✅ Done | — | `GET /api/stripe/connect/start` → Stripe OAuth → `GET /api/stripe/connect/callback` (token exchange, stores `stripeAccountId`). Connect/Reconnect button in `/admin/settings/operator`. |
+| 8 | **Operator onboarding UI:** form to create operator row, set domain, first admin account | ✅ Done | — | `/platform` (login + operator list) and `/platform/operators/new` (creation form). `POST /api/platform/operators` inserts operator + domain + staff rows, returns temp password. Gated by `PLATFORM_SECRET` env var via separate iron-session cookie (`openboat_platform`). |
+| 9 | **Platform owner admin panel:** view all operators, aggregate revenue, suspend accounts | ⬜ Todo | ~1–2 weeks | Separate workstream. Not a blocker for the routing plumbing. `/platform` currently shows list + creation only. |
 
 ---
 
