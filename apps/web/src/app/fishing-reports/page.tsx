@@ -1,11 +1,13 @@
 import { db } from "@/lib/db";
-import { fishingReports, trips, vessels, products, operators } from "@openboat/db";
-import { and, desc, eq } from "drizzle-orm";
-import { getOperatorIdFromHeaders } from "@/lib/operator";
+import { fishingReports, trips, vessels, products } from "@openboat/db";
+import { desc, eq } from "drizzle-orm";
+import { getOperatorRecord } from "@/lib/operator";
 import Link from "next/link";
 import type { Metadata } from "next";
 
-export const revalidate = 300; // ISR: revalidate every 5 minutes
+// Force dynamic: Next.js ISR keys by path, not host. In centralized mode
+// multiple operators share the same path and would get each other's cached data.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Fishing Reports",
@@ -23,13 +25,7 @@ function fmtDate(date: string) {
 }
 
 export default async function FishingReportsPage() {
-  const operatorId = await getOperatorIdFromHeaders();
-  const [operator] = operatorId
-    ? await db
-        .select({ id: operators.id, name: operators.name })
-        .from(operators)
-        .where(eq(operators.id, operatorId))
-    : [];
+  const operator = await getOperatorRecord();
   if (!operator) return null;
 
   const rows = await db

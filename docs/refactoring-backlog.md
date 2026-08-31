@@ -16,28 +16,18 @@ Captured before starting Step 11 / fishing-reports work. Goal: domain-driven str
 - `src/lib/bookings/cancel.ts` — `cancelPendingBooking` + `cancelConfirmedBooking` (seat restore, ticket void, fee reverse). Used by cron, PI-canceled webhook, and charge-refunded webhook.
 - `src/lib/webhooks/` — all four Stripe event handlers extracted from `route.ts` dispatcher
 - `src/lib/notifications/send-confirmation-email.ts` — confirmation email assembly extracted
+- `src/test/api/bookings.test.ts` — 24 integration tests covering `POST` (validation, operator/Stripe errors, seat inventory, happy path, near-full hold window, Stripe PI rollback) and `GET` (wallet lookup). Prerequisite for safe extraction.
 
 **Remaining:**
-- Booking creation is still inline in `POST /api/bookings` (490 lines, no other callers — low duplication value, high risk to touch)
+- Booking creation is still inline in `POST /api/bookings` (490 lines, no other callers — low duplication value, high risk). Now has test coverage — safe to extract.
 - `payments` domain (Stripe PI creation, per-ticket refund) — no duplication yet, defer
 - `reports` domain — no duplication yet, defer
 
 ---
 
-## 2. Operator Resolution — Consolidate Access Pattern
+## 2. Operator Resolution — Consolidate Access Pattern ✅ Done
 
-**Status: Partially done**
-
-**Problem:** Two helpers exist for reading `operator_id` from context:
-- `getOperatorId(req: NextRequest)` — for API route handlers (reads `x-operator-id` request header)
-- `getOperatorIdFromHeaders()` — for Server Components (calls `next/headers`)
-
-**Done:**
-- `getOperatorContext(req)` added to `src/lib/operator.ts` — resolves ID from header + fetches standard `OperatorContext` field set in one call. Used by `POST /api/bookings` and `POST /api/auth/request`.
-
-**Remaining:**
-- `getOperatorOrThrow(req)` variant — not needed yet, all routes return 500 directly on null
-- Server-component `getOperatorRecord()` helper — server-component pages still repeat the two-step resolve + fetch pattern. ~10 pages affected.
+`getOperatorRecord()` added to `src/lib/operator.ts` — server-component variant of `getOperatorContext(req)`. Reads `x-operator-id` from `next/headers`, fetches the curated `OperatorContext` field set, returns `OperatorContext | null`. All 10 server-component pages migrated off the inline two-step pattern. `OperatorContext` expanded with `slug`, `phone`, `dockAddress`, `dockMapsUrl` to cover all display fields needed by those pages.
 
 ---
 
@@ -79,6 +69,6 @@ Captured before starting Step 11 / fishing-reports work. Goal: domain-driven str
 1. ~~**Item 5 (cleanup)**~~ ✅ Done
 2. ~~**Item 4 (session factory)**~~ ✅ Done
 3. ~~**Item 3 (operator context helper)**~~ ✅ Done
-4. **Item 2 (server-component operator helper)** — ~10 server-component pages still do the two-step resolve + fetch
-5. **Item 1 (booking creation extraction)** — low priority, single caller, high risk; revisit when tests cover it
+4. ~~**Item 2 (server-component operator helper)**~~ ✅ Done
+5. **Item 1 (booking creation extraction)** — test coverage now in place; ready to extract when the time is right
 6. **Item 6 (middleware caching)** — post-launch only

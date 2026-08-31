@@ -54,5 +54,12 @@ export async function requireCustomer(
   if (!payload) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // Token operatorId must match the middleware-resolved x-operator-id header.
+  // Prevents a token issued for operator A from being used against operator B
+  // in centralized (multi-tenant) mode.
+  const operatorIdHeader = req.headers.get("x-operator-id");
+  if (operatorIdHeader && payload.operatorId !== operatorIdHeader) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   return { customer: payload };
 }

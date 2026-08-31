@@ -56,6 +56,11 @@ export async function requireMate(
   if (!payload) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // Token operatorId must match the middleware-resolved x-operator-id header.
+  const operatorIdHeader = req.headers.get("x-operator-id");
+  if (operatorIdHeader && payload.operatorId !== operatorIdHeader) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   if (payload.role !== "mate" && payload.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

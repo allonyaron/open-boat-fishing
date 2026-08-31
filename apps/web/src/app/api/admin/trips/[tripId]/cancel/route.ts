@@ -143,8 +143,12 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
         .where(inArray(bookings.id, fullyRefundedBookingIds));
     }
 
-    // Reset seats to capacity (trip is done; no new bookings possible)
-    await tx.update(trips).set({ seatsRemaining: trip.capacity }).where(eq(trips.id, tripId));
+    // Reset seats to capacity (trip is done; no new bookings possible).
+    // Use the DB's current capacity value, not the stale read, in case it changed concurrently.
+    await tx
+      .update(trips)
+      .set({ seatsRemaining: sql`${trips.capacity}` })
+      .where(eq(trips.id, tripId));
   });
 
   // Count voided tickets for the response

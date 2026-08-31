@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
-import { bookings, operators } from "@openboat/db";
-import { eq } from "drizzle-orm";
-import { getOperatorIdFromHeaders } from "@/lib/operator";
+import { bookings } from "@openboat/db";
+import { and, eq } from "drizzle-orm";
+import { getOperatorRecord } from "@/lib/operator";
 import { notFound, redirect } from "next/navigation";
 
 export default async function DeliveryPage({
@@ -17,14 +17,16 @@ export default async function DeliveryPage({
     redirect(`/booking/confirmation?code=${code}&redirect_status=${redirect_status ?? ""}`);
   }
 
-  const [booking] = await db.select().from(bookings).where(eq(bookings.confirmationCode, code));
-  if (!booking) notFound();
+  const operator = await getOperatorRecord();
+  if (!operator) notFound();
 
-  const operatorId = await getOperatorIdFromHeaders();
-  const [operator] = operatorId
-    ? await db.select({ name: operators.name }).from(operators).where(eq(operators.id, operatorId))
-    : [];
-  const operatorName = operator?.name ?? "Fishing Charter";
+  const operatorName = operator.name ?? "Fishing Charter";
+
+  const [booking] = await db
+    .select()
+    .from(bookings)
+    .where(and(eq(bookings.confirmationCode, code), eq(bookings.operatorId, operator.id)));
+  if (!booking) notFound();
 
   const displayEmail = email ?? booking.customerEmail;
   const displayPhone = phone ?? booking.customerPhone ?? "";

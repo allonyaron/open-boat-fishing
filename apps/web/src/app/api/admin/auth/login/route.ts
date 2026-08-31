@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { compare } from "bcryptjs";
 import { db } from "@/lib/db";
 import { staff } from "@openboat/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getSession } from "@/lib/session";
 import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { getOperatorId } from "@/lib/operator";
@@ -24,9 +24,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
 
-  const [member] = await db.select().from(staff).where(eq(staff.email, email.toLowerCase().trim()));
+  const [member] = await db
+    .select()
+    .from(staff)
+    .where(and(eq(staff.email, email.toLowerCase().trim()), eq(staff.operatorId, operatorId)));
 
-  if (!member || !member.passwordHash || member.operatorId !== operatorId) {
+  if (!member || !member.passwordHash) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 

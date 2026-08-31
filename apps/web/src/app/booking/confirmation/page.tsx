@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
-import { bookings, bookingItems, trips, products, vessels, operators } from "@openboat/db";
+import { bookings, bookingItems, trips, products, vessels } from "@openboat/db";
 import { fmtTimeET } from "@/lib/format";
-import { eq } from "drizzle-orm";
-import { getOperatorIdFromHeaders } from "@/lib/operator";
+import { and, eq } from "drizzle-orm";
+import { getOperatorRecord } from "@/lib/operator";
 import { notFound } from "next/navigation";
 
 export default async function ConfirmationPage({
@@ -14,15 +14,17 @@ export default async function ConfirmationPage({
 
   if (!code) notFound();
 
-  const [booking] = await db.select().from(bookings).where(eq(bookings.confirmationCode, code));
+  const operator = await getOperatorRecord();
+  if (!operator) notFound();
+
+  const operatorName = operator.name ?? "Fishing Charter";
+
+  const [booking] = await db
+    .select()
+    .from(bookings)
+    .where(and(eq(bookings.confirmationCode, code), eq(bookings.operatorId, operator.id)));
 
   if (!booking) notFound();
-
-  const operatorId = await getOperatorIdFromHeaders();
-  const [operator] = operatorId
-    ? await db.select({ name: operators.name }).from(operators).where(eq(operators.id, operatorId))
-    : [];
-  const operatorName = operator?.name ?? "Fishing Charter";
 
   const items = await db
     .select({

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sendPushToEmails } from "@/lib/push";
 import { trips, bookingItems, bookings, vessels, products } from "@openboat/db";
-import { and, eq, gte, lt, inArray } from "drizzle-orm";
+import { and, eq, gte, lt } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -19,17 +19,24 @@ export async function GET(req: NextRequest) {
   const windowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
   const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-  const upcomingTrips = await db
+  // Single join — no N+1 per trip
+  const rows = await db
     .select({
-      id: trips.id,
+      tripId: trips.id,
       operatorId: trips.operatorId,
       startTime: trips.startTime,
       vesselName: vessels.name,
       productName: products.displayName,
+      email: bookings.customerEmail,
     })
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))
     .innerJoin(products, eq(trips.productId, products.id))
+    .innerJoin(bookingItems, eq(bookingItems.tripId, trips.id))
+    .innerJoin(
+      bookings,
+      and(eq(bookings.id, bookingItems.bookingId), eq(bookings.status, "confirmed")),
+    )
     .where(
       and(
         eq(trips.status, "scheduled"),
@@ -38,42 +45,47 @@ export async function GET(req: NextRequest) {
       ),
     );
 
+  // Group emails by trip
+  type TripMeta = { operatorId: string; startTime: Date; vesselName: string; productName: string };
+  const byTrip = new Map<string, { meta: TripMeta; emails: Set<string> }>();
+  for (const row of rows) {
+    if (!byTrip.has(row.tripId)) {
+      byTrip.set(row.tripId, {
+        meta: {
+          operatorId: row.operatorId,
+          startTime: row.startTime,
+          vesselName: row.vesselName,
+          productName: row.productName,
+        },
+        emails: new Set(),
+      });
+    }
+    if (row.email) byTrip.get(row.tripId)!.emails.add(row.email);
+  }
+
   let sent = 0;
-  for (const trip of upcomingTrips) {
-    const items = await db
-      .select({ bookingId: bookingItems.bookingId })
-      .from(bookingItems)
-      .where(eq(bookingItems.tripId, trip.id));
+  for (const [tripId, { meta, emails }] of byTrip) {
+    const emailList = [...emails];
+    if (emailList.length === 0) continue;
 
-    if (items.length === 0) continue;
-
-    const bookingIds = [...new Set(items.map((i) => i.bookingId))];
-    const bookedPassengers = await db
-      .select({ email: bookings.customerEmail })
-      .from(bookings)
-      .where(and(inArray(bookings.id, bookingIds), eq(bookings.status, "confirmed")));
-
-    const emails = bookedPassengers.map((b) => b.email).filter(Boolean) as string[];
-    if (emails.length === 0) continue;
-
-    const departs = new Date(trip.startTime).toLocaleTimeString("en-US", {
+    const departs = new Date(meta.startTime).toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
     });
 
     await sendPushToEmails(
-      trip.operatorId,
-      emails,
+      meta.operatorId,
+      emailList,
       {
         title: "Trip Reminder",
-        body: `Your ${trip.vesselName} ${trip.productName} departs tomorrow at ${departs}. See you at the dock!`,
-        data: { type: "trip_reminder", tripId: trip.id },
+        body: `Your ${meta.vesselName} ${meta.productName} departs tomorrow at ${departs}. See you at the dock!`,
+        data: { type: "trip_reminder", tripId },
       },
       "reminders",
     );
-    sent += emails.length;
+    sent += emailList.length;
   }
 
-  return NextResponse.json({ ok: true, tripsProcessed: upcomingTrips.length, pushSent: sent });
+  return NextResponse.json({ ok: true, tripsProcessed: byTrip.size, pushSent: sent });
 }

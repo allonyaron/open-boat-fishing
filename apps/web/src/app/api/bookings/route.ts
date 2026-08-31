@@ -14,7 +14,8 @@ import {
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { randomBytes, randomUUID } from "crypto";
 import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
-import { getOperatorContext } from "@/lib/operator";
+import { getOperatorContext, getOperatorId } from "@/lib/operator";
+import { cancelPendingBooking } from "@/lib/bookings/cancel";
 import { z } from "zod";
 
 const PLATFORM_FEE_CENTS = 150; // $1.50 per ticket
@@ -115,6 +116,11 @@ export async function POST(req: NextRequest) {
         }
 
         for (const trip of tripRows) {
+          if (trip.status !== "scheduled") {
+            throw Object.assign(new Error("Trip is no longer available for booking"), {
+              httpStatus: 409,
+            });
+          }
           const requested = seatRequestsByTrip[trip.id] ?? 0;
           if (requested > (trip.seatsRemaining ?? 0)) {
             throw Object.assign(
@@ -323,15 +329,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err) {
-    await db.transaction(async (tx) => {
-      for (const [tripId, count] of Object.entries(seatRequestsByTrip)) {
-        await tx
-          .update(trips)
-          .set({ seatsRemaining: sql`${trips.seatsRemaining} + ${count}` })
-          .where(eq(trips.id, tripId));
-      }
-      await tx.update(bookings).set({ status: "cancelled" }).where(eq(bookings.id, booking.id));
-    });
+    await cancelPendingBooking(booking.id);
     console.error("Stripe PaymentIntent creation failed, booking cancelled:", err);
     return NextResponse.json({ error: "Payment service unavailable" }, { status: 502 });
   }
@@ -384,11 +382,18 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const operatorId = getOperatorId(req);
+  if (!operatorId) {
+    await enforceMinDelay(start);
+    return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+  }
+
   const [booking] = await db
     .select()
     .from(bookings)
     .where(
       and(
+        eq(bookings.operatorId, operatorId),
         eq(bookings.customerEmail, email),
         eq(bookings.confirmationCode, code),
         eq(bookings.status, "confirmed"),

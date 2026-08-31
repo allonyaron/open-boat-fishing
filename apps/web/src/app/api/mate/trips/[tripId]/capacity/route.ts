@@ -17,74 +17,85 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ tr
     return NextResponse.json({ error: "capacity must be a positive integer" }, { status: 400 });
   }
 
-  const [trip] = await db
-    .select({
-      id: trips.id,
-      capacity: trips.capacity,
-      seatsRemaining: trips.seatsRemaining,
-      status: trips.status,
-      certificateCapacity: vessels.certificateCapacity,
-    })
-    .from(trips)
-    .innerJoin(vessels, eq(trips.vesselId, vessels.id))
-    .where(and(eq(trips.id, tripId), eq(trips.operatorId, staff.operatorId)));
+  let responseData: {
+    capacity: number;
+    seatsRemaining: number;
+    certificateCapacity: number | null;
+    ticketsSold: number;
+  } | null = null;
 
-  if (!trip) {
-    return NextResponse.json({ error: "Trip not found" }, { status: 404 });
-  }
-  if (trip.status === "cancelled") {
-    return NextResponse.json({ error: "Cannot edit a cancelled trip" }, { status: 409 });
-  }
-  if (trip.certificateCapacity === null) {
-    return NextResponse.json(
-      { error: "Certificate capacity not configured for this vessel — contact admin" },
-      { status: 422 },
-    );
-  }
-  if (newCapacity > trip.certificateCapacity) {
-    return NextResponse.json(
-      { error: `Cannot exceed certificate capacity of ${trip.certificateCapacity}` },
-      { status: 422 },
-    );
-  }
+  try {
+    await db.transaction(async (tx) => {
+      const [trip] = await tx
+        .select({
+          id: trips.id,
+          capacity: trips.capacity,
+          status: trips.status,
+          certificateCapacity: vessels.certificateCapacity,
+        })
+        .from(trips)
+        .innerJoin(vessels, eq(trips.vesselId, vessels.id))
+        .where(and(eq(trips.id, tripId), eq(trips.operatorId, staff.operatorId)))
+        .for("update");
 
-  const [{ sold }] = await db
-    .select({ sold: sql<number>`cast(count(*) as int)` })
-    .from(tickets)
-    .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
-    .where(and(eq(bookingItems.tripId, tripId), eq(tickets.voided, false)));
+      if (!trip) throw Object.assign(new Error("Trip not found"), { status: 404 });
+      if (trip.status === "cancelled")
+        throw Object.assign(new Error("Cannot edit a cancelled trip"), { status: 409 });
+      if (trip.certificateCapacity === null)
+        throw Object.assign(
+          new Error("Certificate capacity not configured for this vessel — contact admin"),
+          { status: 422 },
+        );
+      if (newCapacity > trip.certificateCapacity)
+        throw Object.assign(
+          new Error(`Cannot exceed certificate capacity of ${trip.certificateCapacity}`),
+          { status: 422 },
+        );
 
-  if (newCapacity < sold) {
-    return NextResponse.json(
-      { error: `Cannot set capacity below tickets already sold (${sold})` },
-      { status: 422 },
-    );
-  }
+      const [{ sold }] = await tx
+        .select({ sold: sql<number>`cast(count(*) as int)` })
+        .from(tickets)
+        .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
+        .where(and(eq(bookingItems.tripId, tripId), eq(tickets.voided, false)));
 
-  const delta = newCapacity - trip.capacity;
-  const newSeatsRemaining = Math.max(0, trip.seatsRemaining + delta);
+      if (newCapacity < sold)
+        throw Object.assign(
+          new Error(`Cannot set capacity below tickets already sold (${sold})`),
+          { status: 422 },
+        );
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(trips)
-      .set({ capacity: newCapacity, seatsRemaining: newSeatsRemaining, updatedAt: new Date() })
-      .where(eq(trips.id, tripId));
+      const [updated] = await tx
+        .update(trips)
+        .set({
+          capacity: newCapacity,
+          seatsRemaining: sql<number>`GREATEST(0, ${trips.seatsRemaining} + ${newCapacity - trip.capacity})`,
+          updatedAt: new Date(),
+        })
+        .where(eq(trips.id, tripId))
+        .returning({ seatsRemaining: trips.seatsRemaining });
 
-    await tx.insert(capacityChanges).values({
-      tripId,
-      operatorId: staff.operatorId,
-      staffId: staff.staffId,
-      previousCapacity: trip.capacity,
-      newCapacity,
+      await tx.insert(capacityChanges).values({
+        tripId,
+        operatorId: staff.operatorId,
+        staffId: staff.staffId,
+        previousCapacity: trip.capacity,
+        newCapacity,
+      });
+
+      responseData = {
+        capacity: newCapacity,
+        seatsRemaining: updated.seatsRemaining,
+        certificateCapacity: trip.certificateCapacity,
+        ticketsSold: sold,
+      };
     });
-  });
+  } catch (err: unknown) {
+    const e = err as { message?: string; status?: number };
+    if (e.status) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw err;
+  }
 
   // TODO: fire standby notifications when capacity increases (item 26)
 
-  return NextResponse.json({
-    capacity: newCapacity,
-    seatsRemaining: newSeatsRemaining,
-    certificateCapacity: trip.certificateCapacity,
-    ticketsSold: sold,
-  });
+  return NextResponse.json(responseData!);
 }

@@ -1,30 +1,23 @@
 import { db } from "@/lib/db";
-import { bookings, bookingItems, tickets, trips, products, vessels, operators } from "@openboat/db";
+import { bookings, bookingItems, tickets, trips, products, vessels } from "@openboat/db";
 import { fmtTimeET } from "@/lib/format";
-import { eq } from "drizzle-orm";
-import { getOperatorIdFromHeaders } from "@/lib/operator";
+import { and, eq } from "drizzle-orm";
+import { getOperatorRecord } from "@/lib/operator";
 import { notFound } from "next/navigation";
 import { PrintButton } from "./PrintButton";
 
 export default async function BoardingPassPage({ params }: { params: { bookingId: string } }) {
-  const [booking] = await db.select().from(bookings).where(eq(bookings.id, params.bookingId));
+  const operator = await getOperatorRecord();
+  if (!operator) notFound();
+
+  const operatorName = operator.name ?? "Fishing Charter";
+
+  const [booking] = await db
+    .select()
+    .from(bookings)
+    .where(and(eq(bookings.id, params.bookingId), eq(bookings.operatorId, operator.id)));
 
   if (!booking) notFound();
-
-  const operatorId = await getOperatorIdFromHeaders();
-  const [operator] = operatorId
-    ? await db
-        .select({
-          name: operators.name,
-          phone: operators.phone,
-          dockAddress: operators.dockAddress,
-          dockMapsUrl: operators.dockMapsUrl,
-          termsUrl: operators.termsUrl,
-        })
-        .from(operators)
-        .where(eq(operators.id, operatorId))
-    : [];
-  const operatorName = operator?.name ?? "Fishing Charter";
 
   const ticketRows = await db
     .select({

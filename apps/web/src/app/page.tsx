@@ -1,9 +1,6 @@
 import { BookingCalendar, type Trip } from "@/components/BookingCalendar";
-import { db } from "@/lib/db";
-import { operators } from "@openboat/db";
-import { eq } from "drizzle-orm";
 import { dollars } from "@openboat/utils";
-import { getOperatorIdFromHeaders } from "@/lib/operator";
+import { getOperatorRecord } from "@/lib/operator";
 import Image from "next/image";
 
 function currentMonth() {
@@ -145,20 +142,14 @@ function HeroSection({
 export default async function HomePage() {
   const month = currentMonth();
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
-  const operatorId = await getOperatorIdFromHeaders();
-  const [res, operatorRow] = await Promise.all([
+  const [res, operator] = await Promise.all([
     fetch(`${baseUrl}/api/trips?month=${month}`, { cache: "no-store" }),
-    operatorId
-      ? db
-          .select({ name: operators.name, termsUrl: operators.termsUrl, dockAddress: operators.dockAddress })
-          .from(operators)
-          .where(eq(operators.id, operatorId))
-      : Promise.resolve([]),
+    getOperatorRecord(),
   ]);
   const trips: Trip[] = await res.json();
-  const operatorName = operatorRow[0]?.name ?? "Fishing Charter";
-  const termsUrl = operatorRow[0]?.termsUrl ?? null;
-  const dockAddress = operatorRow[0]?.dockAddress ?? null;
+  const operatorName = operator?.name ?? "Fishing Charter";
+  const termsUrl = operator?.termsUrl ?? null;
+  const dockAddress = operator?.dockAddress ?? null;
   const allPriceCents = trips.flatMap((t) => t.product.prices.map((p) => p.priceCents));
   const fromPrice = allPriceCents.length > 0 ? Math.min(...allPriceCents) : null;
 

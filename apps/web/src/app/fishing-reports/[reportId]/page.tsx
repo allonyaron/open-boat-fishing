@@ -2,24 +2,19 @@ import { db } from "@/lib/db";
 import { fishingReports, trips, vessels, products, operators } from "@openboat/db";
 import { fmtTimeET } from "@/lib/format";
 import { and, eq } from "drizzle-orm";
-import { getOperatorIdFromHeaders } from "@/lib/operator";
+import { getOperatorRecord } from "@/lib/operator";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Image from "next/image";
 
-export const revalidate = 300;
+// Force dynamic: ISR caches by path, not host — cross-tenant in centralized mode.
+export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ reportId: string }> };
 
 async function fetchReport(reportId: string) {
-  const operatorId = await getOperatorIdFromHeaders();
-  const [operator] = operatorId
-    ? await db
-        .select({ id: operators.id, name: operators.name })
-        .from(operators)
-        .where(eq(operators.id, operatorId))
-    : [];
+  const operator = await getOperatorRecord();
   if (!operator) return null;
 
   const [row] = await db

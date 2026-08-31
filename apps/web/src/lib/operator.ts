@@ -25,6 +25,7 @@ export type OperatorContext = Pick<
   typeof operators.$inferSelect,
   | "id"
   | "name"
+  | "slug"
   | "emailFrom"
   | "emailDomain"
   | "stripeAccountId"
@@ -34,11 +35,15 @@ export type OperatorContext = Pick<
   | "feeDisplay"
   | "cancelWindowHrs"
   | "settleGraceHrs"
+  | "phone"
+  | "dockAddress"
+  | "dockMapsUrl"
 >;
 
 const operatorContextFields = {
   id: operators.id,
   name: operators.name,
+  slug: operators.slug,
   emailFrom: operators.emailFrom,
   emailDomain: operators.emailDomain,
   stripeAccountId: operators.stripeAccountId,
@@ -48,6 +53,9 @@ const operatorContextFields = {
   feeDisplay: operators.feeDisplay,
   cancelWindowHrs: operators.cancelWindowHrs,
   settleGraceHrs: operators.settleGraceHrs,
+  phone: operators.phone,
+  dockAddress: operators.dockAddress,
+  dockMapsUrl: operators.dockMapsUrl,
 } as const;
 
 /**
@@ -57,6 +65,23 @@ const operatorContextFields = {
  */
 export async function getOperatorContext(req: NextRequest): Promise<OperatorContext | null> {
   const operatorId = getOperatorId(req);
+  if (!operatorId) return null;
+
+  const [operator] = await db
+    .select(operatorContextFields)
+    .from(operators)
+    .where(eq(operators.id, operatorId));
+
+  return operator ?? null;
+}
+
+/**
+ * Server-component variant of getOperatorContext — reads x-operator-id from
+ * next/headers instead of a NextRequest. Returns null if the header is missing
+ * or the operator row is not found.
+ */
+export async function getOperatorRecord(): Promise<OperatorContext | null> {
+  const operatorId = await getOperatorIdFromHeaders();
   if (!operatorId) return null;
 
   const [operator] = await db

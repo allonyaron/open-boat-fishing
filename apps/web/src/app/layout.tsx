@@ -3,10 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { Space_Grotesk, Plus_Jakarta_Sans, Manrope } from "next/font/google";
 import "./globals.css";
-import { db } from "@/lib/db";
-import { operators } from "@openboat/db";
-import { eq } from "drizzle-orm";
-import { getOperatorIdFromHeaders } from "@/lib/operator";
+import { getOperatorRecord } from "@/lib/operator";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import { DemoBanner } from "@/components/DemoBanner";
 
@@ -30,10 +27,7 @@ const manrope = Manrope({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const operatorId = await getOperatorIdFromHeaders();
-  const [operator] = operatorId
-    ? await db.select({ name: operators.name }).from(operators).where(eq(operators.id, operatorId))
-    : [];
+  const operator = await getOperatorRecord();
   const name = operator?.name ?? "Fishing Charter";
   return {
     title: name,

@@ -7,6 +7,9 @@ import { bookings, payments, rateLimits } from "@openboat/db";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+const BATCH_LIMIT = 50;
 
 // Fallback for legacy pending bookings created before holdExpiresAt was added.
 const LEGACY_STALE_MINUTES = 30;
@@ -48,7 +51,8 @@ export async function GET(req: NextRequest) {
           and(sql`${bookings.holdExpiresAt} is null`, lt(bookings.createdAt, legacyCutoff)),
         ),
       ),
-    );
+    )
+    .limit(BATCH_LIMIT);
 
   if (staleBookings.length === 0) {
     return NextResponse.json({ ok: true, cancelled: 0 });

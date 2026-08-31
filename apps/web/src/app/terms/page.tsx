@@ -1,13 +1,7 @@
-import { db } from "@/lib/db";
-import { operators } from "@openboat/db";
-import { eq } from "drizzle-orm";
-import { getOperatorIdFromHeaders } from "@/lib/operator";
+import { getOperatorRecord } from "@/lib/operator";
 
 export default async function TermsPage() {
-  const operatorId = await getOperatorIdFromHeaders();
-  const [operator] = operatorId
-    ? await db.select({ name: operators.name }).from(operators).where(eq(operators.id, operatorId))
-    : [];
+  const operator = await getOperatorRecord();
   const operatorName = operator?.name ?? "Fishing Charter";
 
   return (

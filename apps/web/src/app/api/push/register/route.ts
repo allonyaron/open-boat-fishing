@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { Expo } from "expo-server-sdk";
 import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/customer-auth";
-import { getOperatorId } from "@/lib/operator";
 import { pushTokens } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
 
@@ -25,8 +24,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid Expo push token" }, { status: 400 });
   }
 
-  const operatorId = getOperatorId(req);
-  if (!operatorId) return NextResponse.json({ error: "No operator" }, { status: 500 });
+  // Use operatorId from the verified token, not the header — token is HMAC-signed
+  // and can't be spoofed; the header is controlled by middleware but token is stronger.
+  const operatorId = customer.operatorId;
 
   await db
     .insert(pushTokens)
@@ -68,8 +68,7 @@ export async function DELETE(req: NextRequest) {
   const expoToken = searchParams.get("token");
   if (!expoToken) return NextResponse.json({ error: "Missing token" }, { status: 400 });
 
-  const operatorId = getOperatorId(req);
-  if (!operatorId) return NextResponse.json({ error: "No operator" }, { status: 500 });
+  const operatorId = customer.operatorId;
 
   await db
     .update(pushTokens)
