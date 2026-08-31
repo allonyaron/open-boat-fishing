@@ -21,6 +21,9 @@ const envSchema = z.object({
   // demo banner in the UI and gates the nightly data-reset cron. Any value other
   // than "true" is treated as off.
   DEMO_MODE: z.string().optional(),
+  // Public app URL used in transactional emails (e.g. boarding pass link).
+  // Omit trailing slash. Falls back to "" in environments where it is not set.
+  NEXT_PUBLIC_APP_URL: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
