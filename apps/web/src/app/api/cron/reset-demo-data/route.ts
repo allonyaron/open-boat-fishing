@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { getOperatorId } from "@/lib/operator";
 import { resetBookingActivity } from "@/lib/demo-reset";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const result = await db.transaction((tx) => resetBookingActivity(tx));
+  const operatorId = getOperatorId(req);
+  if (!operatorId) {
+    return NextResponse.json({ error: "No operator configured" }, { status: 500 });
+  }
+
+  const result = await db.transaction((tx) => resetBookingActivity(tx, operatorId));
 
   console.log(`Demo data reset — restored seat inventory on ${result.tripsReset} trips`);
   return NextResponse.json({ ok: true, tripsReset: result.tripsReset });

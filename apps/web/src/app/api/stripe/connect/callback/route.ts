@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac, timingSafeEqual } from "crypto";
 import { requireAdmin } from "@/lib/session";
+import { env } from "@/lib/env";
 import { db } from "@/lib/db";
 import { operators } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -8,6 +10,26 @@ export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
   const { session } = auth;
+
+  // Verify the CSRF state before processing anything else.
+  const state = req.nextUrl.searchParams.get("state");
+  const nonce = req.cookies.get("stripe_connect_nonce")?.value;
+
+  const errDest = new URL("/admin/settings", req.url);
+  errDest.searchParams.set("stripe", "error");
+
+  if (!state || !nonce) {
+    console.error(`Stripe Connect callback: missing state or nonce for operator ${session.operatorId}`);
+    return NextResponse.redirect(errDest);
+  }
+
+  const expected = createHmac("sha256", env.SESSION_SECRET).update(nonce).digest("hex");
+  const eBuf = Buffer.from(expected);
+  const sBuf = Buffer.from(state);
+  if (eBuf.length !== sBuf.length || !timingSafeEqual(eBuf, sBuf)) {
+    console.error(`Stripe Connect callback: invalid state for operator ${session.operatorId}`);
+    return NextResponse.redirect(errDest);
+  }
 
   const error = req.nextUrl.searchParams.get("error");
   const errorDesc = req.nextUrl.searchParams.get("error_description");
@@ -70,5 +92,7 @@ export async function GET(req: NextRequest) {
 
   const dest = new URL("/admin/settings", req.url);
   dest.searchParams.set("stripe", "connected");
-  return NextResponse.redirect(dest);
+  const successResponse = NextResponse.redirect(dest);
+  successResponse.cookies.delete("stripe_connect_nonce");
+  return successResponse;
 }

@@ -4,7 +4,17 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function clientIp(req: NextRequest): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+  // Prefer x-real-ip (set by Vercel's edge, not spoofable by clients).
+  // Fall back to the rightmost x-forwarded-for entry, which is the hop our
+  // own proxy appended — not the leftmost, which is client-controlled.
+  const real = req.headers.get("x-real-ip");
+  if (real) return real.trim();
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
+    return parts[parts.length - 1] ?? "unknown";
+  }
+  return "unknown";
 }
 
 /**

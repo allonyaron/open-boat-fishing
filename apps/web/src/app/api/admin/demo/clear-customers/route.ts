@@ -23,8 +23,8 @@ export async function POST(req: NextRequest) {
   }
 
   const result = await db.transaction(async (tx) => {
-    const bookingsResult = await resetBookingActivity(tx);
-    const customersResult = await resetCustomerAccounts(tx);
+    const bookingsResult = await resetBookingActivity(tx, auth.session.operatorId);
+    const customersResult = await resetCustomerAccounts(tx, auth.session.operatorId);
     return { ...bookingsResult, ...customersResult };
   });
 

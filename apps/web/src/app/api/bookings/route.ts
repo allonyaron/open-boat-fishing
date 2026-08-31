@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
         const tripRows = await tx
           .select()
           .from(trips)
-          .where(inArray(trips.id, tripIds))
+          .where(and(inArray(trips.id, tripIds), eq(trips.operatorId, operator.id)))
           .for("update");
 
         if (tripRows.length !== tripIds.length) {
@@ -130,8 +130,8 @@ export async function POST(req: NextRequest) {
 
         const [productPriceRows, schedulePriceRows, vesselRows] = await Promise.all([
           tx.select().from(productPrices).where(inArray(productPrices.productId, productIds)),
-          tx.select().from(schedulePrices).where(inArray(schedulePrices.scheduleId, scheduleIds)),
-          tx.select().from(vessels).where(inArray(vessels.id, vesselIds)),
+          tx.select().from(schedulePrices).where(and(inArray(schedulePrices.scheduleId, scheduleIds), eq(schedulePrices.operatorId, operator.id))),
+          tx.select().from(vessels).where(and(inArray(vessels.id, vesselIds), eq(vessels.operatorId, operator.id))),
         ]);
 
         // Schedule-level price takes precedence over product-level price

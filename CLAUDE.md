@@ -104,6 +104,43 @@ open-boat-fishing/
 
 See `docs/data-model.md` for full schema, `docs/booking-requirements.md` for booking flow decisions, `docs/incumbent-system.md` for migration context.
 
+## Architecture Invariants
+
+Hard rules — a violation is a bug, not a style issue. Use these as a checklist when reviewing any API route or DB query.
+
+**Operator isolation**
+- Operator ID comes only from `getOperatorId(req)` / `getOperatorContext(req)` (API routes) or `getOperatorRecord()` (Server Components) — never from the request body or query string.
+- Every query on a tenant table (`bookings`, `tickets`, `booking_items`, `trips`, `vessels`, `products`, `customers`, `magic_link_otps`, `schedules`, `fishing_reports`) must include `eq(table.operatorId, operatorId)`. A missing filter leaks data across operators.
+
+**Seat inventory**
+- Seat decrements must use SQL arithmetic inside a `FOR UPDATE` transaction: `sql\`${trips.seatsRemaining} - ${count}\`` after `.for("update")`. No read-check-write at the application level.
+- Seat restores (cancellation, Stripe PI failure) must also use SQL arithmetic in their own transaction.
+
+**Payments**
+- Use `stripe.paymentIntents.create()` with `transfer_data.destination` and `application_fee_amount`. Never `stripe.charges.create()`.
+- Stripe PI creation lives outside the booking transaction. On PI failure, restore seats and cancel the booking in a new atomic transaction before returning an error.
+
+**Auth and token audiences**
+- Customer tokens (`aud:"customer"`) and mate tokens (`aud:"mate"`) are verified by separate functions (`verifyCustomerToken` / `verifyMateToken`). Never use one to verify the other.
+- `customers` and `staff` are separate tables with separate auth paths. Never query one as a fallback for the other.
+- Every auth endpoint (`/api/auth/*`, `/api/mate/auth`) must call `checkRateLimit()` as the first operation, before any DB access.
+
+**Webhook integrity**
+- The Stripe webhook handler must call `stripe.webhooks.constructEvent()` with the raw (un-parsed) request body before reading any event data.
+- Guard against duplicate delivery: check current booking/ticket status before applying any state transition. An already-cancelled booking must not be re-cancelled.
+
+**Cron security**
+- Every `/api/cron/*` route must verify `Authorization: Bearer ${CRON_SECRET}` before any business logic. Return 401 immediately if missing or wrong.
+
+**Cancellation atomicity**
+- Full cancellation is one DB transaction: void all tickets, set `fee_status = 'reversed'` on all fees, restore seats via SQL arithmetic, set `booking.status = 'cancelled'`. No partial cancellation path.
+
+**Fee lifecycle**
+- Fees are inserted as `fee_status = 'held'`. Only the fee-earn cron (or lazy earn on revenue report render) may transition them to `'earned'`. Revenue queries must filter `WHERE fee_status = 'earned'` — never count `'held'` fees.
+
+**QR codes** *(pre-launch gap — tracking in Known Tech Debt)*
+- `tickets.qrPayload` must be an HMAC of `ticketId + per-operator secret`, not a bare UUID. Currently bare UUIDs. Must be fixed and the mate app updated to validate signatures before go-live.
+
 ## Commands
 
 ```bash
