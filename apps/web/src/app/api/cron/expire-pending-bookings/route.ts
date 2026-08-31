@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { sendPushToEmails } from "@/lib/push";
-import { bookings, bookingItems, tickets, payments, trips, rateLimits } from "@openboat/db";
+import { cancelPendingBooking } from "@/lib/bookings/cancel";
+import { bookings, payments, rateLimits } from "@openboat/db";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -84,51 +85,12 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const result = await db.transaction(async (tx) => {
-        // Re-fetch with FOR UPDATE to close the race window between the initial
-        // stale-booking SELECT (outside this transaction) and now. If the webhook
-        // handler processed this booking in the interim, its status will no longer
-        // be "pending" and we skip rather than double-restoring seats.
-        const [fresh] = await tx
-          .select({ status: bookings.status })
-          .from(bookings)
-          .where(eq(bookings.id, booking.id))
-          .for("update");
+      // cancelPendingBooking re-fetches with FOR UPDATE inside its transaction,
+      // closing the race window between the stale-booking SELECT above and now.
+      // Returns null if a concurrent process already handled this booking.
+      const result = await cancelPendingBooking(booking.id);
 
-        if (!fresh || fresh.status !== "pending") {
-          return { skipped: true };
-        }
-
-        const itemRows = await tx
-          .select({ id: bookingItems.id, tripId: bookingItems.tripId })
-          .from(bookingItems)
-          .where(eq(bookingItems.bookingId, booking.id));
-
-        // Restore seats using the same relative-increment pattern as the
-        // Payment Intent failure rollback in POST /api/bookings
-        for (const item of itemRows) {
-          const [{ ticketCount }] = await tx
-            .select({ ticketCount: sql<number>`cast(count(*) as int)` })
-            .from(tickets)
-            .where(eq(tickets.bookingItemId, item.id));
-
-          if (ticketCount > 0) {
-            await tx
-              .update(trips)
-              .set({ seatsRemaining: sql`${trips.seatsRemaining} + ${ticketCount}` })
-              .where(eq(trips.id, item.tripId));
-          }
-        }
-
-        await tx
-          .update(bookings)
-          .set({ status: "cancelled", updatedAt: new Date() })
-          .where(eq(bookings.id, booking.id));
-
-        return { skipped: false };
-      });
-
-      if (result.skipped) {
+      if (!result) {
         console.log(`Skipped booking ${booking.id} — already handled by another process`);
         continue;
       }

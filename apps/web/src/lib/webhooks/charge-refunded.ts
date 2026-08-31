@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
-import { bookings, bookingItems, tickets, payments, trips } from "@openboat/db";
-import { eq, inArray, sql } from "drizzle-orm";
+import { payments } from "@openboat/db";
+import { eq } from "drizzle-orm";
+import { cancelConfirmedBooking } from "@/lib/bookings/cancel";
 import type Stripe from "stripe";
 
 // Void tickets and cancel booking when a charge is fully refunded externally
@@ -31,47 +32,7 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
     return;
   }
 
-  await db.transaction(async (tx) => {
-    const [fresh] = await tx
-      .select()
-      .from(bookings)
-      .where(eq(bookings.id, payment.bookingId))
-      .for("update");
-
-    if (!fresh || fresh.status !== "confirmed") return;
-
-    const itemRows = await tx
-      .select({ id: bookingItems.id, tripId: bookingItems.tripId })
-      .from(bookingItems)
-      .where(eq(bookingItems.bookingId, payment.bookingId));
-
-    for (const item of itemRows) {
-      const [{ ticketCount }] = await tx
-        .select({ ticketCount: sql<number>`cast(count(*) as int)` })
-        .from(tickets)
-        .where(eq(tickets.bookingItemId, item.id));
-
-      if (ticketCount > 0) {
-        await tx
-          .update(trips)
-          .set({ seatsRemaining: sql`${trips.seatsRemaining} + ${ticketCount}` })
-          .where(eq(trips.id, item.tripId));
-      }
-    }
-
-    const itemIds = itemRows.map((i) => i.id);
-    if (itemIds.length > 0) {
-      await tx
-        .update(tickets)
-        .set({ voided: true, feeStatus: "reversed" })
-        .where(inArray(tickets.bookingItemId, itemIds));
-    }
-
-    await tx
-      .update(bookings)
-      .set({ status: "cancelled", updatedAt: new Date() })
-      .where(eq(bookings.id, payment.bookingId));
-  });
+  await cancelConfirmedBooking(payment.bookingId);
 
   console.log(`Booking cancelled on full refund: charge ${charge.id}`);
 }
