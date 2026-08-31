@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { db } from "@/lib/db";
-import { operators, magicLinkOtps } from "@openboat/db";
+import { magicLinkOtps } from "@openboat/db";
 import { sendOtpEmail } from "@/lib/email";
-import { eq } from "drizzle-orm";
-import { getOperatorId } from "@/lib/operator";
+import { getOperatorContext } from "@/lib/operator";
 import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
@@ -27,10 +26,7 @@ export async function POST(req: NextRequest) {
     return tooManyRequests(Math.max(ipRl.retryAfterSec, emailRl.retryAfterSec));
   }
 
-  const operatorId = getOperatorId(req);
-  if (!operatorId) return NextResponse.json({ error: "No operator" }, { status: 500 });
-
-  const [operator] = await db.select().from(operators).where(eq(operators.id, operatorId));
+  const operator = await getOperatorContext(req);
   if (!operator) return NextResponse.json({ error: "No operator" }, { status: 500 });
 
   // Generate 6-digit OTP
