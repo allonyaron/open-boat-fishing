@@ -10,9 +10,11 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(32),
   STRIPE_SECRET_KEY: z.string().min(1),
   STRIPE_WEBHOOK_SECRET: z.string().min(1),
-  STRIPE_CONNECTED_ACCOUNT_ID: z.string().min(1),
   CRON_SECRET: z.string().min(1),
   RESEND_API_KEY: z.string().min(1),
+  // Platform Connect client_id (ca_xxx). Required in centralized mode to generate
+  // the Stripe OAuth authorization URL. Not needed in single-deploy mode.
+  STRIPE_CLIENT_ID: z.string().optional(),
   // Marks this deployment as the public demo (openboatfishing.com). Enables the
   // demo banner in the UI and gates the nightly data-reset cron. Any value other
   // than "true" is treated as off.

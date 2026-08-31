@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 type Op = {
   name: string;
@@ -15,6 +16,8 @@ type Op = {
   feeDisplay: "itemized" | "folded";
   cancelWindowHrs: number;
   settleGraceHrs: number;
+  stripeAccountId: string | null;
+  stripeOnboardingComplete: boolean;
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -35,6 +38,8 @@ export default function OperatorSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const searchParams = useSearchParams();
+  const stripeStatus = searchParams.get("stripe");
 
   useEffect(() => {
     fetch("/api/admin/settings/operator")
@@ -155,6 +160,37 @@ export default function OperatorSettingsPage() {
             Cancellation window: how many hours before departure a customer can self-cancel.
             Settlement grace: how many hours after departure before fees are marked earned.
           </p>
+        </div>
+
+        <div className="px-6 py-5 grid gap-4">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Stripe</h2>
+          {stripeStatus === "connected" && (
+            <p className="text-sm text-green-600">Stripe account connected successfully.</p>
+          )}
+          {stripeStatus === "error" && (
+            <p className="text-sm text-red-600">Something went wrong connecting Stripe. Try again.</p>
+          )}
+          {stripeStatus === "cancelled" && (
+            <p className="text-sm text-gray-500">Stripe connection cancelled.</p>
+          )}
+          <div className="flex items-center justify-between">
+            <div>
+              {form.stripeOnboardingComplete && form.stripeAccountId ? (
+                <>
+                  <p className="text-sm font-medium text-green-700">Connected</p>
+                  <p className="text-xs text-gray-400 font-mono mt-0.5">{form.stripeAccountId}</p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">No Stripe account connected.</p>
+              )}
+            </div>
+            <a
+              href="/api/stripe/connect/start"
+              className="bg-[#635BFF] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#4F46E5] transition-colors"
+            >
+              {form.stripeOnboardingComplete ? "Reconnect Stripe" : "Connect Stripe"}
+            </a>
+          </div>
         </div>
 
         <div className="px-6 py-4 flex items-center justify-between">
