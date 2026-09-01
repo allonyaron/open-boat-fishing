@@ -30,7 +30,7 @@ const BOOKING_RATE_MAX = 20; // per IP per 15 min
 const bookingBodySchema = z.object({
   customerEmail: z.string().email().max(254).transform((s) => s.toLowerCase().trim()),
   customerName: z.string().max(100).nullish(),
-  customerPhone: z.string().max(20).optional(),
+  customerPhone: z.string().max(20).nullish(),
   cart: z
     .array(
       z.object({
