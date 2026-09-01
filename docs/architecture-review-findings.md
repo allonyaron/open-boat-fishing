@@ -141,32 +141,32 @@ These are exploitable on a live centralized deployment with no authentication re
   `apps/web/src/app/api/bookings/route.ts:65,370-371`
   Fix: prefix all rate-limit keys with `operatorId` in centralized mode.
 
-- [ ] **`charge.refunded` silently drops partial refunds**
+- [x] **`charge.refunded` silently drops partial refunds**
   Dashboard-issued partial refunds are logged and ignored. The ticket stays valid and boardable; the fee remains `held` and will later be counted as `earned`.
   `apps/web/src/lib/webhooks/charge-refunded.ts:12-17`
   Fix: on partial refund, flag the booking `needs_review` and alert the operator.
 
-- [ ] **Full refund via `charge.refunded` doesn't reverse the `application_fee` in Stripe**
+- [x] **Full refund via `charge.refunded` doesn't reverse the `application_fee` in Stripe**
   Local `fee_status` is set to `reversed` but `stripe.applicationFees.createRefund()` is never called. Platform keeps the fee on a refunded charge.
   `apps/web/src/lib/webhooks/charge-refunded.ts:35`
   Fix: call `stripe.applicationFees.createRefund(applicationFeeId)` before flipping local state.
 
-- [ ] **`payment_intent.succeeded` after a cancelled booking logs but doesn't auto-refund**
+- [x] **`payment_intent.succeeded` after a cancelled booking logs but doesn't auto-refund**
   The customer has paid; the booking is already cancelled; no refund is issued automatically.
   `apps/web/src/lib/webhooks/payment-intent-succeeded.ts:57-62`
   Fix: call `stripe.refunds.create({ payment_intent: pi.id, reverse_transfer: true, refund_application_fee: true })` in this branch.
 
-- [ ] **`charge.dispute.created` handler is not wrapped in a transaction and lacks operator scope**
+- [x] **`charge.dispute.created` handler is not wrapped in a transaction and lacks operator scope**
   Three sequential writes with no transaction — a crash between steps leaves tickets valid while a dispute is open. Queries also have no `operatorId` filter.
   `apps/web/src/lib/webhooks/charge-dispute-created.ts:17-38`
   Fix: wrap in a single transaction; add `operatorId` filter; flip `feeStatus` to `reversed` on voided tickets.
 
-- [ ] **Per-ticket admin refund is not atomic**
+- [x] **Per-ticket admin refund is not atomic**
   Two Stripe API calls happen before the DB transaction. A failure between them leaves a refunded customer with a still-valid boardable ticket.
   `apps/web/src/app/api/admin/tickets/[ticketId]/refund/route.ts:48-80`
   Fix: mark ticket voided + restore seat in the DB first, then call Stripe; on Stripe failure, alert the operator with the ledger row visible.
 
-- [ ] **Trip cancellation rolls forward on partial Stripe-refund failure**
+- [x] **Trip cancellation rolls forward on partial Stripe-refund failure**
   If refund #3 fails, refunds #1 and #2 have already gone through, but no booking rows are updated. A retry double-refunds.
   `apps/web/src/app/api/admin/trips/[tripId]/cancel/route.ts:81-108`
   Fix: persist each refund ID to a `refund_ledger` table as it succeeds, so retries are idempotent.
@@ -203,7 +203,7 @@ These are exploitable on a live centralized deployment with no authentication re
   `apps/web/src/app/api/bookings/route.ts:88-93`
   Fix: reject duplicate `tripId`s after Zod parse with a 400.
 
-- [ ] **`OPERATOR_ID` env var not validated against DB at boot**
+- [x] **`OPERATOR_ID` env var not validated against DB at boot**
   A stale or mistyped `OPERATOR_ID` causes every `getOperatorContext()` call to return `null` → silent 500s or blank pages rather than a fast boot failure.
   `apps/web/src/middleware.ts:30-33`
   Fix: in `instrumentation.ts`, if `OPERATOR_ID` is set, do a one-time `SELECT id FROM operators WHERE id = $1` and throw at boot if missing.
@@ -213,12 +213,12 @@ These are exploitable on a live centralized deployment with no authentication re
   `apps/web/src/middleware.ts:36`
   Fix: `.toLowerCase()` on the parsed hostname.
 
-- [ ] **`/api/platform/operators` body is not Zod-validated**
+- [x] **`/api/platform/operators` body is not Zod-validated**
   Operator creation uses an untyped cast instead of a schema. `domain`, `emailFrom`, `emailDomain`, and `slug` are not validated for shape or uniqueness.
   `apps/web/src/app/api/platform/operators/route.ts:38-103`
   Fix: add a Zod schema enforcing hostname regex on `domain`/`emailDomain`, email format on `emailFrom`, max lengths on all fields.
 
-- [ ] **Push notification in expiry cron is fire-and-forget — may be dropped on Vercel**
+- [x] **Push notification in expiry cron is fire-and-forget — may be dropped on Vercel**
   `sendPushToEmails(...).catch(...)` is not awaited with `waitUntil()`. Vercel freezes the function context on response, dropping in-flight promises.
   `apps/web/src/app/api/cron/expire-pending-bookings/route.ts:102-111`
   Fix: wrap in `waitUntil()` from `@vercel/functions`.
@@ -227,7 +227,7 @@ These are exploitable on a live centralized deployment with no authentication re
   `trip-reminders` calls `sendPushToEmails` per trip with `trip.operatorId` — but if `push.ts` doesn't scope the `push_tokens` query by operator, push notifications leak across tenants. Elevate to Critical if unscoped.
   `apps/web/src/lib/push.ts`
 
-- [ ] **PIN and OTP-verify rate limits have no IP fallback**
+- [x] **PIN and OTP-verify rate limits have no IP fallback**
   `mate-auth` and `otp-verify` are keyed by email only. An attacker can parallelize across many emails from one host with no IP-level pressure.
   `apps/web/src/app/api/mate/auth/route.ts:20`
   `apps/web/src/app/api/auth/verify/route.ts:21`
