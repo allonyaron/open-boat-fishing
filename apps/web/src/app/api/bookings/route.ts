@@ -28,7 +28,7 @@ const BOOKING_RATE_WINDOW_MS = 15 * 60 * 1000;
 const BOOKING_RATE_MAX = 20; // per IP per 15 min
 
 const bookingBodySchema = z.object({
-  customerEmail: z.string().email().max(254),
+  customerEmail: z.string().email().max(254).transform((s) => s.toLowerCase().trim()),
   customerName: z.string().max(100).nullish(),
   customerPhone: z.string().max(20).optional(),
   cart: z
@@ -47,7 +47,11 @@ const bookingBodySchema = z.object({
       }),
     )
     .min(1)
-    .max(10),
+    .max(10)
+    .refine(
+      (items) => new Set(items.map((i) => i.tripId)).size === items.length,
+      { message: "Duplicate tripId in cart" },
+    ),
 });
 
 async function enforceMinDelay(startMs: number) {
@@ -63,7 +67,8 @@ function confirmationCode() {
 
 export async function POST(req: NextRequest) {
   const ip = clientIp(req);
-  const rl = await checkRateLimit(`booking-create:${ip}`, BOOKING_RATE_MAX, BOOKING_RATE_WINDOW_MS);
+  const opId = getOperatorId(req) ?? "unknown";
+  const rl = await checkRateLimit(`booking-create:${opId}:${ip}`, BOOKING_RATE_MAX, BOOKING_RATE_WINDOW_MS);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
   const rawBody = await req.json().catch(() => null);
@@ -365,8 +370,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing email or code" }, { status: 400 });
   }
 
-  const emailKey = `wallet-lookup:email:${email}`;
-  const ipKey = `wallet-lookup:ip:${clientIp(req)}`;
+  const opId = getOperatorId(req) ?? "unknown";
+  const emailKey = `wallet-lookup:${opId}:email:${email}`;
+  const ipKey = `wallet-lookup:${opId}:ip:${clientIp(req)}`;
 
   const [emailCheck, ipCheck] = await Promise.all([
     checkRateLimit(emailKey, WALLET_MAX_ATTEMPTS, WALLET_WINDOW_MS),
@@ -405,7 +411,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 
-  await Promise.all([resetRateLimit(emailKey), resetRateLimit(ipKey)]);
+  // Reset only the email bucket on success so a valid pair can't exhaust the IP budget for others.
+  await resetRateLimit(emailKey);
 
   const itemRows = await db
     .select()

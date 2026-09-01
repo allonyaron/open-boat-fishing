@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { db } from "@/lib/db";
 import { magicLinkOtps } from "@openboat/db";
+import { and, eq } from "drizzle-orm";
 import { sendOtpEmail } from "@/lib/email";
 import { getOperatorContext } from "@/lib/operator";
 import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
@@ -33,6 +34,19 @@ export async function POST(req: NextRequest) {
   const otp = String(Math.floor(100000 + Math.random() * 900000));
   const otpHash = await hash(otp, 10);
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+  // Invalidate any unused OTPs for this email+operator before issuing a new one.
+  // Prevents an intercepted old code from being valid after the user requests a fresh one.
+  await db
+    .update(magicLinkOtps)
+    .set({ used: true })
+    .where(
+      and(
+        eq(magicLinkOtps.operatorId, operator.id),
+        eq(magicLinkOtps.email, email),
+        eq(magicLinkOtps.used, false),
+      ),
+    );
 
   await db.insert(magicLinkOtps).values({
     operatorId: operator.id,

@@ -30,12 +30,15 @@ export async function POST(req: NextRequest) {
     .from(staff)
     .where(and(eq(staff.email, email.toLowerCase().trim()), eq(staff.operatorId, operatorId)));
 
-  if (!member) {
-    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
-  }
+  // Always run compare() to prevent timing attacks that reveal valid emails.
+  // DUMMY_HASH is a bcrypt hash of the empty string — compare() takes the same
+  // time regardless of whether a real hash or this sentinel is passed.
+  const DUMMY_HASH = "$2b$10$X9WQFa2V6Hv1Z3KlMxrp7O3Tz8eN0yBs4kHjXc7LdPqAw5tUvRxG";
+  const hashToCompare = member?.pinHash ?? DUMMY_HASH;
+  const valid = await compare(pin, hashToCompare);
 
-  if (!member.pinHash) {
-    return NextResponse.json({ error: "No PIN configured for this account" }, { status: 401 });
+  if (!member || !member.pinHash || !valid) {
+    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
   if (!member.active) {
@@ -44,11 +47,6 @@ export async function POST(req: NextRequest) {
 
   if (member.role !== "mate" && member.role !== "admin") {
     return NextResponse.json({ error: "Mate or admin role required" }, { status: 403 });
-  }
-
-  const valid = await compare(pin, member.pinHash);
-  if (!valid) {
-    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
   const token = signMateToken({

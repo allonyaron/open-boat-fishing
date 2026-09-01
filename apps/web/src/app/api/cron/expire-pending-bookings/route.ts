@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { sendPushToEmails } from "@/lib/push";
 import { cancelPendingBooking } from "@/lib/bookings/cancel";
+import { verifyCronAuth } from "@/lib/cron-auth";
 import { bookings, payments, rateLimits } from "@openboat/db";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 
@@ -21,8 +22,7 @@ const LEGACY_STALE_MINUTES = 30;
 //   1. No PI ever created (server crash between DB commit and stripe.paymentIntents.create)
 //   2. PI created but customer abandoned; webhook hasn't fired yet
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!verifyCronAuth(req.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

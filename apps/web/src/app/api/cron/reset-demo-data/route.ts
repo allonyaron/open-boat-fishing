@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getOperatorId } from "@/lib/operator";
+import { verifyCronAuth } from "@/lib/cron-auth";
 import { resetBookingActivity } from "@/lib/demo-reset";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +16,7 @@ export const dynamic = "force-dynamic";
 // (safety net so this endpoint is a no-op on any accidental deploy to a real
 // operator's environment).
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronAuth(req.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

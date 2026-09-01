@@ -29,7 +29,12 @@ export async function POST(req: NextRequest) {
     .from(staff)
     .where(and(eq(staff.email, email.toLowerCase().trim()), eq(staff.operatorId, operatorId)));
 
-  if (!member || !member.passwordHash) {
+  // Always run compare() to prevent timing attacks that reveal valid emails.
+  const DUMMY_HASH = "$2b$10$X9WQFa2V6Hv1Z3KlMxrp7O3Tz8eN0yBs4kHjXc7LdPqAw5tUvRxG";
+  const hashToCompare = member?.passwordHash ?? DUMMY_HASH;
+  const valid = await compare(password, hashToCompare);
+
+  if (!member || !member.passwordHash || !valid) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
@@ -39,11 +44,6 @@ export async function POST(req: NextRequest) {
 
   if (!member.active) {
     return NextResponse.json({ error: "Account disabled" }, { status: 403 });
-  }
-
-  const valid = await compare(password, member.passwordHash);
-  if (!valid) {
-    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
   const session = await getSession();
