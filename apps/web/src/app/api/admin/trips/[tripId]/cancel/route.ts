@@ -90,7 +90,9 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
       if (!plan.fullRefund) {
         refundParams.amount = plan.refundCents;
       }
-      await stripe.refunds.create(refundParams);
+      await stripe.refunds.create(refundParams, {
+        idempotencyKey: `refund:${plan.booking.id}:${tripId}`,
+      });
     } catch (err) {
       console.error(`Stripe refund failed for booking ${plan.booking.id}:`, err);
       refundErrors.push({ bookingId: plan.booking.id, error: String(err) });

@@ -173,6 +173,7 @@ describe("POST /api/admin/trips/[tripId]/cancel", () => {
 
     expect(stripe.refunds.create).toHaveBeenCalledWith(
       expect.objectContaining({ payment_intent: expect.stringContaining("pi_test_") }),
+      expect.objectContaining({ idempotencyKey: expect.stringContaining("refund:") }),
     );
 
     const [booking] = await testDb

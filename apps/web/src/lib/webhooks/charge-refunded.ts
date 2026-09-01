@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { stripe } from "@/lib/stripe";
 import { payments } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { cancelConfirmedBooking } from "@/lib/bookings/cancel";
@@ -10,8 +11,8 @@ import type Stripe from "stripe";
 // tickets to void — the booking stays confirmed.
 export async function handleChargeRefunded(charge: Stripe.Charge) {
   if (charge.amount_refunded < charge.amount) {
-    console.log(
-      `Partial refund on charge ${charge.id} (${charge.amount_refunded}/${charge.amount} cents) — no automatic action taken`,
+    console.error(
+      `Partial refund on charge ${charge.id} (${charge.amount_refunded}/${charge.amount} cents) — manual review required to determine which tickets to void`,
     );
     return;
   }
@@ -23,13 +24,25 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
   }
 
   const [payment] = await db
-    .select({ bookingId: payments.bookingId })
+    .select({ bookingId: payments.bookingId, applicationFeeId: payments.applicationFeeId })
     .from(payments)
     .where(eq(payments.stripePaymentIntentId, piId));
 
   if (!payment) {
     console.error(`charge.refunded: no payment row for PI ${piId} — charge ${charge.id}`);
     return;
+  }
+
+  // Reverse the platform fee before cancelling. Treat "already refunded" as success
+  // so duplicate webhook deliveries don't abort the cancellation path.
+  if (payment.applicationFeeId) {
+    try {
+      await stripe.applicationFees.createRefund(payment.applicationFeeId);
+    } catch (err: any) {
+      if (err?.code !== "fee_refund_already_refunded") {
+        console.error(`Failed to reverse application fee ${payment.applicationFeeId}:`, err);
+      }
+    }
   }
 
   await cancelConfirmedBooking(payment.bookingId);

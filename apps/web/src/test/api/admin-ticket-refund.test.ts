@@ -142,6 +142,7 @@ describe("POST /api/admin/tickets/[ticketId]/refund", () => {
 
     expect(stripe.refunds.create).toHaveBeenCalledWith(
       expect.objectContaining({ payment_intent: expect.stringContaining("pi_test_") }),
+      expect.objectContaining({ idempotencyKey: expect.stringContaining("ticket-refund:") }),
     );
 
     const [updatedTicket] = await testDb

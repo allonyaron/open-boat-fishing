@@ -45,18 +45,23 @@ export async function POST(req: NextRequest, { params }: { params: { ticketId: s
   const hasExactFee = !!payment.applicationFeeId;
 
   try {
-    await stripe.refunds.create({
-      payment_intent: booking.stripePaymentIntentId,
-      amount: ticket.priceCents,
-      reverse_transfer: true,
-      refund_application_fee: !hasExactFee,
-      metadata: { reason: "admin_ticket_refund", ticketId, bookingId: booking.id },
-    });
+    await stripe.refunds.create(
+      {
+        payment_intent: booking.stripePaymentIntentId,
+        amount: ticket.priceCents,
+        reverse_transfer: true,
+        refund_application_fee: !hasExactFee,
+        metadata: { reason: "admin_ticket_refund", ticketId, bookingId: booking.id },
+      },
+      { idempotencyKey: `ticket-refund:${ticketId}` },
+    );
 
     if (hasExactFee) {
-      await stripe.applicationFees.createRefund(payment.applicationFeeId!, {
-        amount: ticket.feeAmountCents,
-      });
+      await stripe.applicationFees.createRefund(
+        payment.applicationFeeId!,
+        { amount: ticket.feeAmountCents },
+        { idempotencyKey: `ticket-fee-refund:${ticketId}` },
+      );
     }
   } catch (err) {
     console.error("Stripe refund failed for ticket", ticketId, err);

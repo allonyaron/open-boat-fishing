@@ -52,13 +52,12 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
     // Safety net: if the expire-pending-bookings cron somehow cancelled this
     // booking before the webhook arrived (PI status check gap), do not confirm
     // it — seats have already been restored and re-confirming would overbook.
-    // This should not happen after the cron's succeeded/processing guard, but
-    // requires manual investigation if it does (customer paid, booking cancelled).
+    // Auto-refund the PI so the customer isn't charged for a cancelled booking.
     if (fresh.status === "cancelled") {
       console.error(
-        `payment_intent.succeeded: booking ${bookingId} is already cancelled — PI ${pi.id} succeeded but cron cancelled first. Manual refund investigation required.`,
+        `payment_intent.succeeded: booking ${bookingId} is already cancelled — PI ${pi.id} succeeded but cron cancelled first. Issuing auto-refund.`,
       );
-      return null;
+      return "CANCELLED" as const;
     }
 
     // Confirm the booking (seats were already decremented at booking creation)
@@ -82,6 +81,20 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
   });
 
   if (!booking) return;
+
+  if (booking === "CANCELLED") {
+    try {
+      await stripe.refunds.create({
+        payment_intent: pi.id,
+        reverse_transfer: true,
+        refund_application_fee: true,
+      });
+      console.log(`Auto-refunded PI ${pi.id} — booking ${bookingId} was already cancelled when payment arrived`);
+    } catch (err) {
+      console.error(`Failed to auto-refund PI ${pi.id} for cancelled booking ${bookingId}:`, err);
+    }
+    return;
+  }
 
   // waitUntil keeps the serverless function alive until background tasks
   // complete, even after the response has been returned to Stripe.
