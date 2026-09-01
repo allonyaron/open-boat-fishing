@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
+import { z } from "zod";
 import { db } from "@/lib/db";
 import { operators, domains, staff } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { requirePlatform } from "@/lib/platform-session";
+
+const hostnameRe = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
+
+const createOperatorSchema = z.object({
+  name: z.string().min(1).max(100),
+  domain: z.string().regex(hostnameRe, "Invalid domain format"),
+  emailFrom: z.string().email(),
+  emailDomain: z.string().regex(hostnameRe, "Invalid email domain format"),
+  adminName: z.string().min(1).max(100),
+  adminEmail: z.string().email(),
+});
 
 function slugify(name: string): string {
   return name
@@ -39,19 +51,14 @@ export async function POST(req: NextRequest) {
   const auth = await requirePlatform(req);
   if (auth instanceof NextResponse) return auth;
 
-  const body = await req.json();
-  const { name, domain, emailFrom, emailDomain, adminName, adminEmail } = body as {
-    name: string;
-    domain: string;
-    emailFrom: string;
-    emailDomain: string;
-    adminName: string;
-    adminEmail: string;
-  };
-
-  if (!name || !domain || !emailFrom || !emailDomain || !adminName || !adminEmail) {
-    return NextResponse.json({ error: "All fields are required" }, { status: 400 });
+  const parsed = createOperatorSchema.safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid request", detail: parsed.error.flatten().fieldErrors },
+      { status: 400 },
+    );
   }
+  const { name, domain, emailFrom, emailDomain, adminName, adminEmail } = parsed.data;
 
   // Ensure domain is unique
   const [existingDomain] = await db

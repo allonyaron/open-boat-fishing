@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { staff } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
 import { signMateToken } from "@/lib/mate-auth";
-import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { getOperatorId } from "@/lib/operator";
 
 export async function POST(req: NextRequest) {
@@ -17,8 +17,15 @@ export async function POST(req: NextRequest) {
 
   // 4-digit PIN = 10,000 combinations. 5 per 15 min caps a sustained attack
   // to ~480 guesses/day — ~21 days to brute-force without a lockout signal.
-  const rl = await checkRateLimit(`mate-auth:${email.toLowerCase().trim()}`, 5, 15 * 60 * 1000);
-  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
+  // Coarse IP bucket prevents parallelising across many email addresses from one host.
+  const ip = clientIp(req);
+  const [ipRl, emailRl] = await Promise.all([
+    checkRateLimit(`mate-auth:ip:${ip}`, 20, 15 * 60 * 1000),
+    checkRateLimit(`mate-auth:${email.toLowerCase().trim()}`, 5, 15 * 60 * 1000),
+  ]);
+  if (!ipRl.allowed || !emailRl.allowed) {
+    return tooManyRequests(Math.max(ipRl.retryAfterSec, emailRl.retryAfterSec));
+  }
 
   const operatorId = getOperatorId(req);
   if (!operatorId) {

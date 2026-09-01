@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { sendPushToEmails } from "@/lib/push";
@@ -103,16 +104,18 @@ export async function GET(req: NextRequest) {
       cancelled++;
 
       if (booking.customerEmail) {
-        sendPushToEmails(
-          booking.operatorId,
-          [booking.customerEmail],
-          {
-            title: "Booking Expired",
-            body: `Your reservation (${booking.confirmationCode}) was released because payment wasn't completed.`,
-            data: { type: "booking_expired", bookingId: booking.id },
-          },
-          "cancellations",
-        ).catch((err) => console.error("Push error on booking expiry:", err));
+        waitUntil(
+          sendPushToEmails(
+            booking.operatorId,
+            [booking.customerEmail],
+            {
+              title: "Booking Expired",
+              body: `Your reservation (${booking.confirmationCode}) was released because payment wasn't completed.`,
+              data: { type: "booking_expired", bookingId: booking.id },
+            },
+            "cancellations",
+          ).catch((err) => console.error("Push error on booking expiry:", err)),
+        );
       }
     } catch (err) {
       console.error(`Failed to expire booking ${booking.id}:`, err);
