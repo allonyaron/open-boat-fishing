@@ -35,7 +35,7 @@ See `docs/build-status.md` for the full per-step build narrative.
 - Weekend vs. weekday pricing not modelled (schema change needed)
 - `CRON_SECRET` env var must be added to Vercel before deploying (value in `apps/web/.env.local`)
 - EAS build + store submission not done (configure Apple IDs in `eas.json submit.consumer`, then `eas submit`)
-- `expire-pending-bookings` cron runs every 10 minutes — requires Vercel Pro. On Hobby plan, change schedule to `0 * * * *` (hourly) and widen `STALE_MINUTES` to 90
+- Crons are set to daily in `vercel.json` for Vercel Hobby (max 2, once/day). Upgrade to Pro to restore `*/10 * * * *` expiry, hourly reminders, and the `reset-demo-data` cron.
 
 ## Known Tech Debt (pre-launch, not blocking dev)
 

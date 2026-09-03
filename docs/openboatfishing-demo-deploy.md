@@ -56,7 +56,7 @@ The demo runs in Stripe test mode so anyone can book with card `4242 4242 4242 4
   - Framework preset: **Next.js**
   - Root directory: `apps/web`
   - Build command: default (`next build`)
-- **Upgrade the project's team to Pro** — required because the `expire-pending-bookings` cron runs every 10 minutes (Hobby plan restricts to hourly)
+- Vercel Hobby plan works for this demo deployment (2 daily crons — see cron schedule below). Upgrade to Pro later to restore hourly expiry and full-day reminder coverage.
 - Point DNS: add `openboatfishing.com` and `www.openboatfishing.com` in Vercel → domain settings; update your registrar's nameservers or A/CNAME records per Vercel's instructions
 
 ### Environment variables (Vercel dashboard → Settings → Environment Variables)
@@ -180,9 +180,10 @@ After the manual cron trigger: reload `openboatfishing.com`, the calendar should
 
 | Endpoint                                | Schedule       | What it does                                                          |
 | --------------------------------------- | -------------- | --------------------------------------------------------------------- |
-| `/api/cron/trip-reminders`              | `0 * * * *`    | Hourly — sends push notifications for trips departing in next 23-24h  |
-| `/api/cron/expire-pending-bookings`     | `*/10 * * * *` | Every 10 min — cancels unpaid holds after 15 min, restores seats      |
-| `/api/cron/reset-demo-data`             | `0 8 * * *`    | Daily at 8am UTC (3am ET / 4am EDT) — wipes booking activity          |
+| `/api/cron/expire-pending-bookings`     | `0 2 * * *`    | Daily 2am UTC — cancels unpaid holds; legacy fallback window 90 min   |
+| `/api/cron/trip-reminders`              | `0 9 * * *`    | Daily 9am UTC — sends push reminders for trips departing 8–9am next day |
+
+> **Hobby plan limits:** max 2 cron jobs, each at most once per day. The `reset-demo-data` cron is excluded from `vercel.json`; trigger it manually (see below) or restore it on Vercel Pro. Trip reminders only cover the 8–9am departure window on Hobby — upgrade to Pro to restore hourly coverage.
 
 **Nightly reset** (`/api/cron/reset-demo-data`) — deletes and preserves:
 
