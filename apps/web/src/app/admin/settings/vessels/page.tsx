@@ -47,7 +47,7 @@ function VesselForm({
 
   return (
     <form onSubmit={submit} className="bg-fill rounded-xl border border-hairline p-5 grid gap-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-ink mb-1">Vessel name</label>
           <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} required placeholder="Blue Wave Express" />

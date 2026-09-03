@@ -60,7 +60,7 @@ function StaffForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-ink mb-1">Name</label>
           <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} required placeholder="Captain John" />
@@ -77,7 +77,7 @@ function StaffForm({
           <input className={inputCls} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-ink mb-1">PIN (4–8 digits)</label>
             <input
@@ -166,7 +166,7 @@ function StaffRow({
       {editing ? (
         <form onSubmit={saveEdit} className="grid gap-3">
           {member.role === "mate" && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-muted mb-1">New PIN (leave blank to keep)</label>
                 <input className={inputCls} type="password" inputMode="numeric" pattern="\d{4,8}" value={newPin} onChange={(e) => setNewPin(e.target.value)} placeholder="4–8 digits" />

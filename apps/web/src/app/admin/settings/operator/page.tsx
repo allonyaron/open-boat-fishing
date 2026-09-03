@@ -93,7 +93,7 @@ export default function OperatorSettingsPage() {
           <Field label="Business name">
             <input className={inputCls} value={form.name} onChange={(e) => set("name", e.target.value)} required />
           </Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Reply-from email">
               <input className={inputCls} value={form.emailFrom} onChange={(e) => set("emailFrom", e.target.value)} required />
             </Field>
@@ -136,7 +136,7 @@ export default function OperatorSettingsPage() {
 
         <div className="px-6 py-5 grid gap-4">
           <h2 className="text-xs font-semibold text-muted uppercase tracking-label">Policy windows</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Cancellation window (hours)">
               <input className={inputCls} type="number" min={0} value={form.cancelWindowHrs} onChange={(e) => set("cancelWindowHrs", Number(e.target.value))} />
             </Field>

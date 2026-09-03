@@ -98,7 +98,7 @@ function ScheduleForm({
         </select>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-ink mb-1">Start date</label>
           <input className={inputCls} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
@@ -129,7 +129,7 @@ function ScheduleForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-3 gap-4">
         <div>
           <label className="block text-sm font-medium text-ink mb-1">Departure (UTC)</label>
           <input className={inputCls} type="time" value={departureTime} onChange={(e) => setDepartureTime(e.target.value)} required />

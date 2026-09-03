@@ -46,6 +46,25 @@ function SettingsIcon() {
   );
 }
 
+function MenuIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
 const NAV = [
   { href: "/admin", label: "Dashboard", Icon: DashboardIcon },
   { href: "/admin/trips", label: "Trips", Icon: TripsIcon },
@@ -53,10 +72,74 @@ const NAV = [
   { href: "/admin/settings", label: "Settings", Icon: SettingsIcon },
 ];
 
+function SidebarContents({ me, pathname, onNav, onLogout }: {
+  me: NonNullable<Me>;
+  pathname: string;
+  onNav: () => void;
+  onLogout: () => void;
+}) {
+  return (
+    <>
+      {/* Brand */}
+      <div className="px-6 py-5 border-b border-white/10">
+        <div className="flex items-center gap-2">
+          <span className="text-gold text-lg">⚓</span>
+          <span className="text-white font-semibold text-sm tracking-wide">Open Boat</span>
+        </div>
+        <div className="text-white/30 text-xs mt-0.5">Captain's Dashboard</div>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 py-4 px-3 space-y-0.5">
+        {NAV.map(({ href, label, Icon }) => {
+          const active = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              onClick={onNav}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                active
+                  ? "bg-navy-light text-gold"
+                  : "text-white/60 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <span className={active ? "text-gold" : "text-white/40"}>
+                <Icon />
+              </span>
+              {label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* User */}
+      <div className="px-4 py-4 border-t border-white/10">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-7 h-7 rounded-full bg-navy-light flex items-center justify-center text-gold text-xs font-bold flex-shrink-0">
+            {me.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <div className="text-white text-xs font-medium truncate">{me.name}</div>
+            <div className="text-white/40 text-xs capitalize">{me.role}</div>
+          </div>
+        </div>
+        <button
+          onClick={onLogout}
+          className="text-white/30 hover:text-white/60 text-xs transition-colors"
+        >
+          Sign out
+        </button>
+      </div>
+    </>
+  );
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [me, setMe] = useState<Me | undefined>(undefined);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/auth/me")
@@ -68,6 +151,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }
       });
   }, [pathname, router]);
+
+  // Close drawer on route change
+  useEffect(() => { setDrawerOpen(false); }, [pathname]);
 
   async function logout() {
     await fetch("/api/admin/auth/logout", { method: "POST" });
@@ -88,64 +174,109 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="flex min-h-screen bg-surface">
-      {/* Sidebar */}
-      <aside className="w-56 bg-navy flex-shrink-0 flex flex-col shadow-sidebar sticky top-0 h-screen overflow-y-auto">
-        {/* Brand */}
-        <div className="px-6 py-5 border-b border-white/10">
+      {/* Desktop sidebar — hidden on mobile */}
+      <aside className="hidden md:flex w-56 bg-navy flex-shrink-0 flex-col shadow-sidebar sticky top-0 h-screen overflow-y-auto">
+        {me && (
+          <SidebarContents
+            me={me}
+            pathname={pathname}
+            onNav={() => {}}
+            onLogout={logout}
+          />
+        )}
+      </aside>
+
+      {/* Mobile drawer overlay */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+
+      {/* Mobile drawer */}
+      <aside
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-navy flex flex-col shadow-sidebar transition-transform duration-200 md:hidden ${
+          drawerOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <div className="flex items-center gap-2">
             <span className="text-gold text-lg">⚓</span>
             <span className="text-white font-semibold text-sm tracking-wide">Open Boat</span>
           </div>
-          <div className="text-white/30 text-xs mt-0.5">Captain's Dashboard</div>
+          <button
+            onClick={() => setDrawerOpen(false)}
+            className="text-white/50 hover:text-white transition-colors p-1"
+            aria-label="Close menu"
+          >
+            <XIcon />
+          </button>
         </div>
-
-        {/* Nav */}
-        <nav className="flex-1 py-4 px-3 space-y-0.5">
-          {NAV.map(({ href, label, Icon }) => {
-            const active = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-navy-light text-gold"
-                    : "text-white/60 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                <span className={active ? "text-gold" : "text-white/40"}>
-                  <Icon />
-                </span>
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* User */}
         {me && (
-          <div className="px-4 py-4 border-t border-white/10">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-full bg-navy-light flex items-center justify-center text-gold text-xs font-bold flex-shrink-0">
-                {me.name.charAt(0).toUpperCase()}
+          <>
+            <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
+              {NAV.map(({ href, label, Icon }) => {
+                const active = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setDrawerOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      active
+                        ? "bg-navy-light text-gold"
+                        : "text-white/60 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    <span className={active ? "text-gold" : "text-white/40"}>
+                      <Icon />
+                    </span>
+                    {label}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="px-4 py-4 border-t border-white/10">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 rounded-full bg-navy-light flex items-center justify-center text-gold text-xs font-bold flex-shrink-0">
+                  {me.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-white text-xs font-medium truncate">{me.name}</div>
+                  <div className="text-white/40 text-xs capitalize">{me.role}</div>
+                </div>
               </div>
-              <div className="min-w-0">
-                <div className="text-white text-xs font-medium truncate">{me.name}</div>
-                <div className="text-white/40 text-xs capitalize">{me.role}</div>
-              </div>
+              <button
+                onClick={logout}
+                className="text-white/30 hover:text-white/60 text-xs transition-colors"
+              >
+                Sign out
+              </button>
             </div>
-            <button
-              onClick={logout}
-              className="text-white/30 hover:text-white/60 text-xs transition-colors"
-            >
-              Sign out
-            </button>
-          </div>
+          </>
         )}
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto p-6">{children}</main>
+      {/* Content area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile top bar */}
+        <header className="md:hidden bg-navy px-4 py-3 flex items-center gap-3 flex-shrink-0 shadow-sidebar">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="text-white/70 hover:text-white transition-colors p-1 -ml-1"
+            aria-label="Open menu"
+          >
+            <MenuIcon />
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-gold">⚓</span>
+            <span className="text-white font-semibold text-sm tracking-wide">Open Boat</span>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+      </div>
     </div>
   );
 }

@@ -160,7 +160,7 @@ export default function AdminTripsPage() {
 
         {/* Today at a glance */}
         {!loading && todayTrips.length > 0 && (
-          <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
             <StatCard
               label="Today's Trips"
               value={String(todayTrips.length)}

@@ -130,7 +130,7 @@ export default function RevenuePage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <SummaryCard
           label="Earned"
           description="Sailed · grace cleared"
@@ -170,6 +170,7 @@ export default function RevenuePage() {
         <div className="text-center text-muted py-16 text-sm">No trips with ticket sales in this period</div>
       ) : (
         <div className="bg-white rounded-xl border border-hairline overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-fill border-b border-hairline text-left">
@@ -245,6 +246,7 @@ export default function RevenuePage() {
               </tfoot>
             )}
           </table>
+          </div>
         </div>
       )}
     </div>
