@@ -1,27 +1,50 @@
+import {
+  amber,
+  cardBorder,
+  error,
+  faint,
+  fill,
+  info,
+  ink,
+  muted,
+  navy,
+  gold,
+  success,
+  surface,
+  teal,
+} from "@openboat/design";
+
 export const Colors = {
   // Brand
-  teal: "#0E7C7B",
-  tealLight: "#1A9E9C",
-  tealDark: "#0A5E5D",
+  teal: teal.DEFAULT,
+  tealLight: teal.light,
+  tealDark: teal.dark,
+  navy: navy.DEFAULT,
+  navyLight: navy.light,
+  navyTint: navy.tint,
+  gold: gold.DEFAULT,
+  goldTint: gold.tint,
 
   // Text
-  ink: "#10201F",
-  inkMuted: "#3D5A59",
-  inkSubtle: "#6B8A89",
+  ink,
+  inkMuted: muted,
+  inkSubtle: faint,
 
   // Backgrounds
-  surface: "#FFFFFF",
-  surfaceAlt: "#F4F8F8",
-  border: "#D1E0DF",
-  successTint: "#F0FDF4",
+  surface,
+  surfaceAlt: fill,
+  border: cardBorder,
+  successTint: success.bg,
 
   // Semantic
-  success: "#22C55E",
-  warning: "#F59E0B",
-  error: "#EF4444",
-  info: "#3B82F6",
+  success: success.DEFAULT,
+  successDark: success.dark,
+  warning: amber.DEFAULT,     // amber = caution/in-progress (pending badge, scan warning)
+  warningDark: amber.dark,
+  error: error.DEFAULT,
+  info: info.DEFAULT,
 
-  // Utility
+  // Utility (native-only)
   shadow: "#000000",
   scrim: "#000000",
   white: "#FFFFFF",
@@ -30,16 +53,12 @@ export const Colors = {
   whiteA85: "rgba(255,255,255,0.85)",
   whiteA90: "rgba(255,255,255,0.90)",
 
-  // Semantic state colors (darker variants for solid backgrounds)
-  successDark: "#16A34A",
-  warningDark: "#D97706",
-
   // Tab bar
-  tabIconDefault: "#6B8A89",
-  tabIconSelected: "#0E7C7B",
+  tabIconDefault: faint,
+  tabIconSelected: teal.DEFAULT,
   tabBackground: "#FFFFFF",
 
-  // Vessel accent colors — actual values come from the vessels DB row
+  // Vessel accent colors (actual values come from the vessels DB row)
   boatBlue: "#1D4ED8",
   boatRed: "#DC2626",
   boatAmber: "#D97706",

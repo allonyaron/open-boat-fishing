@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@openboat/design": "workspace:*",
     "@openboat/types": "workspace:*",
     "@openboat/utils": "workspace:*",
     "@stripe/stripe-react-native": "^0.45.0",

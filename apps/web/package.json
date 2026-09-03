@@ -14,6 +14,7 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@openboat/db": "workspace:*",
+    "@openboat/design": "workspace:*",
     "@openboat/types": "workspace:*",
     "@openboat/utils": "workspace:*",
     "@stripe/react-stripe-js": "^6.7.0",
