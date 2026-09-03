@@ -38,3 +38,10 @@ jobs:
 
       - name: Build web app
         run: pnpm --filter @openboat/web build
+        env:
+          DATABASE_URL: "postgres://ci:ci@localhost/ci"
+          SESSION_SECRET: "ci-placeholder-secret-minimum-32-chars-long"
+          STRIPE_SECRET_KEY: "sk_test_ci_placeholder"
+          STRIPE_WEBHOOK_SECRET: "whsec_ci_placeholder"
+          CRON_SECRET: "ci_cron_placeholder"
+          RESEND_API_KEY: "re_ci_placeholder"
