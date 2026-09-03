@@ -14,9 +14,10 @@ export const maxDuration = 60;
 const BATCH_LIMIT = 50;
 
 // Fallback for legacy pending bookings created before holdExpiresAt was added.
-const LEGACY_STALE_MINUTES = 30;
+// Widened to 90 min because the cron runs hourly on Vercel Hobby plan.
+const LEGACY_STALE_MINUTES = 90;
 
-// Vercel cron: runs every 10 minutes via vercel.json.
+// Vercel cron: runs hourly via vercel.json (Hobby plan limit).
 // Cancels pending bookings whose holdExpiresAt has passed (or, for legacy rows
 // without holdExpiresAt, that are older than 30 minutes) with no completed payment.
 // Targets two failure modes:

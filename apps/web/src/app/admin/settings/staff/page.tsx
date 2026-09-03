@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type StaffMember = {
   id: string;
@@ -12,7 +13,7 @@ type StaffMember = {
 };
 type Vessel = { id: string; name: string };
 
-const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+const inputCls = "w-full border border-hairline rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy";
 
 function StaffForm({
   vessels,
@@ -45,40 +46,40 @@ function StaffForm({
   }
 
   return (
-    <form onSubmit={submit} className="bg-gray-50 rounded-xl border border-gray-200 p-5 grid gap-4">
+    <form onSubmit={submit} className="bg-fill rounded-xl border border-hairline p-5 grid gap-4">
       <div>
-        <div className="text-sm font-medium text-gray-700 mb-2">Role</div>
-        <div className="flex gap-3">
+        <div className="text-sm font-medium text-ink mb-2">Role</div>
+        <div className="flex gap-4">
           {(["admin", "mate"] as const).map((r) => (
             <label key={r} className="flex items-center gap-2 cursor-pointer">
               <input type="radio" value={r} checked={role === r} onChange={() => setRole(r)} />
-              <span className="text-sm capitalize text-gray-700">{r}</span>
-              <span className="text-xs text-gray-400">{r === "admin" ? "(password login, web dashboard)" : "(PIN login, tablet check-in)"}</span>
+              <span className="text-sm font-medium capitalize text-ink">{r}</span>
+              <span className="text-xs text-faint">{r === "admin" ? "(password login, web dashboard)" : "(PIN login, tablet check-in)"}</span>
             </label>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <label className="block text-sm font-medium text-ink mb-1">Name</label>
           <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} required placeholder="Captain John" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <label className="block text-sm font-medium text-ink mb-1">Email</label>
           <input className={inputCls} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </div>
       </div>
 
       {role === "admin" ? (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Password (min 8 chars)</label>
+          <label className="block text-sm font-medium text-ink mb-1">Password (min 8 chars)</label>
           <input className={inputCls} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">PIN (4–8 digits)</label>
+            <label className="block text-sm font-medium text-ink mb-1">PIN (4–8 digits)</label>
             <input
               className={inputCls}
               type="password"
@@ -91,7 +92,7 @@ function StaffForm({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Assigned vessel (optional)</label>
+            <label className="block text-sm font-medium text-ink mb-1">Assigned vessel (optional)</label>
             <select className={inputCls} value={vesselId} onChange={(e) => setVesselId(e.target.value)}>
               <option value="">— unassigned —</option>
               {vessels.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -100,11 +101,11 @@ function StaffForm({
         </div>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-warning">{error}</p>}
 
       <div className="flex gap-3 justify-end">
-        <button type="button" onClick={onCancel} className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
-        <button type="submit" disabled={saving} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+        <button type="button" onClick={onCancel} className="border border-hairline text-ink px-4 py-2 rounded-lg text-sm hover:bg-white transition-colors">Cancel</button>
+        <button type="submit" disabled={saving} className="bg-navy text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity">
           {saving ? "Creating…" : "Create account"}
         </button>
       </div>
@@ -165,13 +166,13 @@ function StaffRow({
       {editing ? (
         <form onSubmit={saveEdit} className="grid gap-3">
           {member.role === "mate" && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">New PIN (leave blank to keep)</label>
+                <label className="block text-xs font-medium text-muted mb-1">New PIN (leave blank to keep)</label>
                 <input className={inputCls} type="password" inputMode="numeric" pattern="\d{4,8}" value={newPin} onChange={(e) => setNewPin(e.target.value)} placeholder="4–8 digits" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Vessel</label>
+                <label className="block text-xs font-medium text-muted mb-1">Vessel</label>
                 <select className={inputCls} value={vesselId} onChange={(e) => setVesselId(e.target.value)}>
                   <option value="">— unassigned —</option>
                   {vessels.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -181,38 +182,38 @@ function StaffRow({
           )}
           {member.role === "admin" && (
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">New password (leave blank to keep)</label>
+              <label className="block text-xs font-medium text-muted mb-1">New password (leave blank to keep)</label>
               <input className={inputCls} type="password" minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
             </div>
           )}
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-warning">{error}</p>}
           <div className="flex gap-2">
-            <button type="submit" disabled={saving} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+            <button type="submit" disabled={saving} className="bg-navy text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity">
               {saving ? "Saving…" : "Save"}
             </button>
-            <button type="button" onClick={() => setEditing(false)} className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
+            <button type="button" onClick={() => setEditing(false)} className="border border-hairline text-ink px-3 py-1.5 rounded-lg text-sm hover:bg-fill transition-colors">Cancel</button>
           </div>
         </form>
       ) : (
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-medium text-gray-900">{member.name}</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 capitalize">{member.role}</span>
-              {!member.active && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Inactive</span>}
-              {isMe && <span className="text-xs text-gray-400">(you)</span>}
+              <span className="font-semibold text-sm text-ink">{member.name}</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-navy-tint text-navy capitalize">{member.role}</span>
+              {!member.active && <span className="text-xs px-2 py-0.5 rounded-full bg-fill text-muted">Inactive</span>}
+              {isMe && <span className="text-xs text-faint">(you)</span>}
             </div>
-            <div className="text-sm text-gray-500 mt-0.5">
+            <div className="text-xs text-muted mt-0.5">
               {member.email}
               {member.vesselId && (
                 <span className="ml-2">· {vessels.find((v) => v.id === member.vesselId)?.name ?? "—"}</span>
               )}
             </div>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
-            <button onClick={() => setEditing(true)} className="text-sm text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50">Edit</button>
+          <div className="flex gap-1 flex-shrink-0">
+            <button onClick={() => setEditing(true)} className="text-sm font-medium text-navy hover:text-navy-light px-3 py-1.5 rounded-lg hover:bg-navy-tint transition-colors">Edit</button>
             {!isMe && (
-              <button onClick={toggleActive} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50">
+              <button onClick={toggleActive} className="text-sm font-medium text-muted hover:text-ink px-3 py-1.5 rounded-lg hover:bg-fill transition-colors">
                 {member.active ? "Deactivate" : "Activate"}
               </button>
             )}
@@ -263,23 +264,23 @@ export default function StaffPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <a href="/admin/settings" className="text-sm text-gray-400 hover:text-gray-600">Settings</a>
-        <span className="text-gray-300">›</span>
-        <h1 className="text-2xl font-semibold text-gray-900">Staff</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <Link href="/admin/settings" className="text-sm text-muted hover:text-ink transition-colors">Settings</Link>
+        <span className="text-hairline">›</span>
+        <h1 className="text-xl font-semibold text-ink">Staff</h1>
       </div>
 
       {loading ? (
-        <div className="text-center text-gray-400 py-16">Loading…</div>
+        <div className="text-center text-muted py-16 text-sm">Loading…</div>
       ) : (
         <div className="space-y-4">
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+          <div className="flex gap-1 bg-white border border-hairline rounded-lg p-1 w-fit">
             {(["admin", "mate"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${
-                  tab === t ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  tab === t ? "bg-navy text-white shadow-sm" : "text-muted hover:text-ink"
                 }`}
               >
                 {t}s ({staffList.filter((s) => s.role === t).length})
@@ -288,18 +289,18 @@ export default function StaffPage() {
           </div>
 
           {tab === "admin" && (
-            <p className="text-xs text-gray-400">Admins log in at /admin/login with email + password and have full access to the admin dashboard.</p>
+            <p className="text-xs text-faint">Admins log in at /admin/login with email + password and have full access to the dashboard.</p>
           )}
           {tab === "mate" && (
-            <p className="text-xs text-gray-400">Mates log in on the tablet app with their email + PIN. They can view manifests and check in passengers.</p>
+            <p className="text-xs text-faint">Mates log in on the tablet app with their email + PIN. They can view manifests and check in passengers.</p>
           )}
 
-          <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+          <div className="bg-white rounded-xl border border-hairline divide-y divide-hairline">
             {filtered.map((m) => (
               <StaffRow key={m.id} member={m} vessels={vessels} currentStaffId={currentStaffId} onRefresh={load} />
             ))}
             {filtered.length === 0 && (
-              <div className="text-center text-gray-400 py-10 text-sm">No {tab}s yet</div>
+              <div className="text-center text-muted py-10 text-sm">No {tab}s yet</div>
             )}
           </div>
 
@@ -308,7 +309,7 @@ export default function StaffPage() {
           ) : (
             <button
               onClick={() => setAdding(true)}
-              className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 text-sm text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors"
+              className="w-full border-2 border-dashed border-hairline rounded-xl py-4 text-sm text-muted hover:border-navy/30 hover:text-navy transition-colors"
             >
               + Add {tab}
             </button>
