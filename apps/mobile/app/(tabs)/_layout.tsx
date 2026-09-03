@@ -22,7 +22,7 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors.teal,
+        tabBarActiveTintColor: Colors.gold,
         tabBarInactiveTintColor: Colors.tabIconDefault,
         tabBarStyle: {
           backgroundColor: Colors.tabBackground,
@@ -34,9 +34,9 @@ export default function TabLayout() {
           fontWeight: "600",
         },
         headerStyle: {
-          backgroundColor: Colors.teal,
+          backgroundColor: Colors.navy,
         },
-        headerTintColor: Colors.surface,
+        headerTintColor: Colors.white,
         headerTitleStyle: {
           fontWeight: "700",
         },

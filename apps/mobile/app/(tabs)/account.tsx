@@ -479,7 +479,7 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.navy,
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
@@ -564,13 +564,13 @@ const f = StyleSheet.create({
   error: { fontSize: 13, color: Colors.error },
   btn: {
     height: 50,
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.gold,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   btnLoading: { opacity: 0.7 },
-  btnText: { color: Colors.white, fontSize: 16, fontWeight: "700" },
+  btnText: { color: Colors.navy, fontSize: 16, fontWeight: "700" },
   back: { fontSize: 13, color: Colors.teal, textAlign: "center" },
 });
 

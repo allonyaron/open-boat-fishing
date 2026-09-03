@@ -293,7 +293,7 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.navy,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
@@ -382,7 +382,7 @@ const s = StyleSheet.create({
   },
   removePhotoText: { color: Colors.white, fontSize: 11, fontWeight: "700" },
   saveBtn: {
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.gold,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -390,7 +390,7 @@ const s = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: {
-    color: Colors.white,
+    color: Colors.navy,
     fontSize: 16,
     fontWeight: "700",
   },
