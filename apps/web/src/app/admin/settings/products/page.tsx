@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type Price = { ticketType: "adult" | "child" | "senior"; priceCents: number };
 type Product = {
@@ -16,7 +17,7 @@ type Product = {
 };
 type Vessel = { id: string; name: string; color: string };
 
-const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+const inputCls = "w-full border border-hairline rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy";
 const TICKET_TYPES = ["adult", "child", "senior"] as const;
 
 function dollars(cents: number) {
@@ -26,11 +27,11 @@ function dollars(cents: number) {
 function PriceRow({ type, value, onChange }: { type: string; value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-sm text-gray-600 capitalize w-14">{type}</span>
+      <span className="text-sm text-muted capitalize w-14">{type}</span>
       <div className="relative flex-1 max-w-[120px]">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">$</span>
         <input
-          className="w-full border border-gray-300 rounded-lg pl-7 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full border border-hairline rounded-lg pl-7 pr-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy"
           type="number"
           min={0}
           step={0.01}
@@ -71,41 +72,39 @@ function ProductForm({
     e.preventDefault();
     setSaving(true);
     setError("");
-
     const priceRows = TICKET_TYPES
       .filter((t) => prices[t] !== "" && !isNaN(Number(prices[t])))
       .map((t) => ({ ticketType: t, priceCents: Math.round(Number(prices[t]) * 100) }));
-
     const err = await onSave({ vesselId, category, displayName, description: description || undefined, showRemaining, prices: priceRows });
     setSaving(false);
     if (err) setError(err);
   }
 
   return (
-    <form onSubmit={submit} className="bg-gray-50 rounded-xl border border-gray-200 p-5 grid gap-4">
+    <form onSubmit={submit} className="bg-fill rounded-xl border border-hairline p-5 grid gap-4">
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Vessel</label>
+          <label className="block text-sm font-medium text-ink mb-1">Vessel</label>
           <select className={inputCls} value={vesselId} onChange={(e) => setVesselId(e.target.value)} required>
             {vessels.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Category (fish species)</label>
+          <label className="block text-sm font-medium text-ink mb-1">Category (fish species)</label>
           <input className={inputCls} value={category} onChange={(e) => setCategory(e.target.value)} required placeholder="Sea Bass" />
         </div>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Display name</label>
+        <label className="block text-sm font-medium text-ink mb-1">Display name</label>
         <input className={inputCls} value={displayName} onChange={(e) => setDisplayName(e.target.value)} required placeholder="Sea Bass Fishing Express" />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+        <label className="block text-sm font-medium text-ink mb-1">Description (optional)</label>
         <input className={inputCls} value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
 
       <div>
-        <div className="text-sm font-medium text-gray-700 mb-2">Ticket prices</div>
+        <div className="text-sm font-medium text-ink mb-2">Ticket prices</div>
         <div className="grid gap-2">
           {TICKET_TYPES.map((t) => (
             <PriceRow key={t} type={t} value={prices[t]} onChange={(v) => setPrices((p) => ({ ...p, [t]: v }))} />
@@ -113,16 +112,16 @@ function ProductForm({
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+      <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
         <input type="checkbox" checked={showRemaining} onChange={(e) => setShowRemaining(e.target.checked)} className="rounded" />
         Show remaining seats to customers
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-warning">{error}</p>}
 
       <div className="flex gap-3 justify-end">
-        <button type="button" onClick={onCancel} className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
-        <button type="submit" disabled={saving} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+        <button type="button" onClick={onCancel} className="border border-hairline text-ink px-4 py-2 rounded-lg text-sm hover:bg-white transition-colors">Cancel</button>
+        <button type="submit" disabled={saving} className="bg-navy text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity">
           {saving ? "Saving…" : initial?.id ? "Save changes" : "Add trip type"}
         </button>
       </div>
@@ -185,7 +184,6 @@ export default function ProductsPage() {
     await load();
   }
 
-  // Group by vessel
   const byVessel: Record<string, Product[]> = {};
   for (const p of products) {
     if (!byVessel[p.vessel.id]) byVessel[p.vessel.id] = [];
@@ -194,25 +192,25 @@ export default function ProductsPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <a href="/admin/settings" className="text-sm text-gray-400 hover:text-gray-600">Settings</a>
-        <span className="text-gray-300">›</span>
-        <h1 className="text-2xl font-semibold text-gray-900">Trip Types &amp; Pricing</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <Link href="/admin/settings" className="text-sm text-muted hover:text-ink transition-colors">Settings</Link>
+        <span className="text-hairline">›</span>
+        <h1 className="text-xl font-semibold text-ink">Trip Types &amp; Pricing</h1>
       </div>
 
       {loading ? (
-        <div className="text-center text-gray-400 py-16">Loading…</div>
+        <div className="text-center text-muted py-16 text-sm">Loading…</div>
       ) : (
         <div className="space-y-6">
           {Object.entries(byVessel).map(([, vProducts]) => {
             const v = vProducts[0].vessel;
             return (
               <section key={v.id}>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: v.color }} />
-                  <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">{v.name}</h2>
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: v.color }} />
+                  <h2 className="text-xs font-semibold text-muted uppercase tracking-label">{v.name}</h2>
                 </div>
-                <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+                <div className="bg-white rounded-xl border border-hairline divide-y divide-hairline">
                   {vProducts.map((p) =>
                     editing === p.id ? (
                       <div key={p.id} className="p-3">
@@ -222,22 +220,22 @@ export default function ProductsPage() {
                       <div key={p.id} className="px-5 py-4 flex items-start gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-gray-900">{p.displayName}</span>
-                            <span className="text-xs text-gray-400">{p.category}</span>
-                            {!p.active && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Inactive</span>}
+                            <span className="font-semibold text-sm text-ink">{p.displayName}</span>
+                            <span className="text-xs text-muted">{p.category}</span>
+                            {!p.active && <span className="text-xs px-2 py-0.5 rounded-full bg-fill text-muted">Inactive</span>}
                           </div>
-                          <div className="text-sm text-gray-500 mt-1 flex gap-3 flex-wrap">
+                          <div className="text-xs text-muted mt-1 flex gap-3 flex-wrap">
                             {p.prices.map((pr) => (
                               <span key={pr.ticketType} className="capitalize">
                                 {pr.ticketType}: ${dollars(pr.priceCents)}
                               </span>
                             ))}
-                            {p.prices.length === 0 && <span className="text-amber-600">No prices set</span>}
+                            {p.prices.length === 0 && <span className="text-amber">No prices set</span>}
                           </div>
                         </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button onClick={() => setEditing(p.id)} className="text-sm text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50">Edit</button>
-                          <button onClick={() => toggleActive(p)} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50">
+                        <div className="flex gap-1 flex-shrink-0">
+                          <button onClick={() => setEditing(p.id)} className="text-sm font-medium text-navy hover:text-navy-light px-3 py-1.5 rounded-lg hover:bg-navy-tint transition-colors">Edit</button>
+                          <button onClick={() => toggleActive(p)} className="text-sm font-medium text-muted hover:text-ink px-3 py-1.5 rounded-lg hover:bg-fill transition-colors">
                             {p.active ? "Deactivate" : "Activate"}
                           </button>
                         </div>
@@ -250,7 +248,7 @@ export default function ProductsPage() {
           })}
 
           {products.length === 0 && !adding && (
-            <div className="text-center text-gray-400 py-12">
+            <div className="text-center text-muted py-12 text-sm">
               No trip types yet.{" "}
               {vessels.length === 0 && <span>Add a vessel first, then come back to define trip types.</span>}
             </div>
@@ -262,7 +260,7 @@ export default function ProductsPage() {
             ) : (
               <button
                 onClick={() => setAdding(true)}
-                className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 text-sm text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors"
+                className="w-full border-2 border-dashed border-hairline rounded-xl py-4 text-sm text-muted hover:border-navy/30 hover:text-navy transition-colors"
               >
                 + Add trip type
               </button>

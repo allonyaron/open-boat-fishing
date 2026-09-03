@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 type Op = {
   name: string;
@@ -23,14 +24,13 @@ type Op = {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <label className="block text-sm font-medium text-ink mb-1">{label}</label>
       {children}
     </div>
   );
 }
 
-const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
-const selectCls = inputCls;
+const inputCls = "w-full border border-hairline rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy";
 
 export default function OperatorSettingsPage() {
   const [form, setForm] = useState<Op | null>(null);
@@ -76,20 +76,20 @@ export default function OperatorSettingsPage() {
   }
 
   if (loading || !form) {
-    return <div className="text-center text-gray-400 py-16">Loading…</div>;
+    return <div className="text-center text-muted py-16 text-sm">Loading…</div>;
   }
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <a href="/admin/settings" className="text-sm text-gray-400 hover:text-gray-600">Settings</a>
-        <span className="text-gray-300">›</span>
-        <h1 className="text-2xl font-semibold text-gray-900">Business Info</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <Link href="/admin/settings" className="text-sm text-muted hover:text-ink transition-colors">Settings</Link>
+        <span className="text-hairline">›</span>
+        <h1 className="text-xl font-semibold text-ink">Business Info</h1>
       </div>
 
-      <form onSubmit={save} className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+      <form onSubmit={save} className="bg-white rounded-xl border border-hairline divide-y divide-hairline">
         <div className="px-6 py-5 grid gap-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">General</h2>
+          <h2 className="text-xs font-semibold text-muted uppercase tracking-label">General</h2>
           <Field label="Business name">
             <input className={inputCls} value={form.name} onChange={(e) => set("name", e.target.value)} required />
           </Field>
@@ -119,15 +119,15 @@ export default function OperatorSettingsPage() {
         </div>
 
         <div className="px-6 py-5 grid gap-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Fees</h2>
+          <h2 className="text-xs font-semibold text-muted uppercase tracking-label">Fees</h2>
           <Field label="Platform fee paid by">
-            <select className={selectCls} value={form.feeBearer} onChange={(e) => set("feeBearer", e.target.value as Op["feeBearer"])}>
+            <select className={inputCls} value={form.feeBearer} onChange={(e) => set("feeBearer", e.target.value as Op["feeBearer"])}>
               <option value="passenger">Passenger (added to ticket price)</option>
               <option value="operator">Operator (absorbed by you)</option>
             </select>
           </Field>
           <Field label="Fee display">
-            <select className={selectCls} value={form.feeDisplay} onChange={(e) => set("feeDisplay", e.target.value as Op["feeDisplay"])}>
+            <select className={inputCls} value={form.feeDisplay} onChange={(e) => set("feeDisplay", e.target.value as Op["feeDisplay"])}>
               <option value="itemized">Itemized (shown as a separate line)</option>
               <option value="folded">Folded into ticket price</option>
             </select>
@@ -135,58 +135,46 @@ export default function OperatorSettingsPage() {
         </div>
 
         <div className="px-6 py-5 grid gap-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Policy windows</h2>
+          <h2 className="text-xs font-semibold text-muted uppercase tracking-label">Policy windows</h2>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Cancellation window (hours)">
-              <input
-                className={inputCls}
-                type="number"
-                min={0}
-                value={form.cancelWindowHrs}
-                onChange={(e) => set("cancelWindowHrs", Number(e.target.value))}
-              />
+              <input className={inputCls} type="number" min={0} value={form.cancelWindowHrs} onChange={(e) => set("cancelWindowHrs", Number(e.target.value))} />
             </Field>
             <Field label="Settlement grace (hours)">
-              <input
-                className={inputCls}
-                type="number"
-                min={0}
-                value={form.settleGraceHrs}
-                onChange={(e) => set("settleGraceHrs", Number(e.target.value))}
-              />
+              <input className={inputCls} type="number" min={0} value={form.settleGraceHrs} onChange={(e) => set("settleGraceHrs", Number(e.target.value))} />
             </Field>
           </div>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-faint">
             Cancellation window: how many hours before departure a customer can self-cancel.
             Settlement grace: how many hours after departure before fees are marked earned.
           </p>
         </div>
 
         <div className="px-6 py-5 grid gap-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Stripe</h2>
+          <h2 className="text-xs font-semibold text-muted uppercase tracking-label">Stripe</h2>
           {stripeStatus === "connected" && (
-            <p className="text-sm text-green-600">Stripe account connected successfully.</p>
+            <p className="text-sm text-success font-medium">Stripe account connected successfully.</p>
           )}
           {stripeStatus === "error" && (
-            <p className="text-sm text-red-600">Something went wrong connecting Stripe. Try again.</p>
+            <p className="text-sm text-warning">Something went wrong connecting Stripe. Try again.</p>
           )}
           {stripeStatus === "cancelled" && (
-            <p className="text-sm text-gray-500">Stripe connection cancelled.</p>
+            <p className="text-sm text-muted">Stripe connection cancelled.</p>
           )}
           <div className="flex items-center justify-between">
             <div>
               {form.stripeOnboardingComplete && form.stripeAccountId ? (
                 <>
-                  <p className="text-sm font-medium text-green-700">Connected</p>
-                  <p className="text-xs text-gray-400 font-mono mt-0.5">{form.stripeAccountId}</p>
+                  <p className="text-sm font-semibold text-success">Connected</p>
+                  <p className="text-xs text-faint font-mono mt-0.5">{form.stripeAccountId}</p>
                 </>
               ) : (
-                <p className="text-sm text-gray-500">No Stripe account connected.</p>
+                <p className="text-sm text-muted">No Stripe account connected.</p>
               )}
             </div>
             <a
               href="/api/stripe/connect/start"
-              className="bg-[#635BFF] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#4F46E5] transition-colors"
+              className="bg-[#635BFF] text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
             >
               {form.stripeOnboardingComplete ? "Reconnect Stripe" : "Connect Stripe"}
             </a>
@@ -194,13 +182,14 @@ export default function OperatorSettingsPage() {
         </div>
 
         <div className="px-6 py-4 flex items-center justify-between">
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          {saved && !error && <p className="text-sm text-green-600">Saved</p>}
-          {!error && !saved && <span />}
+          <div>
+            {error && <p className="text-sm text-warning">{error}</p>}
+            {saved && !error && <p className="text-sm text-success font-medium">Saved</p>}
+          </div>
           <button
             type="submit"
             disabled={saving}
-            className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="bg-navy text-white px-5 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
             {saving ? "Saving…" : "Save changes"}
           </button>

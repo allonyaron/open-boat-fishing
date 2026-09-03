@@ -38,11 +38,10 @@ type ApiResponse = {
 };
 
 const RANGES = [
-  { label: "Last 30 days", days: 30 },
-  { label: "Last 90 days", days: 90 },
-  { label: "Last 12 months", days: 365 },
+  { label: "30 days", days: 30 },
+  { label: "90 days", days: 90 },
+  { label: "12 months", days: 365 },
 ];
-
 
 function fmtDate(date: string) {
   const [y, m, d] = date.split("-").map(Number);
@@ -52,9 +51,30 @@ function fmtDate(date: string) {
   });
 }
 
-
 function toDateParam(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  scheduled: "Scheduled",
+  pending_settlement: "Pending",
+  sailed: "Sailed",
+  cancelled: "Cancelled",
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  scheduled: "bg-blue-100 text-blue-700",
+  pending_settlement: "bg-yellow-100 text-yellow-700",
+  sailed: "bg-green-100 text-green-700",
+  cancelled: "bg-red-100 text-red-700",
+};
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[status] ?? "bg-fill text-muted"}`}>
+      {STATUS_LABEL[status] ?? status}
+    </span>
+  );
 }
 
 export default function RevenuePage() {
@@ -88,16 +108,19 @@ export default function RevenuePage() {
   return (
     <div className="max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Revenue</h1>
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 text-sm">
+        <div>
+          <h1 className="text-xl font-semibold text-ink">Revenue</h1>
+          <p className="text-sm text-muted mt-0.5">Platform fee earnings by trip</p>
+        </div>
+        <div className="flex gap-1 bg-white border border-hairline rounded-lg p-1">
           {RANGES.map((r) => (
             <button
               key={r.days}
               onClick={() => setRangeDays(r.days)}
-              className={`px-3 py-1 rounded-md transition-colors ${
+              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
                 rangeDays === r.days
-                  ? "bg-white shadow-sm text-gray-900 font-medium"
-                  : "text-gray-500 hover:text-gray-700"
+                  ? "bg-navy text-white shadow-sm"
+                  : "text-muted hover:text-ink"
               }`}
             >
               {r.label}
@@ -107,21 +130,21 @@ export default function RevenuePage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-3 gap-3 mb-6">
         <SummaryCard
           label="Earned"
-          description="Trips sailed · grace cleared"
+          description="Sailed · grace cleared"
           cents={totals?.earnedCents ?? 0}
           count={totals?.earnedCount ?? 0}
-          color="green"
+          variant="earned"
           loading={loading}
         />
         <SummaryCard
           label="Held"
-          description="Trips in grace window"
+          description="In grace window"
           cents={totals?.heldCents ?? 0}
           count={totals?.heldCount ?? 0}
-          color="yellow"
+          variant="held"
           loading={loading}
         />
         <SummaryCard
@@ -129,55 +152,46 @@ export default function RevenuePage() {
           description="Cancellations · refunds"
           cents={totals?.reversedCents ?? 0}
           count={totals?.reversedCount ?? 0}
-          color="red"
+          variant="reversed"
           loading={loading}
         />
       </div>
 
-      {/* Note: Stripe's balance will differ from earned by held + reversed amounts */}
       {totals && totals.heldCents > 0 && (
-        <p className="text-xs text-gray-400 -mt-6 mb-6 text-right">
-          Stripe balance includes {dollars(totals.heldCents)} held that hasn't cleared the
-          settlement grace window yet.
+        <p className="text-xs text-faint -mt-3 mb-5 text-right">
+          Stripe balance includes {dollars(totals.heldCents)} held pending settlement.
         </p>
       )}
 
       {/* Per-trip breakdown */}
       {loading ? (
-        <div className="text-center text-gray-400 py-16">Loading…</div>
+        <div className="text-center text-muted py-16 text-sm">Loading…</div>
       ) : tripRows.length === 0 ? (
-        <div className="text-center text-gray-400 py-16">
-          No trips with ticket sales in this period
-        </div>
+        <div className="text-center text-muted py-16 text-sm">No trips with ticket sales in this period</div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-hairline overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                <th className="px-4 py-3">Trip</th>
-                <th className="px-4 py-3 text-right">Earned</th>
-                <th className="px-4 py-3 text-right">Held</th>
-                <th className="px-4 py-3 text-right">Reversed</th>
-                <th className="px-4 py-3 text-right">Status</th>
+              <tr className="bg-fill border-b border-hairline text-left">
+                <th className="px-4 py-3 text-xs font-semibold text-muted uppercase tracking-label">Trip</th>
+                <th className="px-4 py-3 text-xs font-semibold text-muted uppercase tracking-label text-right">Earned</th>
+                <th className="px-4 py-3 text-xs font-semibold text-muted uppercase tracking-label text-right">Held</th>
+                <th className="px-4 py-3 text-xs font-semibold text-muted uppercase tracking-label text-right">Reversed</th>
+                <th className="px-4 py-3 text-xs font-semibold text-muted uppercase tracking-label text-right">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-hairline">
               {tripRows.map((row) => (
-                <tr key={row.tripId} className="hover:bg-gray-50 transition-colors">
+                <tr key={row.tripId} className="hover:bg-fill transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div
-                        className="w-2 h-6 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: row.vesselColor }}
-                      />
+                      <div className="w-1.5 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: row.vesselColor }} />
                       <div>
-                        <div className="font-medium text-gray-900">
+                        <div className="font-medium text-ink">
                           {row.vesselName}
-                          <span className="font-normal text-gray-400 ml-1">
-                            · {row.productName}
-                          </span>
+                          <span className="font-normal text-muted ml-1">· {row.productName}</span>
                         </div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-faint">
                           {fmtDate(row.departureDate)} {fmtTimeET(row.startTime)}
                         </div>
                       </div>
@@ -185,38 +199,32 @@ export default function RevenuePage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     {row.earnedCents > 0 ? (
-                      <span className="text-green-700 font-medium">
+                      <span className="text-success font-medium">
                         {dollars(row.earnedCents)}
-                        <span className="text-green-400 font-normal text-xs ml-1">
-                          ×{row.earnedCount}
-                        </span>
+                        <span className="text-success/60 font-normal text-xs ml-1">×{row.earnedCount}</span>
                       </span>
                     ) : (
-                      <span className="text-gray-300">—</span>
+                      <span className="text-faint">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {row.heldCents > 0 ? (
-                      <span className="text-yellow-600 font-medium">
+                      <span className="text-amber font-medium">
                         {dollars(row.heldCents)}
-                        <span className="text-yellow-400 font-normal text-xs ml-1">
-                          ×{row.heldCount}
-                        </span>
+                        <span className="text-amber/60 font-normal text-xs ml-1">×{row.heldCount}</span>
                       </span>
                     ) : (
-                      <span className="text-gray-300">—</span>
+                      <span className="text-faint">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {row.reversedCents > 0 ? (
-                      <span className="text-red-600 font-medium">
+                      <span className="text-warning font-medium">
                         −{dollars(row.reversedCents)}
-                        <span className="text-red-400 font-normal text-xs ml-1">
-                          ×{row.reversedCount}
-                        </span>
+                        <span className="text-warning/60 font-normal text-xs ml-1">×{row.reversedCount}</span>
                       </span>
                     ) : (
-                      <span className="text-gray-300">—</span>
+                      <span className="text-faint">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -225,20 +233,13 @@ export default function RevenuePage() {
                 </tr>
               ))}
             </tbody>
-            {/* Totals footer */}
             {totals && (
               <tfoot>
-                <tr className="border-t-2 border-gray-200 bg-gray-50 font-medium">
-                  <td className="px-4 py-3 text-gray-700">Total</td>
-                  <td className="px-4 py-3 text-right text-green-700">
-                    {dollars(totals.earnedCents)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-yellow-600">
-                    {dollars(totals.heldCents)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-red-600">
-                    −{dollars(totals.reversedCents)}
-                  </td>
+                <tr className="border-t-2 border-hairline bg-fill font-semibold">
+                  <td className="px-4 py-3 text-ink text-sm">Total</td>
+                  <td className="px-4 py-3 text-right text-success text-sm">{dollars(totals.earnedCents)}</td>
+                  <td className="px-4 py-3 text-right text-amber text-sm">{dollars(totals.heldCents)}</td>
+                  <td className="px-4 py-3 text-right text-warning text-sm">−{dollars(totals.reversedCents)}</td>
                   <td className="px-4 py-3" />
                 </tr>
               </tfoot>
@@ -255,63 +256,31 @@ function SummaryCard({
   description,
   cents,
   count,
-  color,
+  variant,
   loading,
 }: {
   label: string;
   description: string;
   cents: number;
   count: number;
-  color: "green" | "yellow" | "red";
+  variant: "earned" | "held" | "reversed";
   loading: boolean;
 }) {
-  const colors = {
-    green: {
-      card: "border-green-100 bg-green-50",
-      amount: "text-green-800",
-      sub: "text-green-500",
-    },
-    yellow: {
-      card: "border-yellow-100 bg-yellow-50",
-      amount: "text-yellow-800",
-      sub: "text-yellow-500",
-    },
-    red: { card: "border-red-100 bg-red-50", amount: "text-red-800", sub: "text-red-500" },
-  }[color];
+  const styles = {
+    earned: { card: "bg-success-bg border-success/20", label: "text-success", amount: "text-success", sub: "text-success/70" },
+    held: { card: "bg-white border-hairline", label: "text-amber", amount: "text-amber", sub: "text-muted" },
+    reversed: { card: "bg-warning-bg border-warning/20", label: "text-warning", amount: "text-warning", sub: "text-warning/70" },
+  }[variant];
 
   return (
-    <div className={`rounded-xl border p-5 ${colors.card}`}>
-      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{label}</div>
-      <div className={`text-2xl font-semibold ${colors.amount} ${loading ? "opacity-40" : ""}`}>
+    <div className={`rounded-xl border px-5 py-4 ${styles.card}`}>
+      <div className={`text-xs font-semibold uppercase tracking-label mb-1 ${styles.label}`}>{label}</div>
+      <div className={`text-2xl font-semibold ${styles.amount} ${loading ? "opacity-40" : ""}`}>
         {dollars(cents)}
       </div>
-      <div className={`text-xs mt-1 ${colors.sub}`}>
+      <div className={`text-xs mt-0.5 ${styles.sub}`}>
         {count} ticket{count !== 1 ? "s" : ""} · {description}
       </div>
     </div>
-  );
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  scheduled: "Scheduled",
-  pending_settlement: "Pending",
-  sailed: "Sailed",
-  cancelled: "Cancelled",
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  scheduled: "bg-blue-100 text-blue-700",
-  pending_settlement: "bg-yellow-100 text-yellow-700",
-  sailed: "bg-green-100 text-green-700",
-  cancelled: "bg-red-100 text-red-700",
-};
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span
-      className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[status] ?? "bg-gray-100 text-gray-600"}`}
-    >
-      {STATUS_LABEL[status] ?? status}
-    </span>
   );
 }

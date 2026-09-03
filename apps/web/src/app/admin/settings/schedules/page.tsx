@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 const ALL_DAYS: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -23,7 +24,7 @@ type Schedule = {
 
 type Product = { id: string; displayName: string; category: string; vessel: { id: string; name: string } };
 
-const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+const inputCls = "w-full border border-hairline rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-navy";
 
 function fmtDate(d: string) {
   const [y, m, day] = d.split("-").map(Number);
@@ -75,19 +76,21 @@ function ScheduleForm({
 
   if (result) {
     return (
-      <div className="bg-green-50 rounded-xl border border-green-200 p-5 text-center">
-        <div className="text-2xl mb-2">✅</div>
-        <div className="font-medium text-green-800">Schedule created</div>
-        <div className="text-sm text-green-700 mt-1">{result.tripsCreated} trips generated on the calendar</div>
-        <button onClick={onCancel} className="mt-4 text-sm text-green-700 underline">Done</button>
+      <div className="bg-success-bg rounded-xl border border-success/20 p-6 text-center">
+        <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-3">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-success"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div className="font-semibold text-success text-sm">Schedule created</div>
+        <div className="text-sm text-success/70 mt-1">{result.tripsCreated} trips generated on the calendar</div>
+        <button onClick={onCancel} className="mt-4 text-sm text-navy font-medium hover:underline">Done</button>
       </div>
     );
   }
 
   return (
-    <form onSubmit={submit} className="bg-gray-50 rounded-xl border border-gray-200 p-5 grid gap-4">
+    <form onSubmit={submit} className="bg-fill rounded-xl border border-hairline p-5 grid gap-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Trip type</label>
+        <label className="block text-sm font-medium text-ink mb-1">Trip type</label>
         <select className={inputCls} value={productId} onChange={(e) => setProductId(e.target.value)} required>
           {products.map((p) => (
             <option key={p.id} value={p.id}>{p.vessel.name} · {p.displayName}</option>
@@ -97,27 +100,27 @@ function ScheduleForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Start date</label>
+          <label className="block text-sm font-medium text-ink mb-1">Start date</label>
           <input className={inputCls} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">End date</label>
+          <label className="block text-sm font-medium text-ink mb-1">End date</label>
           <input className={inputCls} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
         </div>
       </div>
 
       <div>
-        <div className="text-sm font-medium text-gray-700 mb-2">Days of week</div>
+        <div className="text-sm font-medium text-ink mb-2">Days of week</div>
         <div className="flex gap-2">
           {ALL_DAYS.map((d) => (
             <button
               key={d}
               type="button"
               onClick={() => toggleDay(d)}
-              className={`w-9 h-9 rounded-lg text-sm font-medium border transition-colors ${
+              className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-colors ${
                 days.includes(d)
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-gray-600 border-gray-300 hover:border-blue-300"
+                  ? "bg-navy text-white border-navy"
+                  : "bg-white text-muted border-hairline hover:border-navy/30"
               }`}
             >
               {DAY_LABELS[d]}
@@ -128,29 +131,29 @@ function ScheduleForm({
 
       <div className="grid grid-cols-3 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Departure (UTC)</label>
+          <label className="block text-sm font-medium text-ink mb-1">Departure (UTC)</label>
           <input className={inputCls} type="time" value={departureTime} onChange={(e) => setDepartureTime(e.target.value)} required />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Return (UTC)</label>
+          <label className="block text-sm font-medium text-ink mb-1">Return (UTC)</label>
           <input className={inputCls} type="time" value={returnTime} onChange={(e) => setReturnTime(e.target.value)} required />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
+          <label className="block text-sm font-medium text-ink mb-1">Capacity</label>
           <input className={inputCls} type="number" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} required />
         </div>
       </div>
 
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-faint">
         Times are stored in UTC. Eastern Time is UTC−5 (winter) / UTC−4 (summer).
         A 7:00 AM ET departure = 12:00 UTC in winter, 11:00 UTC in summer.
       </p>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-warning">{error}</p>}
 
       <div className="flex gap-3 justify-end">
-        <button type="button" onClick={onCancel} className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
-        <button type="submit" disabled={saving || days.length === 0} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+        <button type="button" onClick={onCancel} className="border border-hairline text-ink px-4 py-2 rounded-lg text-sm hover:bg-white transition-colors">Cancel</button>
+        <button type="submit" disabled={saving || days.length === 0} className="bg-navy text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity">
           {saving ? "Creating…" : "Create schedule & generate trips"}
         </button>
       </div>
@@ -191,26 +194,26 @@ export default function SchedulesPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <a href="/admin/settings" className="text-sm text-gray-400 hover:text-gray-600">Settings</a>
-        <span className="text-gray-300">›</span>
-        <h1 className="text-2xl font-semibold text-gray-900">Schedules</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <Link href="/admin/settings" className="text-sm text-muted hover:text-ink transition-colors">Settings</Link>
+        <span className="text-hairline">›</span>
+        <h1 className="text-xl font-semibold text-ink">Schedules</h1>
       </div>
 
       {loading ? (
-        <div className="text-center text-gray-400 py-16">Loading…</div>
+        <div className="text-center text-muted py-16 text-sm">Loading…</div>
       ) : (
         <div className="space-y-3">
           {schedules.map((s) => (
-            <div key={s.id} className="bg-white rounded-xl border border-gray-200 px-5 py-4">
+            <div key={s.id} className="bg-white rounded-xl border border-hairline px-5 py-4">
               <div className="flex items-start gap-3">
-                <div className="w-3 h-3 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: s.vessel.color }} />
+                <div className="w-1.5 h-8 rounded-full mt-0.5 flex-shrink-0" style={{ backgroundColor: s.vessel.color }} />
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900">{s.vessel.name} · {s.product.displayName}</div>
-                  <div className="text-sm text-gray-500 mt-1">
+                  <div className="font-semibold text-sm text-ink">{s.vessel.name} · {s.product.displayName}</div>
+                  <div className="text-xs text-muted mt-1">
                     {fmtDate(s.startDate)} → {fmtDate(s.endDate)}
                   </div>
-                  <div className="text-sm text-gray-500 mt-0.5">
+                  <div className="text-xs text-muted mt-0.5">
                     {ALL_DAYS.filter((d) => s.daysOfWeek.includes(d)).map((d) => DAY_LABELS[d]).join(" ")}
                     {" · "}
                     {fmt12(s.departureTime)} → {fmt12(s.returnTime)}
@@ -218,13 +221,13 @@ export default function SchedulesPage() {
                     {s.capacity} seats
                   </div>
                 </div>
-                {!s.active && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Inactive</span>}
+                {!s.active && <span className="text-xs px-2 py-0.5 rounded-full bg-fill text-muted flex-shrink-0">Inactive</span>}
               </div>
             </div>
           ))}
 
           {schedules.length === 0 && !adding && (
-            <div className="text-center text-gray-400 py-12">
+            <div className="text-center text-muted py-12 text-sm">
               No schedules yet.{" "}
               {products.length === 0 && <span>Add a trip type first, then create a schedule.</span>}
             </div>
@@ -240,7 +243,7 @@ export default function SchedulesPage() {
             ) : (
               <button
                 onClick={() => setAdding(true)}
-                className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 text-sm text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors"
+                className="w-full border-2 border-dashed border-hairline rounded-xl py-4 text-sm text-muted hover:border-navy/30 hover:text-navy transition-colors"
               >
                 + Add schedule
               </button>
