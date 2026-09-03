@@ -6,6 +6,17 @@ import Link from "next/link";
 
 type Me = { staffId: string; name: string; role: string } | null;
 
+function DashboardIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
 function TripsIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -36,6 +47,7 @@ function SettingsIcon() {
 }
 
 const NAV = [
+  { href: "/admin", label: "Dashboard", Icon: DashboardIcon },
   { href: "/admin/trips", label: "Trips", Icon: TripsIcon },
   { href: "/admin/revenue", label: "Revenue", Icon: RevenueIcon },
   { href: "/admin/settings", label: "Settings", Icon: SettingsIcon },
@@ -90,7 +102,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Nav */}
         <nav className="flex-1 py-4 px-3 space-y-0.5">
           {NAV.map(({ href, label, Icon }) => {
-            const active = pathname.startsWith(href);
+            const active = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
             return (
               <Link
                 key={href}

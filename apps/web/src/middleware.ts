@@ -14,10 +14,6 @@ function withOperatorId(request: NextRequest, operatorId: string) {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname === "/admin") {
-    return NextResponse.redirect(new URL("/admin/trips", request.url));
-  }
-
   // Platform admin routes don't belong to any operator — skip resolution entirely.
   if (pathname.startsWith("/platform") || pathname.startsWith("/api/platform")) {
     return NextResponse.next();
