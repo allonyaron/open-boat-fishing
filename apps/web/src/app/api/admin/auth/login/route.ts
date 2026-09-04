@@ -14,15 +14,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Email and password required" }, { status: 400 });
   }
 
-  // 10 attempts per 15 min per IP. Admin login is low-volume and high-value —
-  // any legitimate operator will never hit this.
-  const rl = await checkRateLimit(`admin-login:${clientIp(req)}`, 10, 15 * 60 * 1000);
-  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
-
   const operatorId = getOperatorId(req);
   if (!operatorId) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
+
+  // 10 attempts per 15 min per IP, scoped to operatorId so one operator's traffic
+  // can't lock out another operator's admin in centralized mode.
+  const rl = await checkRateLimit(`admin-login:${operatorId}:${clientIp(req)}`, 10, 15 * 60 * 1000);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
   const [member] = await db
     .select()
