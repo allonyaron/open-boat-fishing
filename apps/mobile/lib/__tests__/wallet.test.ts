@@ -159,6 +159,8 @@ function makeBooking(overrides: Partial<WalletBooking> = {}): Omit<WalletBooking
     customerName: "Alice",
     customerEmail: "alice@example.com",
     customerPhone: null,
+    notes: null,
+    operator: null,
     totalCents: 5000,
     groupDiscountCents: 0,
     createdAt: "2026-01-01T10:00:00.000Z",
@@ -175,7 +177,7 @@ function makeBooking(overrides: Partial<WalletBooking> = {}): Omit<WalletBooking
           boardingTime: null,
           status: "scheduled",
           vessel: { id: "v-1", name: "Lady Luck", color: "#003366" },
-          product: { id: "p-1", displayName: "Full Day", category: "party_boat" },
+          product: { id: "p-1", displayName: "Full Day", category: "party_boat", whatToBring: [] },
         },
         tickets: [
           {

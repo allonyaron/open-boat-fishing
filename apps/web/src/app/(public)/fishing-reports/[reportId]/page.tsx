@@ -151,7 +151,7 @@ export default async function FishingReportPage({ params }: Props) {
 
       <div className="border-t border-hairline pt-6">
         <Link
-          href="/"
+          href="/book"
           className="inline-block bg-gold text-navy font-grotesk text-15 font-semibold px-5 py-2.5 rounded-btn hover:bg-gold-hover transition-colors"
         >
           Book a Trip

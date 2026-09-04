@@ -108,6 +108,7 @@ export default function CheckoutScreen() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState<{ code: string; email: string } | null>(null);
@@ -192,6 +193,7 @@ export default function CheckoutScreen() {
           customerName: cleanName,
           customerEmail: cleanEmail,
           customerPhone: cleanPhone,
+          notes: notes.trim() || null,
         }),
       });
 
@@ -360,7 +362,7 @@ export default function CheckoutScreen() {
                 returnKeyType="next"
               />
             </View>
-            <View style={[s.fieldGroup, { marginBottom: 0 }]}>
+            <View style={s.fieldGroup}>
               <Text style={s.fieldLabel}>
                 Mobile Number <Text style={s.optional}>(for ticket delivery)</Text>
               </Text>
@@ -372,6 +374,22 @@ export default function CheckoutScreen() {
                 placeholderTextColor={Colors.inkSubtle}
                 keyboardType="phone-pad"
                 returnKeyType="done"
+              />
+            </View>
+            <View style={[s.fieldGroup, { marginBottom: 0 }]}>
+              <Text style={s.fieldLabel}>
+                Special Requests <Text style={s.optional}>(optional)</Text>
+              </Text>
+              <TextInput
+                style={[s.input, s.notesInput]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Accessibility needs, dietary requirements…"
+                placeholderTextColor={Colors.inkSubtle}
+                multiline
+                maxLength={500}
+                returnKeyType="done"
+                blurOnSubmit
               />
             </View>
           </View>
@@ -529,6 +547,11 @@ const s = StyleSheet.create({
   optional: {
     fontWeight: "400",
     color: Colors.inkSubtle,
+  },
+  notesInput: {
+    minHeight: 72,
+    textAlignVertical: "top",
+    paddingTop: 8,
   },
   input: {
     fontSize: FontSize.xl,

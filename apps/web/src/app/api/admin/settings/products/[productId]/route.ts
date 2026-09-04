@@ -22,7 +22,7 @@ export async function PATCH(
 
   if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
 
-  const allowed = ["category", "displayName", "description", "imageUrl", "showRemaining", "active"] as const;
+  const allowed = ["category", "displayName", "description", "imageUrl", "whatToBring", "showRemaining", "active"] as const;
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   for (const key of allowed) {
     if (key in body) patch[key] = body[key];

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Linking, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import * as Brightness from "expo-brightness";
 import QRCode from "react-native-qrcode-svg";
@@ -118,6 +118,22 @@ export default function BoardingPassScreen() {
   const { trip } = item;
   const isCancelled = trip.status === "cancelled" || ticket.voided;
 
+  const whatToBring = trip.product.whatToBring ?? [];
+  const { operator } = booking;
+
+  const arriveNote = operator?.arriveMinutesBefore != null
+    ? operator.arriveMinutesBefore >= 60
+      ? `Arrive ${operator.arriveMinutesBefore / 60} hour${operator.arriveMinutesBefore === 60 ? "" : "s"} early`
+      : `Arrive ${operator.arriveMinutesBefore} minutes early`
+    : null;
+
+  function openDirections() {
+    const url = operator?.dockMapsUrl ?? (operator?.dockAddress
+      ? `https://maps.google.com/?q=${encodeURIComponent(operator.dockAddress)}`
+      : null);
+    if (url) Linking.openURL(url);
+  }
+
   return (
     <ScrollView
       style={s.scroll}
@@ -169,6 +185,37 @@ export default function BoardingPassScreen() {
         <DetailRow label="Purchased By" value={booking.customerName} />
         <DetailRow label="Confirmation" value={booking.confirmationCode} />
       </View>
+
+      {/* Getting there */}
+      {(operator?.dockAddress || operator?.dockMapsUrl || arriveNote) && (
+        <View style={s.infoCard}>
+          <Text style={s.infoTitle}>GETTING THERE</Text>
+          {operator?.dockAddress ? (
+            <Text style={s.infoBody}>{operator.dockAddress}</Text>
+          ) : null}
+          {arriveNote ? (
+            <Text style={s.arriveNote}>{arriveNote}</Text>
+          ) : null}
+          {(operator?.dockMapsUrl || operator?.dockAddress) ? (
+            <TouchableOpacity style={s.directionsBtn} onPress={openDirections} activeOpacity={0.8}>
+              <Text style={s.directionsBtnText}>Get Directions →</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      )}
+
+      {/* What to bring */}
+      {whatToBring.length > 0 && (
+        <View style={s.infoCard}>
+          <Text style={s.infoTitle}>WHAT TO BRING</Text>
+          {whatToBring.map((item, i) => (
+            <View key={i} style={s.bringRow}>
+              <Text style={s.bringCheck}>✓</Text>
+              <Text style={s.bringItem}>{item}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* Ticket ID — scan fallback */}
       <Text style={s.ticketId} numberOfLines={1} ellipsizeMode="middle">
@@ -318,5 +365,64 @@ const s = StyleSheet.create({
     marginTop: 20,
     marginHorizontal: 20,
     letterSpacing: 0.3,
+  },
+  infoCard: {
+    backgroundColor: Colors.surface,
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+  },
+  infoTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.inkSubtle,
+    letterSpacing: 1,
+    marginBottom: 10,
+  },
+  infoBody: {
+    fontSize: 14,
+    color: Colors.ink,
+    marginBottom: 6,
+    lineHeight: 20,
+  },
+  arriveNote: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.gold,
+    marginBottom: 10,
+  },
+  directionsBtn: {
+    marginTop: 4,
+    backgroundColor: Colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignSelf: "flex-start",
+  },
+  directionsBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.ink,
+  },
+  bringRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  bringCheck: {
+    fontSize: 13,
+    color: Colors.gold,
+    fontWeight: "700",
+    width: 16,
+  },
+  bringItem: {
+    fontSize: 14,
+    color: Colors.ink,
   },
 });

@@ -25,7 +25,7 @@ export type WalletBookingItem = {
     boardingTime: string | null;
     status: string;
     vessel: { id: string; name: string; color: string };
-    product: { id: string; displayName: string; category: string };
+    product: { id: string; displayName: string; category: string; whatToBring: string[] };
   };
   tickets: WalletTicket[];
 };
@@ -36,9 +36,15 @@ export type WalletBooking = {
   customerName: string;
   customerEmail: string;
   customerPhone: string | null;
+  notes: string | null;
   totalCents: number;
   groupDiscountCents: number;
   createdAt: string;
+  operator: {
+    dockAddress: string | null;
+    dockMapsUrl: string | null;
+    arriveMinutesBefore: number | null;
+  } | null;
   items: WalletBookingItem[];
   syncedAt: string;
 };

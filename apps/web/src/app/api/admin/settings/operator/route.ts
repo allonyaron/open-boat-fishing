@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest) {
 
   const allowed = [
     "name", "emailFrom", "emailDomain", "phone", "dockAddress", "dockMapsUrl",
-    "termsUrl", "twilioFromNumber", "feeBearer", "feeDisplay",
+    "arriveMinutesBefore", "termsUrl", "twilioFromNumber", "feeBearer", "feeDisplay",
     "cancelWindowHrs", "settleGraceHrs",
   ] as const;
 
@@ -36,6 +36,17 @@ export async function PATCH(req: NextRequest) {
     if (key in body) patch[key] = body[key];
   }
 
+  if ("arriveMinutesBefore" in patch) {
+    const v = patch.arriveMinutesBefore;
+    if (v === null || v === "" || v === undefined) {
+      patch.arriveMinutesBefore = null;
+    } else {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1)
+        return NextResponse.json({ error: "arriveMinutesBefore must be a positive integer" }, { status: 400 });
+      patch.arriveMinutesBefore = n;
+    }
+  }
   if ("cancelWindowHrs" in patch) {
     const v = Number(patch.cancelWindowHrs);
     if (!Number.isInteger(v) || v < 0)

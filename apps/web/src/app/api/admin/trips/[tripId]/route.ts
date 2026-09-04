@@ -81,6 +81,7 @@ export async function GET(req: NextRequest, { params }: { params: { tripId: stri
       customerName: b.customerName,
       customerEmail: b.customerEmail,
       customerPhone: b.customerPhone,
+      notes: b.notes,
       status: b.status,
       totalCents: b.totalCents,
       stripePaymentIntentId: b.stripePaymentIntentId,

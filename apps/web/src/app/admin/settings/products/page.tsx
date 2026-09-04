@@ -10,6 +10,7 @@ type Product = {
   category: string;
   displayName: string;
   description: string | null;
+  whatToBring: string[];
   showRemaining: boolean;
   active: boolean;
   prices: Price[];
@@ -59,6 +60,7 @@ function ProductForm({
   const [category, setCategory] = useState(initial?.category ?? "");
   const [displayName, setDisplayName] = useState(initial?.displayName ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
+  const [whatToBring, setWhatToBring] = useState((initial?.whatToBring ?? []).join("\n"));
   const [showRemaining, setShowRemaining] = useState(initial?.showRemaining ?? false);
   const [prices, setPrices] = useState<Record<string, string>>({
     adult: initial?.prices?.find((p) => p.ticketType === "adult") ? dollars(initial.prices.find((p) => p.ticketType === "adult")!.priceCents) : "",
@@ -75,7 +77,8 @@ function ProductForm({
     const priceRows = TICKET_TYPES
       .filter((t) => prices[t] !== "" && !isNaN(Number(prices[t])))
       .map((t) => ({ ticketType: t, priceCents: Math.round(Number(prices[t]) * 100) }));
-    const err = await onSave({ vesselId, category, displayName, description: description || undefined, showRemaining, prices: priceRows });
+    const parsedWhatToBring = whatToBring.split("\n").map((s) => s.trim()).filter(Boolean);
+    const err = await onSave({ vesselId, category, displayName, description: description || undefined, whatToBring: parsedWhatToBring, showRemaining, prices: priceRows });
     setSaving(false);
     if (err) setError(err);
   }
@@ -101,6 +104,16 @@ function ProductForm({
       <div>
         <label className="block text-sm font-medium text-ink mb-1">Description (optional)</label>
         <input className={inputCls} value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-ink mb-1">What to bring (one item per line, shown on booking confirmation)</label>
+        <textarea
+          className={`${inputCls} resize-none`}
+          rows={4}
+          value={whatToBring}
+          onChange={(e) => setWhatToBring(e.target.value)}
+          placeholder={"Camera\nSunglasses\nSunblock\nWarm clothing\nRubber sole shoes"}
+        />
       </div>
 
       <div>

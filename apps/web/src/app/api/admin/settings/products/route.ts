@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
       displayName: products.displayName,
       description: products.description,
       imageUrl: products.imageUrl,
+      whatToBring: products.whatToBring,
       showRemaining: products.showRemaining,
       active: products.active,
       createdAt: products.createdAt,
@@ -64,6 +65,11 @@ export async function POST(req: NextRequest) {
 
   if (!vessel) return NextResponse.json({ error: "Vessel not found" }, { status: 404 });
 
+  const rawWhatToBring = body.whatToBring;
+  const whatToBring = Array.isArray(rawWhatToBring)
+    ? (rawWhatToBring as string[]).map((s) => String(s).trim()).filter(Boolean)
+    : [];
+
   const [product] = await db
     .insert(products)
     .values({
@@ -72,6 +78,7 @@ export async function POST(req: NextRequest) {
       category,
       displayName,
       description: body.description ? String(body.description) : null,
+      whatToBring,
       showRemaining: Boolean(body.showRemaining),
     })
     .returning();

@@ -11,6 +11,7 @@ type Op = {
   phone: string | null;
   dockAddress: string | null;
   dockMapsUrl: string | null;
+  arriveMinutesBefore: number | null;
   termsUrl: string | null;
   twilioFromNumber: string | null;
   feeBearer: "passenger" | "operator";
@@ -109,6 +110,16 @@ export default function OperatorSettingsPage() {
           </Field>
           <Field label="Google Maps URL (dock)">
             <input className={inputCls} value={form.dockMapsUrl ?? ""} onChange={(e) => set("dockMapsUrl", e.target.value)} />
+          </Field>
+          <Field label="Arrive early (minutes before departure, e.g. 60)">
+            <input
+              className={inputCls}
+              type="number"
+              min={1}
+              value={form.arriveMinutesBefore ?? ""}
+              onChange={(e) => set("arriveMinutesBefore", e.target.value === "" ? (null as unknown as number) : Number(e.target.value))}
+              placeholder="Leave blank to hide"
+            />
           </Field>
           <Field label="Terms & conditions URL">
             <input className={inputCls} value={form.termsUrl ?? ""} onChange={(e) => set("termsUrl", e.target.value)} />

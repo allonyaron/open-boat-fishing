@@ -58,6 +58,7 @@ export const operators = pgTable("operators", {
   phone: text("phone"),
   dockAddress: text("dock_address"),
   dockMapsUrl: text("dock_maps_url"),
+  arriveMinutesBefore: integer("arrive_minutes_before"), // null = no arrive-early note shown
   feeBearer: feeBearerEnum("fee_bearer").notNull().default("passenger"),
   feeDisplay: feeDisplayEnum("fee_display").notNull().default("itemized"),
   cancelWindowHrs: integer("cancel_window_hrs").notNull().default(48),
@@ -100,6 +101,7 @@ export const products = pgTable("products", {
   displayName: text("display_name").notNull(),       // "Sea Bass Fishing Express"
   description: text("description"),
   imageUrl: text("image_url"),
+  whatToBring: text("what_to_bring").array().notNull().default([]),
   showRemaining: boolean("show_remaining").notNull().default(false),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
