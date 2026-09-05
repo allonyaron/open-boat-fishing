@@ -37,6 +37,7 @@ type BookingRow = {
   customerName: string;
   customerEmail: string;
   customerPhone: string | null;
+  notes: string | null;
   status: "pending" | "confirmed" | "cancelled";
   totalCents: number;
   createdAt: string;
@@ -447,6 +448,11 @@ export default function TripDetailPage() {
                       <span className="text-muted text-sm ml-2">{booking.customerEmail}</span>
                       {booking.customerPhone && (
                         <span className="text-muted text-sm ml-2">{booking.customerPhone}</span>
+                      )}
+                      {booking.notes && (
+                        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 mt-1 inline-block">
+                          Note: {booking.notes}
+                        </div>
                       )}
                     </div>
                     <div className="flex items-center gap-3 text-sm">

@@ -20,8 +20,7 @@ const PAST = Math.floor(Date.now() / 1000) - 3600;
 // Builds a token in the same format the server produces:
 // base64url(payload).signature
 function makeMateToken(payload: object): string {
-  const b64 = Buffer.from(JSON.stringify(payload))
-    .toString("base64")
+  const b64 = btoa(JSON.stringify(payload))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=/g, "");
@@ -60,11 +59,7 @@ describe("decodeMateToken", () => {
   });
 
   it("returns null for a non-JSON payload", () => {
-    const b64 = Buffer.from("not-json")
-      .toString("base64")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=/g, "");
+    const b64 = btoa("not-json").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
     expect(decodeMateToken(`${b64}.sig`)).toBeNull();
   });
 });

@@ -1,17 +1,18 @@
-// 4-point spacing scale
+import { spacing, radius } from "@openboat/design";
+
 export const Spacing = {
-  xxs: 2,
-  xs: 4,
-  sm: 6,
-  md: 8,
-  lg: 12,
-  xl: 16,
-  xxl: 24,
-  xxxl: 32,
-  xxxxl: 40,
+  xxs: spacing.xxs,
+  xs: spacing.xs,
+  sm: spacing.sm,
+  md: spacing.md,
+  lg: spacing.lg,
+  xl: spacing.xl,
+  xxl: spacing.xxl,
+  xxxl: spacing.xxxl,
+  xxxxl: spacing.xxxxl,
 } as const;
 
-// Named padding values that fall between grid steps
+// Component-level padding values (not in the base scale)
 export const Padding = {
   btnVertical: 14,
   inputHorizontal: 16,
@@ -19,13 +20,14 @@ export const Padding = {
 } as const;
 
 export const Radius = {
-  xs: 2,
-  sm: 8,
-  md: 12,
-  lg: 14,
-  pill: 99,
+  xs: radius.xs,
+  sm: radius.sm,
+  md: radius.md,
+  lg: radius.lg,
+  pill: radius.pill,
 } as const;
 
+// React Native shadow props (web equivalent is box-shadow)
 export const Shadow = {
   card: {
     shadowOffset: { width: 0, height: 1 },

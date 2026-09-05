@@ -159,7 +159,7 @@ export default function MateLoginScreen() {
 const s = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.navy,
   },
   kav: {
     flex: 1,
@@ -223,7 +223,7 @@ const s = StyleSheet.create({
   },
   btn: {
     height: 52,
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.gold,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -237,7 +237,7 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   btnText: {
-    color: Colors.white,
+    color: Colors.navy,
     fontSize: 16,
     fontWeight: "700",
   },

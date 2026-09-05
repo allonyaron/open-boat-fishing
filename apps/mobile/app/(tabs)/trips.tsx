@@ -542,7 +542,7 @@ const s = StyleSheet.create({
   },
   navArrow: {
     fontSize: 28,
-    color: Colors.teal,
+    color: Colors.navy,
     lineHeight: 32,
   },
   monthTitle: {
@@ -705,11 +705,11 @@ const cal = StyleSheet.create({
     justifyContent: "center",
   },
   dayCircleSelected: {
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.navy,
   },
   dayCircleToday: {
     borderWidth: 1.5,
-    borderColor: Colors.teal,
+    borderColor: Colors.navy,
   },
   dayNum: {
     fontSize: 14,
@@ -916,13 +916,13 @@ const cb = StyleSheet.create({
     color: Colors.ink,
   },
   btn: {
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.gold,
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 12,
   },
   btnText: {
-    color: Colors.white,
+    color: Colors.navy,
     fontSize: 16,
     fontWeight: "700",
     letterSpacing: 0.3,

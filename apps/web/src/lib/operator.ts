@@ -38,6 +38,7 @@ export type OperatorContext = Pick<
   | "phone"
   | "dockAddress"
   | "dockMapsUrl"
+  | "arriveMinutesBefore"
 >;
 
 const operatorContextFields = {
@@ -56,6 +57,7 @@ const operatorContextFields = {
   phone: operators.phone,
   dockAddress: operators.dockAddress,
   dockMapsUrl: operators.dockMapsUrl,
+  arriveMinutesBefore: operators.arriveMinutesBefore,
 } as const;
 
 /**

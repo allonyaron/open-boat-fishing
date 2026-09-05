@@ -168,6 +168,8 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
   const [phone, setPhone] = useState("");
   const [showName, setShowName] = useState(false);
   const [name, setName] = useState("");
+  const [showNotes, setShowNotes] = useState(false);
+  const [notes, setNotes] = useState("");
 
   // payment phase state
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -246,6 +248,7 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
           customerName: name.trim() || null,
           customerEmail: email.trim(),
           customerPhone: phone.trim() || null,
+          notes: notes.trim() || null,
         }),
       });
       const data = await res.json();
@@ -416,6 +419,31 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
                   className="text-13 text-gold underline underline-offset-2"
                 >
                   + Add a name (optional)
+                </button>
+              )}
+
+              {showNotes ? (
+                <div>
+                  <label htmlFor="checkout-notes" className="text-11 font-bold uppercase tracking-wide text-faint block mb-1.5">
+                    Special requests or notes (optional)
+                  </label>
+                  <textarea
+                    id="checkout-notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    placeholder="Accessibility needs, dietary requirements, any other notes for the crew…"
+                    className="w-full px-4 py-3 rounded-xl border border-card-border text-15 text-ink placeholder:text-faint focus:outline-none focus:border-gold transition-colors resize-none"
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowNotes(true)}
+                  className="text-13 text-gold underline underline-offset-2"
+                >
+                  + Add a special request (optional)
                 </button>
               )}
             </div>

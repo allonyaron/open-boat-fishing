@@ -381,13 +381,13 @@ const s = StyleSheet.create({
     color: Colors.ink,
   },
   addBtn: {
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.gold,
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 8,
   },
   addBtnText: {
-    color: Colors.white,
+    color: Colors.navy,
     fontSize: 14,
     fontWeight: "700",
   },
@@ -420,13 +420,13 @@ const s = StyleSheet.create({
   },
   emptyBtn: {
     marginTop: 8,
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.gold,
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 12,
   },
   emptyBtnText: {
-    color: Colors.white,
+    color: Colors.navy,
     fontSize: 16,
     fontWeight: "700",
   },
@@ -617,7 +617,7 @@ const add = StyleSheet.create({
   },
   btn: {
     height: 50,
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.gold,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -627,7 +627,7 @@ const add = StyleSheet.create({
     opacity: 0.75,
   },
   btnText: {
-    color: Colors.white,
+    color: Colors.navy,
     fontSize: 16,
     fontWeight: "700",
   },

@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { fmtTime } from "@openboat/utils";
 import { API_URL } from "@/lib/api";
 import { Colors } from "@/constants/Colors";
 
@@ -36,14 +37,6 @@ function fmtDate(date: string): string {
     month: "long",
     day: "numeric",
     year: "numeric",
-  });
-}
-
-function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
   });
 }
 

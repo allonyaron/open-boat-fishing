@@ -108,6 +108,7 @@ export default function CheckoutScreen() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState<{ code: string; email: string } | null>(null);
@@ -192,6 +193,7 @@ export default function CheckoutScreen() {
           customerName: cleanName,
           customerEmail: cleanEmail,
           customerPhone: cleanPhone,
+          notes: notes.trim() || null,
         }),
       });
 
@@ -360,7 +362,7 @@ export default function CheckoutScreen() {
                 returnKeyType="next"
               />
             </View>
-            <View style={[s.fieldGroup, { marginBottom: 0 }]}>
+            <View style={s.fieldGroup}>
               <Text style={s.fieldLabel}>
                 Mobile Number <Text style={s.optional}>(for ticket delivery)</Text>
               </Text>
@@ -372,6 +374,22 @@ export default function CheckoutScreen() {
                 placeholderTextColor={Colors.inkSubtle}
                 keyboardType="phone-pad"
                 returnKeyType="done"
+              />
+            </View>
+            <View style={[s.fieldGroup, { marginBottom: 0 }]}>
+              <Text style={s.fieldLabel}>
+                Special Requests <Text style={s.optional}>(optional)</Text>
+              </Text>
+              <TextInput
+                style={[s.input, s.notesInput]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Accessibility needs, dietary requirements…"
+                placeholderTextColor={Colors.inkSubtle}
+                multiline
+                maxLength={500}
+                returnKeyType="done"
+                blurOnSubmit
               />
             </View>
           </View>
@@ -530,6 +548,11 @@ const s = StyleSheet.create({
     fontWeight: "400",
     color: Colors.inkSubtle,
   },
+  notesInput: {
+    minHeight: 72,
+    textAlignVertical: "top",
+    paddingTop: 8,
+  },
   input: {
     fontSize: FontSize.xl,
     color: Colors.ink,
@@ -552,20 +575,20 @@ const s = StyleSheet.create({
     lineHeight: LineHeight.tight,
   },
   payBtn: {
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.gold,
     paddingVertical: Spacing.xl,
     borderRadius: Radius.lg,
     alignItems: "center",
     justifyContent: "center",
     marginTop: Spacing.xs,
-    shadowColor: Colors.teal,
+    shadowColor: Colors.gold,
     ...Shadow.modal,
   },
   payBtnDisabled: {
     opacity: 0.7,
   },
   payBtnText: {
-    color: Colors.white,
+    color: Colors.navy,
     fontSize: FontSize.xxl,
     fontWeight: "800",
     letterSpacing: 0.3,
@@ -588,13 +611,13 @@ const cv = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.gold,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: Spacing.xs,
   },
   checkmark: {
-    color: Colors.white,
+    color: Colors.navy,
     fontSize: FontSize.display,
     fontWeight: "700",
     lineHeight: LineHeight.loose,
@@ -641,7 +664,7 @@ const cv = StyleSheet.create({
     lineHeight: LineHeight.base,
   },
   btn: {
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.gold,
     paddingHorizontal: Spacing.xxxxl,
     paddingVertical: Spacing.xl,
     borderRadius: Radius.lg,
@@ -650,7 +673,7 @@ const cv = StyleSheet.create({
     alignItems: "center",
   },
   btnText: {
-    color: Colors.white,
+    color: Colors.navy,
     fontSize: FontSize.xl,
     fontWeight: "700",
   },

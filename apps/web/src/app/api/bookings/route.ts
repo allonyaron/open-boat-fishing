@@ -10,6 +10,7 @@ import {
   tickets,
   productPrices,
   schedulePrices,
+  operators,
 } from "@openboat/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { randomBytes, randomUUID } from "crypto";
@@ -31,6 +32,7 @@ const bookingBodySchema = z.object({
   customerEmail: z.string().email().max(254).transform((s) => s.toLowerCase().trim()),
   customerName: z.string().max(100).nullish(),
   customerPhone: z.string().max(20).nullish(),
+  notes: z.string().max(500).nullish(),
   cart: z
     .array(
       z.object({
@@ -79,7 +81,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const { cart, customerName, customerEmail, customerPhone } = parsed.data;
+  const { cart, customerName, customerEmail, customerPhone, notes } = parsed.data;
 
   const operator = await getOperatorContext(req);
   if (!operator) {
@@ -238,6 +240,7 @@ export async function POST(req: NextRequest) {
             customerName: customerName ?? null,
             customerEmail,
             customerPhone,
+            notes: notes ?? null,
             termsVersion: operator.termsUrl ?? "unversioned",
             termsAcceptedAt: new Date(),
             holdExpiresAt,
@@ -431,13 +434,21 @@ export async function GET(req: NextRequest) {
   const vesselIds = [...new Set(tripRows.map((t) => t.vesselId))];
   const productIds = [...new Set(tripRows.map((t) => t.productId))];
 
-  const [vesselRows, productRows] = await Promise.all([
+  const [vesselRows, productRows, [operatorRow]] = await Promise.all([
     vesselIds.length > 0
       ? db.select().from(vessels).where(inArray(vessels.id, vesselIds))
       : Promise.resolve([] as (typeof vessels.$inferSelect)[]),
     productIds.length > 0
       ? db.select().from(products).where(inArray(products.id, productIds))
       : Promise.resolve([] as (typeof products.$inferSelect)[]),
+    db
+      .select({
+        dockAddress: operators.dockAddress,
+        dockMapsUrl: operators.dockMapsUrl,
+        arriveMinutesBefore: operators.arriveMinutesBefore,
+      })
+      .from(operators)
+      .where(eq(operators.id, operatorId)),
   ]);
 
   const items = itemRows.map((item) => {
@@ -466,6 +477,7 @@ export async function GET(req: NextRequest) {
           id: product.id,
           displayName: product.displayName,
           category: product.category,
+          whatToBring: product.whatToBring,
         },
       },
       tickets: itemTickets.map((t) => ({
@@ -485,9 +497,11 @@ export async function GET(req: NextRequest) {
     customerName: booking.customerName,
     customerEmail: booking.customerEmail,
     customerPhone: booking.customerPhone,
+    notes: booking.notes,
     totalCents: booking.totalCents,
     groupDiscountCents: booking.groupDiscountCents,
     createdAt: booking.createdAt,
+    operator: operatorRow ?? null,
     items,
   });
 }

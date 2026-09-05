@@ -63,7 +63,7 @@ export async function PATCH(
     .update(staff)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .set(patch as any)
-    .where(eq(staff.id, staffId))
+    .where(and(eq(staff.id, staffId), eq(staff.operatorId, session.operatorId)))
     .returning({
       id: staff.id,
       name: staff.name,

@@ -71,6 +71,20 @@
       "when": 1756684800000,
       "tag": "0009_seats_remaining_check",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788543008739,
+      "tag": "0010_bitter_silver_surfer",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1757001600000,
+      "tag": "0011_confirmation_code_unique",
+      "breakpoints": true
     }
   ]
 }

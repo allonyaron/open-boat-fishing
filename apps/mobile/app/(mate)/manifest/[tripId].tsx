@@ -646,13 +646,13 @@ const s = StyleSheet.create({
   tripBarText: { fontSize: 14, fontWeight: "600", color: Colors.ink },
   tripBarCount: { fontSize: 14, fontWeight: "700", color: Colors.teal },
   reportBtn: {
-    backgroundColor: Colors.teal,
+    backgroundColor: Colors.gold,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 7,
     marginLeft: 10,
   },
-  reportBtnText: { color: Colors.white, fontSize: 13, fontWeight: "700" },
+  reportBtnText: { color: Colors.navy, fontSize: 13, fontWeight: "700" },
 
   capacityBar: {
     backgroundColor: Colors.surface,

@@ -15,21 +15,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Email and PIN required" }, { status: 400 });
   }
 
-  // 4-digit PIN = 10,000 combinations. 5 per 15 min caps a sustained attack
-  // to ~480 guesses/day — ~21 days to brute-force without a lockout signal.
-  // Coarse IP bucket prevents parallelising across many email addresses from one host.
-  const ip = clientIp(req);
-  const [ipRl, emailRl] = await Promise.all([
-    checkRateLimit(`mate-auth:ip:${ip}`, 20, 15 * 60 * 1000),
-    checkRateLimit(`mate-auth:${email.toLowerCase().trim()}`, 5, 15 * 60 * 1000),
-  ]);
-  if (!ipRl.allowed || !emailRl.allowed) {
-    return tooManyRequests(Math.max(ipRl.retryAfterSec, emailRl.retryAfterSec));
-  }
-
   const operatorId = getOperatorId(req);
   if (!operatorId) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
+  }
+
+  // 4-digit PIN = 10,000 combinations. 5 per 15 min caps a sustained attack
+  // to ~480 guesses/day — ~21 days to brute-force without a lockout signal.
+  // Coarse IP bucket prevents parallelising across many email addresses from one host.
+  // Both keys are scoped to operatorId so one operator's staff can't lock out another's.
+  const ip = clientIp(req);
+  const [ipRl, emailRl] = await Promise.all([
+    checkRateLimit(`mate-auth:${operatorId}:ip:${ip}`, 20, 15 * 60 * 1000),
+    checkRateLimit(`mate-auth:${operatorId}:${email.toLowerCase().trim()}`, 5, 15 * 60 * 1000),
+  ]);
+  if (!ipRl.allowed || !emailRl.allowed) {
+    return tooManyRequests(Math.max(ipRl.retryAfterSec, emailRl.retryAfterSec));
   }
 
   const [member] = await db

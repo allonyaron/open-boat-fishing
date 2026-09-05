@@ -1,20 +1,22 @@
+import { fontSize, lineHeight } from "@openboat/design";
+
 export const FontSize = {
-  xs: 11,
-  sm: 12,
-  base: 13,
-  md: 14,
-  lg: 15,
-  xl: 16,
-  xxl: 18,
-  h3: 20,
-  h2: 28,
-  h1: 32,
-  display: 36,
+  xs: fontSize.xs,
+  sm: fontSize.sm,
+  base: fontSize.base,
+  md: fontSize.md,
+  lg: fontSize.lg,
+  xl: fontSize.xl,
+  xxl: fontSize.xxl,
+  h3: fontSize.h3,
+  h2: fontSize.h2,
+  h1: fontSize.h1,
+  display: fontSize.display,
 } as const;
 
 export const LineHeight = {
-  tight: 18,
-  base: 20,
-  relaxed: 24,
-  loose: 44,
+  tight: lineHeight.tight,
+  base: lineHeight.base,
+  relaxed: lineHeight.relaxed,
+  loose: lineHeight.loose,
 } as const;

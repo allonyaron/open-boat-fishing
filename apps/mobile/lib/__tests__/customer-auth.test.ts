@@ -18,8 +18,7 @@ const FUTURE = Math.floor(Date.now() / 1000) + 3600;
 const PAST = Math.floor(Date.now() / 1000) - 3600;
 
 function makeToken(payload: object): string {
-  const b64 = Buffer.from(JSON.stringify(payload))
-    .toString("base64")
+  const b64 = btoa(JSON.stringify(payload))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=/g, "");
@@ -58,7 +57,7 @@ describe("decodeCustomerToken", () => {
   });
 
   it("returns null when the payload is not valid JSON", () => {
-    const b64 = Buffer.from("not-json").toString("base64url");
+    const b64 = btoa("not-json").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
     expect(decodeCustomerToken(`${b64}.sig`)).toBeNull();
   });
 
