@@ -45,3 +45,68 @@ jobs:
           STRIPE_WEBHOOK_SECRET: "whsec_ci_placeholder"
           CRON_SECRET: "ci_cron_placeholder"
           RESEND_API_KEY: "re_ci_placeholder"
+
+  smoke-test:
+    name: Smoke Test (Vercel Preview)
+    runs-on: ubuntu-latest
+    needs: typecheck-and-build
+    # Only run when Vercel will create a preview deployment (PRs to main).
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Wait for Vercel preview deployment
+        id: vercel-url
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const sha = context.payload.pull_request.head.sha;
+            const deadline = Date.now() + 10 * 60 * 1000; // 10 min max
+
+            core.info(`Waiting for Vercel deployment for SHA ${sha}`);
+
+            while (Date.now() < deadline) {
+              const { data: deployments } = await github.rest.repos.listDeployments({
+                owner, repo, sha, environment: "Preview",
+              });
+
+              for (const d of deployments) {
+                const { data: statuses } = await github.rest.repos.listDeploymentStatuses({
+                  owner, repo, deployment_id: d.id, per_page: 1,
+                });
+                const latest = statuses[0];
+                if (!latest) continue;
+                if (latest.state === "success") {
+                  const url = latest.environment_url || latest.target_url;
+                  core.info(`Deployment ready: ${url}`);
+                  core.setOutput("url", url);
+                  return url;
+                }
+                if (latest.state === "failure" || latest.state === "error") {
+                  core.setFailed(`Vercel deployment failed with state: ${latest.state}`);
+                  return;
+                }
+              }
+
+              core.info("Not ready yet — retrying in 15s");
+              await new Promise(r => setTimeout(r, 15000));
+            }
+
+            core.setFailed("Timed out waiting for Vercel preview deployment (10 min)");
+
+      - name: Health check
+        run: |
+          URL="${{ steps.vercel-url.outputs.url }}"
+          if [ -z "$URL" ]; then
+            echo "No deployment URL — skipping health check"
+            exit 1
+          fi
+          echo "Hitting $URL/api/health"
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "$URL/api/health")
+          echo "HTTP status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed — the deploy is broken (env vars missing or startup error)"
+            echo "Look up the digest in Vercel Logs to see the exact error"
+            exit 1
+          fi
+          echo "Health check passed"
