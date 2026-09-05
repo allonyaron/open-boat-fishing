@@ -21,9 +21,9 @@
     "expo-brightness": "~13.1.4",
     "expo-camera": "~16.1.0",
     "expo-constants": "~17.1.8",
-    "expo-dev-client": "^57.0.6",
+    "expo-dev-client": "~5.2.4",
     "expo-device": "~7.1.4",
-    "expo-image-picker": "^57.0.10",
+    "expo-image-picker": "~16.1.4",
     "expo-linking": "^7.1.7",
     "expo-notifications": "~0.31.5",
     "expo-router": "~5.1.11",
@@ -42,6 +42,6 @@
   },
   "devDependencies": {
     "@types/react": "~19.0.14",
-    "typescript": "^5.8.3"
+    "typescript": "~5.8.3"
   }
 }
