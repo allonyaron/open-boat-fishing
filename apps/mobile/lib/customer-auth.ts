@@ -26,7 +26,7 @@ export function decodeCustomerToken(token: string): CustomerProfile | null {
   try {
     const [data] = token.split(".");
     const payload = JSON.parse(
-      Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"),
+      atob(data.replace(/-/g, "+").replace(/_/g, "/")),
     ) as CustomerProfile & { exp: number };
     if (payload.exp < Date.now() / 1000) return null;
     return payload;

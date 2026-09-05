@@ -221,7 +221,7 @@ describe("upsertBooking", () => {
   it("updates syncedAt and raw_json on conflict (same id)", async () => {
     const booking = makeBooking();
     const first = await upsertBooking(booking);
-    await new Promise((r) => setTimeout(r, 5)); // ensure different timestamp
+    await new Promise<void>((resolve) => setTimeout(() => resolve(), 5)); // ensure different timestamp
     const second = await upsertBooking({ ...booking, customerName: "Alice Updated" });
     // Second upsert returns a new record with updated name
     expect(second.customerName).toBe("Alice Updated");
