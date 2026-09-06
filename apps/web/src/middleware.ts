@@ -14,8 +14,12 @@ function withOperatorId(request: NextRequest, operatorId: string) {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Platform admin routes don't belong to any operator — skip resolution entirely.
-  if (pathname.startsWith("/platform") || pathname.startsWith("/api/platform")) {
+  // Routes that don't belong to any operator — skip resolution entirely.
+  if (
+    pathname.startsWith("/platform") ||
+    pathname.startsWith("/api/platform") ||
+    pathname === "/api/health"
+  ) {
     return NextResponse.next();
   }
 

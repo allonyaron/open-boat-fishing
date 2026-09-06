@@ -102,7 +102,9 @@ jobs:
             exit 1
           fi
           echo "Hitting $URL/api/health"
-          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "$URL/api/health")
+          STATUS=$(curl -sL -o /dev/null -w "%{http_code}" \
+            -H "x-vercel-protection-bypass: ${{ secrets.VERCEL_BYPASS_SECRET }}" \
+            "$URL/api/health")
           echo "HTTP status: $STATUS"
           if [ "$STATUS" != "200" ]; then
             echo "Health check failed — the deploy is broken (env vars missing or startup error)"
