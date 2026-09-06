@@ -5,6 +5,8 @@ export default defineConfig({
   out: "./migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    // Prefer DIRECT_DATABASE_URL (non-pooler) for migrations — PgBouncer can
+    // interfere with migration transactions. Falls back to DATABASE_URL in local dev.
+    url: (process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL)!,
   },
 });
