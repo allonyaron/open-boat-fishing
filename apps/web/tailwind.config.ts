@@ -20,11 +20,30 @@ const config: Config = {
         success: tokens.success,
         warning: tokens.warning,
         disabled: tokens.disabled,
+        // ── Consumer booking flow design system ──────────────────────────────
+        hull: { DEFAULT: "#0d1c26", "2": "#132b39", line: "#3c5867" },
+        deck: { DEFAULT: "#eef1f0", "2": "#e6eaea", "3": "#f6f8f8" },
+        rule: { DEFAULT: "#cdd6da", soft: "#e3e9eb" },
+        "border-input": "#9aa8ae",
+        orange: {
+          DEFAULT: "#d1541f",
+          ink: "#b1440f",
+          press: "#8c3b12",
+          light: "#ff8a5c",
+        },
+        "ink-2": "#41565f",
+        "ink-3": "#5b6f79",
+        "ink-dark-2": "#b6c6ce",
+        "ink-dark-3": "#8fa3ad",
+        "green-open": "#186a4a",
       },
       fontFamily: {
         grotesk: ["var(--font-space-grotesk)", "sans-serif"],
         jakarta: ["var(--font-plus-jakarta)", "sans-serif"],
         manrope: ["var(--font-manrope)", "sans-serif"],
+        // Consumer booking flow
+        archivo: ["var(--font-archivo)", "Helvetica", "sans-serif"],
+        "plex-mono": ["var(--font-ibm-plex-mono)", "monospace"],
       },
       fontSize: {
         "9": "9px",

@@ -1,15 +1,43 @@
 import { db } from "@/lib/db";
-import { bookings } from "@openboat/db";
-import { and, eq } from "drizzle-orm";
+import { bookings, bookingItems, trips, products, vessels, tickets } from "@openboat/db";
+import { fmtTimeET } from "@/lib/format";
+import { and, eq, count } from "drizzle-orm";
 import { getOperatorRecord } from "@/lib/operator";
 import { notFound, redirect } from "next/navigation";
+import { BookingNav } from "@/components/BookingCalendar";
+import { dollars } from "@openboat/utils";
+
+function fmtDateShort(d: string) {
+  return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function googleCalUrl(
+  item: { productName: string; startTime: string; endTime: string },
+  code: string,
+  dockAddress: string | null,
+) {
+  const fmt = (d: string) =>
+    new Date(d).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: item.productName,
+    dates: `${fmt(item.startTime)}/${fmt(item.endTime)}`,
+    details: `Booking confirmation: ${code}`,
+    location: dockAddress ?? "",
+  });
+  return `https://calendar.google.com/calendar/render?${params}`;
+}
 
 export default async function DeliveryPage({
   searchParams,
 }: {
   searchParams: { code?: string; email?: string; phone?: string; redirect_status?: string };
 }) {
-  const { code, email, phone, redirect_status } = searchParams;
+  const { code, redirect_status } = searchParams;
 
   if (!code) notFound();
 
@@ -19,160 +47,229 @@ export default async function DeliveryPage({
 
   const operator = await getOperatorRecord();
   if (!operator) notFound();
-
-  const operatorName = operator.name ?? "Fishing Charter";
+  const op = operator;
 
   const [booking] = await db
     .select()
     .from(bookings)
-    .where(and(eq(bookings.confirmationCode, code), eq(bookings.operatorId, operator.id)));
+    .where(and(eq(bookings.confirmationCode, code), eq(bookings.operatorId, op.id)));
   if (!booking) notFound();
 
-  const displayEmail = email ?? booking.customerEmail;
-  const displayPhone = phone ?? booking.customerPhone ?? "";
+  const items = await db
+    .select({
+      tripId: trips.id,
+      tripDate: trips.departureDate,
+      startTime: trips.startTime,
+      endTime: trips.endTime,
+      productName: products.displayName,
+      category: products.category,
+      whatToBring: products.whatToBring,
+      vesselName: vessels.name,
+      subtotal: bookingItems.subtotalCents,
+    })
+    .from(bookingItems)
+    .innerJoin(trips, eq(trips.id, bookingItems.tripId))
+    .innerJoin(products, eq(products.id, trips.productId))
+    .innerJoin(vessels, eq(vessels.id, trips.vesselId))
+    .where(eq(bookingItems.bookingId, booking.id));
+
+  const ticketCounts = await db
+    .select({ tripId: bookingItems.tripId, qty: count() })
+    .from(tickets)
+    .innerJoin(bookingItems, eq(bookingItems.id, tickets.bookingItemId))
+    .where(eq(tickets.bookingId, booking.id))
+    .groupBy(bookingItems.tripId);
+
+  const qtyByTripId = Object.fromEntries(ticketCounts.map((r) => [r.tripId, r.qty]));
+
+  // Earliest departure minus arrive_minutes_before = berth time
+  const earliestStart = items.reduce(
+    (min, item) => Math.min(min, new Date(item.startTime).getTime()),
+    Infinity,
+  );
+  const berthTime =
+    isFinite(earliestStart) && op.arriveMinutesBefore != null
+      ? fmtTimeET(new Date(earliestStart - op.arriveMinutesBefore * 60 * 1000).toISOString())
+      : null;
+
+  // What to bring: de-duped across items, fallback to default
+  const whatToBringSet = new Set<string>();
+  for (const item of items) {
+    for (const thing of item.whatToBring ?? []) whatToBringSet.add(thing);
+  }
+  const whatToBring = Array.from(whatToBringSet);
+  const defaultWhatToBring =
+    "Rods and bait are aboard — nothing to rent or buy. Bring a jacket and non-slip shoes. Bring cash for the pool. We have coffee at the dock.";
+
+  const icsUrl = `/api/bookings/confirmation/${code}/calendar`;
+
+  const operatorName = op.name ?? "Fishing Charter";
 
   return (
-    <div className="min-h-screen bg-surface font-jakarta">
-      <header className="bg-white border-b border-hairline h-masthead flex items-center px-5 md:px-8 gap-3">
-        <a href="/" className="flex items-center gap-3">
-          <div className="w-logo h-logo rounded-icon bg-navy flex items-center justify-center">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="white"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2" />
-              <path d="M4 20l2-8h12l2 8" />
-              <path d="M12 4v8" />
-              <path d="M8 8h8" />
-            </svg>
-          </div>
-          <span className="font-grotesk text-17 font-semibold text-ink">{operatorName}</span>
-        </a>
-      </header>
+    <div className="min-h-screen bg-deck font-archivo">
+      <BookingNav
+        operatorName={operatorName}
+        dockAddress={op.dockAddress ?? null}
+        phone={op.phone ?? null}
+        step={3}
+      />
 
-      <div className="max-w-lg mx-auto px-5 py-10">
-        <div className="text-center mb-8">
-          <div className="text-5xl mb-4">🎣</div>
-          <h1 className="font-grotesk text-26 font-semibold text-ink mb-2">
-            You&apos;re booked!
+      <div className="max-w-[760px] mx-auto px-6 md:px-[34px] pb-20">
+
+        {/* Hull banner */}
+        <div className="bg-hull px-7 py-8">
+          <div
+            className="font-plex-mono text-[13px] font-semibold tracking-[.2em] uppercase mb-3"
+            style={{ color: "#ff8a5c" }}
+          >
+            YOU&apos;RE ON THE BOAT
+          </div>
+          <h1
+            className="font-archivo font-bold uppercase leading-none mb-4"
+            style={{ fontSize: "clamp(28px, 4.4vw, 44px)", letterSpacing: "-.02em", color: "#fff" }}
+          >
+            Seats confirmed.
           </h1>
-          <p className="text-muted text-15">How would you like your tickets?</p>
+          <p className="font-archivo text-[17px] leading-relaxed mb-6" style={{ color: "#b6c6ce" }}>
+            Receipt is on its way to your email. This screen alone is enough to board — show it at
+            the gangway.
+          </p>
+
+          <div
+            className="flex flex-wrap gap-[26px] pt-5"
+            style={{ borderTop: "1px solid #3c5867" }}
+          >
+            <div>
+              <div
+                className="font-plex-mono text-[11px] font-semibold tracking-[.18em] uppercase mb-1"
+                style={{ color: "#8fa3ad" }}
+              >
+                Confirmation
+              </div>
+              <div
+                className="font-plex-mono font-semibold tracking-[.08em]"
+                style={{ fontSize: "34px", color: "#fff" }}
+              >
+                {booking.confirmationCode}
+              </div>
+            </div>
+            {berthTime && (
+              <div>
+                <div
+                  className="font-plex-mono text-[11px] font-semibold tracking-[.18em] uppercase mb-1"
+                  style={{ color: "#8fa3ad" }}
+                >
+                  Be at dock by
+                </div>
+                <div
+                  className="font-plex-mono font-semibold tracking-[.08em]"
+                  style={{ fontSize: "34px", color: "#fff" }}
+                >
+                  {berthTime}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="space-y-3 mb-8">
-          {/* Print */}
-          <a
-            href={`/boarding/${booking.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-4 bg-white rounded-card border border-card-border p-5 hover:border-gold/40 hover:shadow-card transition-all group"
-          >
-            <div className="w-11 h-11 rounded-xl bg-navy-tint flex items-center justify-center flex-shrink-0">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#14233d"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="6 9 6 2 18 2 18 9" />
-                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-                <rect width="12" height="8" x="6" y="14" />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-grotesk text-15 font-semibold text-ink">Print tickets</div>
-              <div className="text-13 text-muted">
-                Open your boarding passes to print or save as PDF
-              </div>
-            </div>
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-faint group-hover:text-muted transition-colors"
+        {/* Trip card — border-top: none so it reads as one object with the banner */}
+        <div
+          className="bg-white"
+          style={{ border: "1px solid #cdd6da", borderTop: "none" }}
+        >
+          {items.map((item, i) => (
+            <div
+              key={i}
+              className="px-5 py-[18px]"
+              style={i > 0 ? { borderTop: "1px solid #e3e9eb" } : undefined}
             >
-              <path d="m9 18 6-6-6-6" />
-            </svg>
-          </a>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="font-archivo text-[19px] font-bold text-hull leading-snug mb-1">
+                    {item.productName}
+                  </div>
+                  <div className="font-plex-mono text-[13px]" style={{ color: "#41565f" }}>
+                    {fmtDateShort(item.tripDate)} · {fmtTimeET(item.startTime)} –{" "}
+                    {fmtTimeET(item.endTime)} · {item.vesselName}
+                  </div>
+                  <div className="font-plex-mono text-[13px]" style={{ color: "#41565f" }}>
+                    {qtyByTripId[item.tripId] ?? 0} seat
+                    {(qtyByTripId[item.tripId] ?? 0) !== 1 ? "s" : ""} ·{" "}
+                    {dollars(item.subtotal)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
 
-          {/* Email */}
-          <div className="flex items-center gap-4 bg-white rounded-card border border-card-border p-5">
-            <div className="w-11 h-11 rounded-xl bg-success-bg flex items-center justify-center flex-shrink-0">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#3f8f5e"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+          {/* Action row */}
+          <div
+            className="flex flex-wrap gap-3 px-5 py-4"
+            style={{ borderTop: "1px solid #e3e9eb" }}
+          >
+            <a
+              href={icsUrl}
+              className="font-plex-mono text-[12px] font-semibold tracking-[.1em] uppercase px-5 py-[15px] transition-colors hover:bg-deck-3"
+              style={{ border: "1px solid #0d1c26", color: "#0d1c26" }}
+            >
+              Add to Calendar
+            </a>
+            {op.dockMapsUrl && (
+              <a
+                href={op.dockMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-plex-mono text-[12px] font-semibold tracking-[.1em] uppercase px-5 py-[15px] transition-colors"
+                style={{ border: "1px solid #0d1c26", color: "#0d1c26" }}
               >
-                <path d="M20 6 9 17l-5-5" />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-grotesk text-15 font-semibold text-ink">Email tickets</div>
-              <div className="text-13 text-muted truncate">
-                Confirmation sent to {displayEmail}
-              </div>
-            </div>
+                Directions to Dock
+              </a>
+            )}
+            <span
+              className="font-plex-mono text-[12px] font-semibold tracking-[.1em] uppercase px-5 py-[15px] cursor-pointer"
+              style={{ border: "1px solid #0d1c26", color: "#0d1c26" }}
+            >
+              Text Me the Pass
+            </span>
           </div>
+        </div>
 
-          {/* Text — only if a phone number was provided */}
-          {displayPhone && (
-            <div className="flex items-center gap-4 bg-white rounded-card border border-card-border p-5">
-              <div className="w-11 h-11 rounded-xl bg-navy-tint flex items-center justify-center flex-shrink-0">
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#14233d"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect width="14" height="20" x="5" y="2" rx="2" />
-                  <path d="M12 18h.01" />
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-grotesk text-15 font-semibold text-ink">Text updates</div>
-                <div className="text-13 text-muted">{displayPhone}</div>
-              </div>
-            </div>
+        {/* Before you go — orange band */}
+        <div className="bg-orange px-6 py-[26px]">
+          <div
+            className="font-plex-mono text-[11px] font-semibold tracking-[.2em] uppercase mb-3"
+            style={{ color: "rgba(255,255,255,.7)" }}
+          >
+            Before you go
+          </div>
+          <p
+            className="font-archivo text-[19px] font-bold text-white leading-[1.4]"
+            style={{ maxWidth: "52ch" }}
+          >
+            {whatToBring.length > 0 ? whatToBring.join(" · ") : defaultWhatToBring}
+          </p>
+        </div>
+
+        {/* Closing line */}
+        <div
+          className="font-plex-mono text-[12px] leading-[1.8] mt-5"
+          style={{ color: "#5b6f79" }}
+        >
+          Cancel free up to 24 hours before sailing.
+          {op.phone && (
+            <>
+              {" "}
+              Questions?{" "}
+              <a
+                href={`tel:${op.phone}`}
+                className="underline"
+                style={{ color: "#b1440f" }}
+              >
+                {op.phone}
+              </a>
+            </>
           )}
         </div>
-
-        <a
-          href={`/booking/confirmation?code=${code}`}
-          className="block w-full text-center py-4 rounded-btn bg-gold text-navy font-grotesk font-semibold hover:bg-gold-hover transition-colors"
-        >
-          View booking details
-        </a>
-
-        <a
-          href="/"
-          className="block text-center text-13 text-muted mt-4 hover:text-ink underline transition-colors"
-        >
-          Back to calendar
-        </a>
       </div>
     </div>
   );

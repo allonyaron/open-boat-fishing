@@ -43,3 +43,47 @@
     animation: modal-appear 0.22s ease;
   }
 }
+
+/* ── Consumer booking flow ────────────────────────────────────────────────── */
+
+/* Trip row: 4-col on desktop, 2-col stacked on small mobile */
+.booking-trip-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 96px 104px 168px;
+  gap: 20px;
+  align-items: center;
+}
+@media (max-width: 700px) {
+  .booking-trip-row {
+    grid-template-columns: minmax(0,1fr) auto;
+    gap: 10px 14px;
+  }
+  .booking-trip-row .trip-col-main  { grid-column: 1 / -1; }
+  .booking-trip-row .trip-col-fare  { grid-column: 1; justify-self: start; }
+  .booking-trip-row .trip-col-seats { grid-column: 2; justify-self: end; }
+  .booking-trip-row .trip-col-action { grid-column: 1 / -1; }
+}
+
+/* Booking shell: 2-col with fixed rail on large screens, 1-col below 1000px */
+.booking-shell {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 372px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .booking-shell {
+    grid-template-columns: minmax(0,1fr);
+  }
+  .booking-rail { display: none !important; }
+  .booking-mobile-bar { display: flex !important; }
+}
+
+/* 2-col checkout / who's fishing fields */
+.booking-co-grid {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+  gap: 16px;
+}
+@media (max-width: 700px) {
+  .booking-co-grid { grid-template-columns: minmax(0,1fr); }
+}

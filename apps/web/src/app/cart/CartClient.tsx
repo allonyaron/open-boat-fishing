@@ -85,7 +85,7 @@ function TripCard({
   onRemove,
 }: {
   item: EnrichedCartItem;
-  onQtyChange: (type: "adult" | "child", qty: number) => void;
+  onQtyChange: (type: string, qty: number) => void;
   onRemove: () => void;
 }) {
   return (
@@ -171,7 +171,7 @@ export function CartClient({ operatorName }: { operatorName: string }) {
     }
   }, [items]);
 
-  function setQty(tripId: string, ticketType: "adult" | "child", qty: number) {
+  function setQty(tripId: string, ticketType: string, qty: number) {
     setItems((prev) =>
       prev
         .map((item) => {

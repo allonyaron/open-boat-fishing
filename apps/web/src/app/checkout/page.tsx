@@ -3,7 +3,11 @@ import { getOperatorRecord } from "@/lib/operator";
 
 export default async function CheckoutPage() {
   const operator = await getOperatorRecord();
-  const operatorName = operator?.name ?? "Fishing Charter";
-
-  return <CheckoutClient operatorName={operatorName} />;
+  return (
+    <CheckoutClient
+      operatorName={operator?.name ?? "Fishing Charter"}
+      phone={operator?.phone ?? null}
+      dockAddress={operator?.dockAddress ?? null}
+    />
+  );
 }
