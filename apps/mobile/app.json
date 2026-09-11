@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "OpenBoat Fishing",
-    "slug": "openboat-fishing",
+    "slug": "open-boat-fishing",
     "owner": "openfishingspot",
     "scheme": "openboatfishing",
     "version": "1.0.0",
@@ -14,7 +14,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#0E7C7B"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.openboat.fishing",
@@ -28,7 +30,10 @@
         "backgroundColor": "#0E7C7B"
       },
       "package": "com.openboat.fishing",
-      "permissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -57,7 +62,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "8466cecb-98b3-4727-8d58-f76ac9505a95"
+        "projectId": "54d05c24-2bd1-42b1-8f7a-b653cffb29d1"
       }
     }
   }

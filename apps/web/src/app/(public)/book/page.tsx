@@ -22,6 +22,8 @@ export default async function BookPage() {
       initialTrips={trips}
       initialMonth={month}
       operatorName={operator?.name ?? "Fishing Charter"}
+      phone={operator?.phone ?? null}
+      dockAddress={operator?.dockAddress ?? null}
       termsUrl={operator?.termsUrl ?? null}
     />
   );

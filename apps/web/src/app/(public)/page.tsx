@@ -1,388 +1,760 @@
 export const dynamic = "force-dynamic";
 
-import { dollars } from "@openboat/utils";
 import { getOperatorRecord } from "@/lib/operator";
 import { db } from "@/lib/db";
 import { products, productPrices, fishingReports, trips, vessels } from "@openboat/db";
-import { and, eq, ne, desc } from "drizzle-orm";
+import { and, eq, ne, desc, gte, lte } from "drizzle-orm";
 import Image from "next/image";
 import Link from "next/link";
+import { fmtTimeET } from "@/lib/format";
 
-// ─── Fish emoji map ───────────────────────────────────────────────────────────
-
-const FISH_EMOJI: Record<string, string> = {
-  Fluke: "🐟",
-  "Fluke / Striper": "🎣",
-  "Sea Bass": "🐠",
-  "Sea Bass / Fluke": "🐠",
-  "Striped Bass": "🎣",
-  "Stripers and Blues": "🎣",
-  Blackfish: "🐡",
-  "Night Stripers": "🌙",
-};
-function fishEmoji(cat: string) {
-  return FISH_EMOJI[cat] ?? "🎣";
+function dollars(cents: number) {
+  return `$${Math.round(cents / 100)}`;
 }
 
-// ─── HeroSection ─────────────────────────────────────────────────────────────
-
-function HeroSection({
-  operatorName,
-  fromPrice,
-  dockAddress,
-}: {
-  operatorName: string;
-  fromPrice: number | null;
-  dockAddress: string | null;
-}) {
-  const eyebrow = dockAddress?.toUpperCase() ?? "SPORT FISHING";
-
-  return (
-    <section className="relative overflow-hidden bg-navy">
-      <div className="relative max-w-7xl mx-auto px-6 md:px-10 py-20 md:py-28">
-        <div className="md:grid md:gap-10" style={{ gridTemplateColumns: "1.1fr 1fr" }}>
-          {/* Left column */}
-          <div className="flex flex-col justify-center">
-            <p className="text-13 font-bold uppercase mb-4 text-gold tracking-[0.14em]">
-              {eyebrow}
-            </p>
-
-            <h1 className="font-manrope text-36 md:text-48 font-extrabold text-white mb-4 leading-[1.08]">
-              {operatorName}
-            </h1>
-
-            <p className="text-16 mb-6 text-white/70">
-              Party fishing trips · Book your spot online
-            </p>
-
-            {/* Pill badges */}
-            <div className="flex flex-wrap gap-2 mb-8">
-              {[
-                "⭐ Top-rated",
-                "🎣 USCG Certified",
-                ...(fromPrice !== null ? [`From ${dollars(fromPrice)} / ticket`] : []),
-              ].map((label) => (
-                <span
-                  key={label}
-                  className="text-13 font-medium px-3 py-1 rounded-full bg-white/8 text-gold-light border border-white/12"
-                >
-                  {label}
-                </span>
-              ))}
-            </div>
-
-            {/* CTAs */}
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href="/book"
-                className="font-manrope text-15 font-bold px-6 py-3 rounded-[9px] bg-gold text-navy transition-opacity hover:opacity-90"
-              >
-                Book a trip →
-              </Link>
-              <Link
-                href="/book"
-                className="font-manrope text-15 font-bold px-6 py-3 rounded-[9px] text-white border border-white/35 transition-opacity hover:opacity-80"
-              >
-                View schedule →
-              </Link>
-            </div>
-          </div>
-
-          {/* Right column — framed photo (desktop only) */}
-          <div className="hidden md:flex items-center justify-center relative">
-            <div className="absolute inset-4 border border-gold/50 rounded-[20px] rotate-[1.5deg]" />
-            <div className="relative w-full rounded-2xl overflow-hidden" style={{ aspectRatio: "4/3" }}>
-              <Image
-                src="/hero-boat.png"
-                alt="Fishing boat with anglers at sea"
-                fill
-                className="object-cover"
-                priority
-              />
-            </div>
-            <div className="absolute -bottom-4 -left-4 bg-white px-4 py-3 rounded-xl shadow-hero">
-              <div className="font-manrope text-20 font-extrabold text-navy">500+</div>
-              <div className="text-12 font-medium text-muted">trips run</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
+function fmtSailDate(dateStr: string) {
+  const dt = new Date(dateStr + "T12:00:00Z");
+  const dow = dt.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).toUpperCase();
+  const day = dt.getUTCDate();
+  return { dow, day };
 }
 
-// ─── TripCategoriesSection ────────────────────────────────────────────────────
-
-function TripCategoriesSection({ categories }: { categories: string[] }) {
-  if (categories.length === 0) return null;
-
-  return (
-    <section className="bg-white py-16 px-6">
-      <div className="max-w-7xl mx-auto">
-        <p className="text-13 font-bold uppercase tracking-[0.14em] text-gold mb-2">
-          Trip Types
-        </p>
-        <h2 className="font-manrope text-28 md:text-36 font-extrabold text-ink mb-10">
-          What&apos;s Biting
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {categories.map((cat) => (
-            <Link
-              key={cat}
-              href="/book"
-              className="group flex flex-col items-center text-center bg-navy-tint rounded-card p-6 border border-transparent hover:border-gold/40 hover:shadow-card transition-all"
-            >
-              <span className="text-4xl mb-3">{fishEmoji(cat)}</span>
-              <span className="font-manrope text-16 font-bold text-ink mb-1">{cat}</span>
-              <span className="text-13 text-gold font-medium group-hover:underline">
-                Book Now →
-              </span>
-            </Link>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
+function fmtSailDateShort(dateStr: string) {
+  const dt = new Date(dateStr + "T12:00:00Z");
+  const dow = dt.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).toUpperCase();
+  const day = dt.getUTCDate();
+  return `${dow} ${day}`;
 }
 
-// ─── WhyUsSection ─────────────────────────────────────────────────────────────
-
-const WHY_US = [
-  {
-    emoji: "🏅",
-    title: "USCG Certified",
-    body: "Licensed, inspected, and Coast Guard certified for your safety on the water.",
-  },
-  {
-    emoji: "🧭",
-    title: "Experienced Captains",
-    body: "Decades of local knowledge and expert guidance on every trip.",
-  },
-  {
-    emoji: "📱",
-    title: "Easy Online Booking",
-    body: "Reserve your spot in minutes, 24/7 — no phone calls needed.",
-  },
-];
-
-function WhyUsSection() {
-  return (
-    <section className="bg-navy py-16 px-6">
-      <div className="max-w-7xl mx-auto">
-        <p className="text-13 font-bold uppercase tracking-[0.14em] text-gold mb-2">
-          Why Book With Us
-        </p>
-        <h2 className="font-manrope text-28 md:text-36 font-extrabold text-white mb-10">
-          The Best Day on the Water
-        </h2>
-        <div className="grid md:grid-cols-3 gap-8">
-          {WHY_US.map((item) => (
-            <div key={item.title} className="flex flex-col gap-3">
-              <span className="text-4xl">{item.emoji}</span>
-              <h3 className="font-manrope text-18 font-bold text-white">{item.title}</h3>
-              <p className="text-15 text-white/65 leading-relaxed">{item.body}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
+function fmtReportDate(dateStr: string) {
+  const dt = new Date(dateStr + "T12:00:00Z");
+  return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase();
 }
-
-// ─── ReportsTeaserSection ─────────────────────────────────────────────────────
-
-type ReportRow = {
-  id: string;
-  catchSummary: string | null;
-  fishCounts: unknown;
-  photoUrls: string[];
-  departureDate: string;
-  vesselName: string;
-  vesselColor: string;
-  productName: string;
-};
-
-function fmtDate(date: string) {
-  const [y, m, d] = date.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function ReportsTeaserSection({ reports }: { reports: ReportRow[] }) {
-  return (
-    <section className="bg-surface py-16 px-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-end justify-between mb-8 flex-wrap gap-4">
-          <div>
-            <p className="text-13 font-bold uppercase tracking-[0.14em] text-gold mb-2">
-              Recent Activity
-            </p>
-            <h2 className="font-manrope text-28 md:text-36 font-extrabold text-ink">
-              Latest from the Water
-            </h2>
-          </div>
-          <Link
-            href="/fishing-reports"
-            className="text-14 font-semibold text-teal hover:text-teal-dark transition-colors"
-          >
-            See all reports →
-          </Link>
-        </div>
-        <div className="grid md:grid-cols-3 gap-5">
-          {reports.map((r) => (
-            <Link
-              key={r.id}
-              href={`/fishing-reports/${r.id}`}
-              className="block bg-white rounded-xl border border-card-border p-5 hover:shadow-card-selected transition-shadow"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <div
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: r.vesselColor }}
-                />
-                <span className="font-semibold text-ink text-14">{r.vesselName}</span>
-                <span className="text-faint text-sm">·</span>
-                <span className="text-muted text-13">{r.productName}</span>
-              </div>
-              <p className="text-12 text-muted mb-2">{fmtDate(r.departureDate)}</p>
-              {r.catchSummary && (
-                <p className="text-13 text-ink line-clamp-3">{r.catchSummary}</p>
-              )}
-              {(r.fishCounts as { species: string; count: number }[]).length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {(r.fishCounts as { species: string; count: number }[])
-                    .slice(0, 3)
-                    .map((fc, i) => (
-                      <span
-                        key={i}
-                        className="text-11 bg-teal-tint text-teal font-medium px-2 py-0.5 rounded-full"
-                      >
-                        {fc.count} {fc.species}
-                      </span>
-                    ))}
-                </div>
-              )}
-            </Link>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─── Footer ───────────────────────────────────────────────────────────────────
-
-function Footer({
-  operatorName,
-  dockAddress,
-  phone,
-}: {
-  operatorName: string;
-  dockAddress: string | null;
-  phone: string | null;
-}) {
-  const year = new Date().getFullYear();
-
-  return (
-    <footer className="bg-navy-medium border-t border-white/10">
-      <div className="max-w-7xl mx-auto px-6 py-12 grid md:grid-cols-2 gap-10">
-        {/* Left: operator info */}
-        <div>
-          <p className="font-manrope text-18 font-bold text-white mb-3">{operatorName}</p>
-          {dockAddress && (
-            <p className="text-14 text-white/60 mb-1">{dockAddress}</p>
-          )}
-          {phone && (
-            <a href={`tel:${phone}`} className="text-14 text-white/60 hover:text-white/80 transition-colors">
-              {phone}
-            </a>
-          )}
-        </div>
-
-        {/* Right: quick links */}
-        <div className="md:text-right">
-          <p className="text-13 font-semibold uppercase tracking-label text-gold/80 mb-4">
-            Quick Links
-          </p>
-          <nav className="flex flex-col md:items-end gap-2">
-            <Link href="/" className="text-14 text-white/60 hover:text-white transition-colors">Home</Link>
-            <Link href="/book" className="text-14 text-white/60 hover:text-white transition-colors">Book a Trip</Link>
-            <Link href="/fishing-reports" className="text-14 text-white/60 hover:text-white transition-colors">Fishing Reports</Link>
-            <Link href="/terms" className="text-14 text-white/60 hover:text-white transition-colors">Terms</Link>
-          </nav>
-        </div>
-      </div>
-      <div className="border-t border-white/8 px-6 py-4">
-        <p className="max-w-7xl mx-auto text-12 text-white/35">
-          © {year} {operatorName}
-        </p>
-      </div>
-    </footer>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function HomePage() {
   const operator = await getOperatorRecord();
   if (!operator) return null;
 
-  const [categoryRows, reportRows, priceRows] = await Promise.all([
+  const now = new Date();
+  const todayStr = now.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const weekEndDate = new Date(now.getTime() + 7 * 86400000);
+  const weekEndStr = weekEndDate.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+  const dayChips = Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(now.getTime() + i * 86400000);
+    return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  });
+
+  const [weekTripRows, latestReportRows, priceRows, categoryRows] = await Promise.all([
     db
-      .select({ category: products.category })
-      .from(products)
-      .where(and(eq(products.operatorId, operator.id), ne(products.category, "Fireworks")))
-      .groupBy(products.category)
-      .orderBy(products.category),
+      .select({
+        tripId: trips.id,
+        departureDate: trips.departureDate,
+        startTime: trips.startTime,
+        productName: products.displayName,
+        seatsRemaining: trips.seatsRemaining,
+        priceCents: productPrices.priceCents,
+      })
+      .from(trips)
+      .innerJoin(products, eq(products.id, trips.productId))
+      .leftJoin(
+        productPrices,
+        and(eq(productPrices.productId, products.id), eq(productPrices.active, true)),
+      )
+      .where(
+        and(
+          eq(trips.operatorId, operator.id),
+          eq(trips.status, "scheduled"),
+          gte(trips.departureDate, todayStr),
+          lte(trips.departureDate, weekEndStr),
+        ),
+      )
+      .orderBy(trips.departureDate, trips.startTime)
+      .limit(50),
 
     db
       .select({
         id: fishingReports.id,
         catchSummary: fishingReports.catchSummary,
-        fishCounts: fishingReports.fishCounts,
-        photoUrls: fishingReports.photoUrls,
         departureDate: trips.departureDate,
         vesselName: vessels.name,
-        vesselColor: vessels.color,
-        productName: products.displayName,
+        photoUrls: fishingReports.photoUrls,
       })
       .from(fishingReports)
       .innerJoin(trips, eq(fishingReports.tripId, trips.id))
       .innerJoin(vessels, eq(fishingReports.vesselId, vessels.id))
-      .innerJoin(products, eq(trips.productId, products.id))
       .where(eq(fishingReports.operatorId, operator.id))
       .orderBy(desc(fishingReports.createdAt))
-      .limit(3),
+      .limit(1),
 
     db
       .select({ priceCents: productPrices.priceCents })
       .from(productPrices)
       .innerJoin(products, eq(productPrices.productId, products.id))
       .where(and(eq(products.operatorId, operator.id), eq(productPrices.active, true))),
+
+    db
+      .select({ category: products.category })
+      .from(products)
+      .where(and(eq(products.operatorId, operator.id), ne(products.category, "Fireworks")))
+      .groupBy(products.category)
+      .orderBy(products.category),
   ]);
+
+  // De-duplicate week trips and compute min price per trip
+  const tripMap = new Map<string, { tripId: string; departureDate: string; startTime: Date; productName: string; seatsRemaining: number; minCents: number | null }>();
+  for (const row of weekTripRows) {
+    const existing = tripMap.get(row.tripId);
+    if (!existing) {
+      tripMap.set(row.tripId, {
+        tripId: row.tripId,
+        departureDate: row.departureDate,
+        startTime: row.startTime,
+        productName: row.productName,
+        seatsRemaining: row.seatsRemaining,
+        minCents: row.priceCents,
+      });
+    } else if (row.priceCents !== null && (existing.minCents === null || row.priceCents < existing.minCents)) {
+      existing.minCents = row.priceCents;
+    }
+  }
+  const sailings = Array.from(tripMap.values());
 
   const allPriceCents = priceRows.map((r) => r.priceCents);
   const fromPrice = allPriceCents.length > 0 ? Math.min(...allPriceCents) : null;
   const categories = categoryRows.map((r) => r.category);
+  const latestReport = latestReportRows[0] ?? null;
+  const operatorName = operator.name ?? "Fishing Charter";
+
+  const datesWithTrips = new Set(sailings.map((t) => t.departureDate));
+
+  const weekStart = new Date(todayStr + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase();
+  const weekEndLabel = new Date(weekEndStr + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase();
+  const weekLabel = `${weekStart} — ${weekEndLabel}`;
 
   return (
-    <>
-      <HeroSection
-        operatorName={operator.name}
-        fromPrice={fromPrice}
-        dockAddress={operator.dockAddress}
-      />
-      <TripCategoriesSection categories={categories} />
-      <WhyUsSection />
-      {reportRows.length > 0 && <ReportsTeaserSection reports={reportRows} />}
-      <Footer
-        operatorName={operator.name}
-        dockAddress={operator.dockAddress}
-        phone={operator.phone}
-      />
-    </>
+    <div
+      className="font-archivo"
+      style={{
+        maxWidth: 1440,
+        margin: "0 auto",
+        background: "#eef1f0",
+        borderLeft: "2px solid #cdd6da",
+        borderRight: "2px solid #cdd6da",
+        overflow: "hidden",
+      }}
+    >
+      {/* ── Utility strip ──────────────────────────────────────── */}
+      <div
+        className="bg-hull font-plex-mono text-[12px] tracking-[.1em] flex flex-wrap gap-3 justify-between"
+        style={{ padding: "9px 28px", color: "#8fa3ad" }}
+      >
+        <span>{operator.dockAddress ?? ""}</span>
+        <span className="flex gap-[22px]">
+          <span>USCG CERTIFIED</span>
+          {operator.phone && (
+            <a href={`tel:${operator.phone}`} style={{ color: "#dfe8ec" }}>
+              {operator.phone}
+            </a>
+          )}
+        </span>
+      </div>
+
+      {/* ── Nav ────────────────────────────────────────────────── */}
+      <div
+        className="bg-hull flex flex-wrap gap-[18px] items-center justify-between"
+        style={{ borderBottom: "3px solid #d1541f", padding: "16px 28px" }}
+      >
+        <Link
+          href="/"
+          className="font-archivo text-[24px] font-bold tracking-[.05em] text-white uppercase"
+          style={{ textDecoration: "none" }}
+        >
+          {operatorName}
+        </Link>
+        <nav className="hidden md:flex flex-wrap gap-[26px] font-plex-mono text-[13px] font-semibold tracking-[.1em] uppercase">
+          <a href="#sailings" className="text-white" style={{ textDecoration: "none" }}>Sailings</a>
+          <a href="#species" style={{ color: "#b6c6ce", textDecoration: "none" }}>What we fish</a>
+          <Link href="/fishing-reports" style={{ color: "#b6c6ce", textDecoration: "none" }}>Reports</Link>
+          <a href="#boat" style={{ color: "#b6c6ce", textDecoration: "none" }}>The boat</a>
+        </nav>
+        <Link
+          href="/book"
+          className="bg-orange hover:bg-orange-press transition-colors font-plex-mono font-bold text-[13px] tracking-[.1em] uppercase text-white"
+          style={{ padding: "13px 22px", textDecoration: "none" }}
+        >
+          Book a seat
+        </Link>
+      </div>
+
+      {/* ── Hero ───────────────────────────────────────────────── */}
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          aspectRatio: "2 / 1",
+          maxHeight: 660,
+          background: "#0d1c26",
+          overflow: "hidden",
+        }}
+      >
+        <Image
+          src="/hero-boat.png"
+          alt={`${operatorName} fishing boat underway`}
+          fill
+          className="object-cover"
+          priority
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(to top, rgba(13,28,38,.88) 0%, rgba(13,28,38,.66) 26%, rgba(13,28,38,.28) 46%, rgba(13,28,38,0) 64%)",
+            pointerEvents: "none",
+          }}
+        />
+        <div
+          style={{ position: "absolute", inset: "auto 0 0 0", padding: "36px 28px", pointerEvents: "none" }}
+        >
+          <div
+            className="inline-block bg-orange font-plex-mono text-[13px] tracking-[.2em] text-white"
+            style={{ padding: "6px 12px", marginBottom: 14 }}
+          >
+            {fromPrice ? `FROM ${dollars(fromPrice)} PER ANGLER` : "PARTY FISHING DAILY"}
+          </div>
+          <div
+            className="font-archivo font-bold text-white uppercase"
+            style={{
+              fontSize: "clamp(34px, 5.4vw, 66px)",
+              lineHeight: 0.96,
+              letterSpacing: "-.02em",
+              maxWidth: "15ch",
+            }}
+          >
+            A working boat, not a tour boat.
+          </div>
+        </div>
+      </div>
+
+      {/* ── Booking bar ────────────────────────────────────────── */}
+      <div
+        id="book"
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          background: "#16303f",
+          padding: "20px 28px",
+          boxShadow: "0 6px 18px rgba(13,28,38,.28)",
+        }}
+      >
+        <div className="flex flex-wrap gap-6 items-end">
+          {/* Day chips */}
+          <div>
+            <div
+              className="font-plex-mono text-[11px] tracking-[.14em]"
+              style={{ color: "#8fa3ad", marginBottom: 8 }}
+            >
+              DAY
+            </div>
+            <div className="flex flex-wrap gap-[6px]">
+              {dayChips.map((dateStr, i) => {
+                const { dow, day } = fmtSailDate(dateStr);
+                const hasTrip = datesWithTrips.has(dateStr);
+                const isFirst = i === 0;
+                return (
+                  <Link
+                    key={dateStr}
+                    href="/book"
+                    className="text-center block"
+                    style={{
+                      background: isFirst ? "#d1541f" : "transparent",
+                      border: isFirst ? "none" : "1px solid #3c5867",
+                      color: hasTrip ? (isFirst ? "#fff" : "#dfe8ec") : "#6f8794",
+                      padding: "9px 14px",
+                      minWidth: 52,
+                      textDecoration: "none",
+                    }}
+                  >
+                    <div className="font-plex-mono" style={{ fontSize: 10 }}>{dow}</div>
+                    <div className="font-archivo font-bold" style={{ fontSize: 20, lineHeight: 1 }}>{day}</div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* First available trip */}
+          {sailings[0] && (
+            <div className="flex-1 min-w-0">
+              <div
+                className="font-plex-mono text-[11px] tracking-[.14em]"
+                style={{ color: "#8fa3ad", marginBottom: 8 }}
+              >
+                TRIP
+              </div>
+              <div
+                className="bg-white flex flex-wrap gap-[10px] justify-between items-center"
+                style={{ padding: "14px 16px" }}
+              >
+                <span className="font-archivo text-[16px] font-semibold">
+                  {fmtTimeET(sailings[0].startTime)} · {sailings[0].productName}
+                </span>
+                {sailings[0].seatsRemaining > 0 && sailings[0].seatsRemaining <= 10 && (
+                  <span className="font-plex-mono text-[13px] text-orange-press">
+                    {sailings[0].seatsRemaining} SEATS LEFT ▾
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          <Link
+            href="/book"
+            className="bg-orange hover:bg-orange-press transition-colors text-white font-archivo font-bold text-[15px] tracking-[.08em] uppercase"
+            style={{ padding: "18px 28px", textDecoration: "none", flexShrink: 0 }}
+          >
+            Book now →
+          </Link>
+        </div>
+      </div>
+
+      {/* ── Reassurance strip ──────────────────────────────────── */}
+      <div
+        className="bg-hull font-plex-mono text-[12px] tracking-[.06em]"
+        style={{ padding: "9px 28px", color: "#8fa3ad" }}
+      >
+        FREE CANCELLATION TO 24H · RODS &amp; BAIT ABOARD · WEATHER REFUNDS AUTOMATIC
+      </div>
+
+      {/* ── Sailings this week ─────────────────────────────────── */}
+      {sailings.length > 0 && (
+        <div id="sailings">
+          <div
+            style={{
+              padding: "48px 28px 0",
+              borderTop: "2px solid #cdd6da",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              alignItems: "baseline",
+              justifyContent: "space-between",
+            }}
+          >
+            <h2
+              className="font-archivo font-bold uppercase"
+              style={{ margin: 0, fontSize: "clamp(26px, 3.4vw, 34px)", letterSpacing: "-.02em" }}
+            >
+              Everything sailing this week
+            </h2>
+            <span className="font-plex-mono text-[13px] text-ink-3">{weekLabel}</span>
+          </div>
+
+          <div style={{ padding: "20px 28px 0" }}>
+            <div className="bg-white" style={{ border: "1px solid #cdd6da" }}>
+              {/* Table header */}
+              <div
+                className="hidden sm:grid font-plex-mono text-[11px] tracking-[.12em] bg-hull"
+                style={{
+                  gridTemplateColumns: "120px minmax(0,1fr) 120px 100px 130px 130px",
+                  gap: 16,
+                  padding: "11px 20px",
+                  color: "#8fa3ad",
+                  alignItems: "center",
+                }}
+              >
+                <span>DATE</span>
+                <span>TRIP</span>
+                <span>DEPARTS</span>
+                <span>FARE</span>
+                <span>SEATS</span>
+                <span />
+              </div>
+
+              {sailings.map((trip, i) => {
+                const soldOut = trip.seatsRemaining === 0;
+                const fewLeft = !soldOut && trip.seatsRemaining <= 10;
+                const seatLabel = soldOut
+                  ? "SOLD OUT"
+                  : fewLeft
+                  ? `${trip.seatsRemaining} LEFT`
+                  : "OPEN";
+                const seatColor = soldOut
+                  ? "#9aa8ae"
+                  : fewLeft
+                  ? "#8c3b12"
+                  : "#186a4a";
+
+                return (
+                  <div
+                    key={trip.tripId}
+                    className="sm:grid"
+                    style={{
+                      gridTemplateColumns: "120px minmax(0,1fr) 120px 100px 130px 130px",
+                      gap: 16,
+                      padding: "16px 20px",
+                      borderTop: i === 0 ? "1px solid #e3e9eb" : "1px solid #e3e9eb",
+                      alignItems: "center",
+                      background: soldOut ? "#f1f4f5" : "transparent",
+                    }}
+                  >
+                    <span
+                      className="font-plex-mono text-[14px]"
+                      style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}
+                    >
+                      {fmtSailDateShort(trip.departureDate)}
+                    </span>
+                    <span
+                      className="font-archivo text-[17px] font-semibold block mt-2 sm:mt-0"
+                      style={{ color: soldOut ? "#9aa8ae" : undefined }}
+                    >
+                      {trip.productName}
+                    </span>
+                    <span
+                      className="font-plex-mono text-[14px] block mt-1 sm:mt-0"
+                      style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}
+                    >
+                      {fmtTimeET(trip.startTime)}
+                    </span>
+                    <span
+                      className="font-plex-mono text-[17px] font-semibold block mt-1 sm:mt-0"
+                      style={{ color: soldOut ? "#9aa8ae" : undefined }}
+                    >
+                      {trip.minCents != null ? dollars(trip.minCents) : "—"}
+                    </span>
+                    <span
+                      className="font-plex-mono text-[13px] font-semibold block mt-1 sm:mt-0"
+                      style={{ color: seatColor }}
+                    >
+                      {seatLabel}
+                    </span>
+                    <div className="flex justify-start sm:justify-end mt-2 sm:mt-0">
+                      {soldOut ? (
+                        <Link
+                          href="/book"
+                          className="font-plex-mono text-[12px] font-bold tracking-[.1em] text-ink-2"
+                          style={{ border: "1px solid #9aa8ae", padding: "10px 16px", textDecoration: "none" }}
+                        >
+                          WAITLIST
+                        </Link>
+                      ) : (
+                        <Link
+                          href="/book"
+                          className="bg-hull hover:bg-hull-2 transition-colors text-white font-plex-mono text-[12px] font-bold tracking-[.1em]"
+                          style={{ padding: "11px 22px", textDecoration: "none" }}
+                        >
+                          BOOK
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Calendar CTA band ──────────────────────────────────── */}
+      <div
+        className="bg-hull flex flex-wrap gap-6 items-center justify-between"
+        style={{ margin: "28px 28px 0", borderLeft: "8px solid #d1541f", padding: 32 }}
+      >
+        <div className="min-w-0">
+          <div
+            className="font-archivo font-bold text-white uppercase"
+            style={{ fontSize: "clamp(24px, 3.2vw, 32px)", letterSpacing: "-.01em" }}
+          >
+            Planning further out?
+          </div>
+          <div
+            className="font-archivo text-[16px]"
+            style={{ marginTop: 8, color: "#8fa3ad", maxWidth: "56ch" }}
+          >
+            Every sailing through the end of the season — species runs, tides and open seats, all on one calendar.
+          </div>
+        </div>
+        <Link
+          href="/book"
+          className="bg-orange hover:bg-orange-press transition-colors text-white font-plex-mono font-bold text-[15px] tracking-[.1em] uppercase"
+          style={{ padding: "18px 30px", textDecoration: "none", flexShrink: 0 }}
+        >
+          See the full calendar →
+        </Link>
+      </div>
+
+      {/* ── Species / categories ───────────────────────────────── */}
+      {categories.length > 0 && (
+        <div id="species">
+          <div
+            style={{
+              padding: "52px 28px 16px",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              alignItems: "baseline",
+              justifyContent: "space-between",
+            }}
+          >
+            <h2
+              className="font-archivo font-bold uppercase"
+              style={{ margin: 0, fontSize: "clamp(24px, 3vw, 30px)" }}
+            >
+              What we&apos;re on
+            </h2>
+            <span className="font-archivo text-[14px] text-ink-3">
+              Open boat — you keep what you catch.
+            </span>
+          </div>
+          <div style={{ padding: "0 28px" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                gap: 2,
+                background: "#cdd6da",
+              }}
+            >
+              {categories.map((cat) => (
+                <Link
+                  key={cat}
+                  href="/book"
+                  className="bg-deck hover:bg-deck-2 transition-colors"
+                  style={{ padding: "16px 14px", textDecoration: "none" }}
+                >
+                  <div
+                    className="font-archivo font-bold uppercase text-[15px]"
+                    style={{ color: "#0d1c26" }}
+                  >
+                    {cat}
+                  </div>
+                  <div className="font-plex-mono text-[12px] text-ink-3" style={{ marginTop: 4 }}>
+                    BOOK NOW →
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Boat / crew split ──────────────────────────────────── */}
+      <div
+        id="boat"
+        className="grid grid-cols-1 sm:grid-cols-2"
+        style={{ marginTop: 52, borderTop: "1px solid #cdd6da" }}
+      >
+        <div
+          className="min-w-0 bg-hull"
+          style={{ minHeight: 320, position: "relative" }}
+        >
+          <Image
+            src="/hero-boat.png"
+            alt="The boat and crew"
+            fill
+            className="object-cover"
+          />
+        </div>
+        <div
+          className="min-w-0 bg-hull flex flex-col justify-center"
+          style={{ padding: "48px 28px", color: "#dfe8ec" }}
+        >
+          <div
+            className="font-plex-mono text-[12px] tracking-[.18em]"
+            style={{ color: "#ff8a5c" }}
+          >
+            THE BOAT &amp; THE CREW
+          </div>
+          <h2
+            className="font-archivo font-bold uppercase text-white"
+            style={{
+              margin: "16px 0 0",
+              fontSize: "clamp(26px, 3.4vw, 38px)",
+              lineHeight: 1.02,
+            }}
+          >
+            Party fishing,<br />done right.
+          </h2>
+          <p
+            className="font-archivo text-[17px]"
+            style={{
+              lineHeight: 1.6,
+              maxWidth: "56ch",
+              margin: "18px 0 0",
+              color: "#b6c6ce",
+            }}
+          >
+            Heated cabin, clean head, full galley, and a mate who will bait your hook, untangle your line and gaff your fish. First-timers and kids are the easiest people we carry — you need a jacket and nothing else.
+          </p>
+          <div
+            className="flex flex-wrap gap-2 font-plex-mono text-[12px] tracking-[.08em]"
+            style={{ marginTop: 24 }}
+          >
+            {["USCG CERTIFIED", "RODS & BAIT ABOARD", "FREE PARKING", "KIDS WELCOME"].map((tag) => (
+              <span
+                key={tag}
+                style={{ border: "1px solid #3c5867", padding: "8px 12px", color: "#dfe8ec" }}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Latest report ──────────────────────────────────────── */}
+      {latestReport && (
+        <div
+          id="report"
+          className="grid grid-cols-1 sm:grid-cols-2"
+          style={{ borderTop: "1px solid #cdd6da" }}
+        >
+          <div className="min-w-0 flex flex-col justify-center" style={{ padding: "48px 28px" }}>
+            <div
+              className="font-plex-mono text-[12px] tracking-[.18em] text-orange-ink"
+            >
+              LATEST REPORT · {fmtReportDate(latestReport.departureDate)}
+            </div>
+            <h2
+              className="font-archivo font-bold uppercase"
+              style={{
+                margin: "14px 0 0",
+                fontSize: "clamp(24px, 3vw, 32px)",
+                lineHeight: 1.1,
+              }}
+            >
+              {latestReport.catchSummary?.slice(0, 80) ?? `${latestReport.vesselName} · Latest trip`}
+            </h2>
+            {latestReport.catchSummary && latestReport.catchSummary.length > 80 && (
+              <p
+                className="font-archivo text-[17px] text-ink-2"
+                style={{ lineHeight: 1.6, maxWidth: "54ch", margin: "16px 0 0" }}
+              >
+                {latestReport.catchSummary.slice(80, 260)}
+                {latestReport.catchSummary.length > 260 ? "…" : ""}
+              </p>
+            )}
+            <div
+              className="flex flex-wrap gap-[22px] font-plex-mono text-[12px] tracking-[.1em]"
+              style={{ marginTop: 22 }}
+            >
+              <Link href="/fishing-reports" style={{ color: "#b1440f", textDecoration: "none" }}>
+                ALL REPORTS →
+              </Link>
+              <Link href={`/fishing-reports/${latestReport.id}`} style={{ color: "#b1440f", textDecoration: "none" }}>
+                FULL REPORT →
+              </Link>
+            </div>
+          </div>
+          <div
+            className="min-w-0 bg-deck-2"
+            style={{ minHeight: 360, position: "relative" }}
+          >
+            {latestReport.photoUrls.length > 0 ? (
+              <Image
+                src={latestReport.photoUrls[0]}
+                alt="Recent catch"
+                fill
+                className="object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <span className="font-plex-mono text-[12px] tracking-[.1em] text-ink-3">PHOTO COMING SOON</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Orange CTA band ────────────────────────────────────── */}
+      <div
+        className="bg-orange text-white flex flex-wrap gap-6 items-center justify-between"
+        style={{ padding: "52px 28px", borderTop: "1px solid #cdd6da" }}
+      >
+        <h2
+          className="font-archivo font-bold uppercase text-white"
+          style={{
+            margin: 0,
+            fontSize: "clamp(28px, 4.6vw, 54px)",
+            lineHeight: 0.98,
+            maxWidth: "18ch",
+          }}
+        >
+          Bring a jacket.<br />We&apos;ve got the rest.
+        </h2>
+        <div className="flex flex-wrap gap-[14px] items-center">
+          <Link
+            href="/book"
+            className="font-archivo font-bold text-[15px] tracking-[.08em] uppercase hover:opacity-90 transition-opacity"
+            style={{
+              background: "#fff",
+              color: "#0d1c26",
+              padding: "18px 28px",
+              textDecoration: "none",
+            }}
+          >
+            Book a seat →
+          </Link>
+        </div>
+      </div>
+
+      {/* ── Footer ─────────────────────────────────────────────── */}
+      <div
+        className="bg-hull"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+          gap: 28,
+          padding: "44px 28px",
+          color: "#8fa3ad",
+          fontSize: 14,
+          lineHeight: 2,
+        }}
+      >
+        <div>
+          <div
+            className="font-archivo font-bold uppercase text-white"
+            style={{ fontSize: 20, letterSpacing: ".04em" }}
+          >
+            {operatorName}
+          </div>
+          <div style={{ lineHeight: 1.7, marginTop: 10 }}>
+            {operator.dockAddress && <div>{operator.dockAddress}</div>}
+            {operator.phone && (
+              <a href={`tel:${operator.phone}`} style={{ color: "#b6c6ce", textDecoration: "none" }}>
+                {operator.phone}
+              </a>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="font-plex-mono text-[11px] tracking-[.14em] text-ink-3">BOOK</span>
+          <Link href="/book" style={{ color: "#b6c6ce", textDecoration: "none" }}>Full calendar</Link>
+          <Link href="/book" style={{ color: "#b6c6ce", textDecoration: "none" }}>View trips</Link>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="font-plex-mono text-[11px] tracking-[.14em] text-ink-3">ON THE WATER</span>
+          <Link href="/fishing-reports" style={{ color: "#b6c6ce", textDecoration: "none" }}>Fishing reports</Link>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="font-plex-mono text-[11px] tracking-[.14em] text-ink-3">POLICIES</span>
+          <Link href="/terms" style={{ color: "#b6c6ce", textDecoration: "none" }}>Terms &amp; conditions</Link>
+        </div>
+      </div>
+
+      {/* ── Copyright ──────────────────────────────────────────── */}
+      <div
+        className="font-plex-mono text-[11px] tracking-[.08em] flex flex-wrap gap-4 justify-between"
+        style={{
+          background: "#0a161e",
+          color: "#5b6f79",
+          padding: "16px 28px",
+        }}
+      >
+        <span>© {new Date().getFullYear()} {operatorName.toUpperCase()} · USCG CERTIFIED &amp; INSPECTED</span>
+        <span>TERMS · PRIVACY · CANCELLATION POLICY</span>
+      </div>
+    </div>
   );
 }

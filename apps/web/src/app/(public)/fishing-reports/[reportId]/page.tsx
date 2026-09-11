@@ -7,6 +7,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Image from "next/image";
+import { SiteHeader } from "@/components/SiteHeader";
 
 // Force dynamic: ISR caches by path, not host — cross-tenant in centralized mode.
 export const dynamic = "force-dynamic";
@@ -89,7 +90,13 @@ export default async function FishingReportPage({ params }: Props) {
   const fishCounts = row.fishCounts as { species: string; count: number }[];
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-10">
+    <div className="min-h-screen bg-deck font-archivo">
+      <SiteHeader
+        operatorName={row.operatorName ?? "Fishing Charter"}
+        phone={null}
+        dockAddress={null}
+      />
+      <main className="max-w-2xl mx-auto px-4 py-10">
       <Link
         href="/fishing-reports"
         className="text-sm text-muted hover:text-ink flex items-center gap-1 mb-6 transition-colors"
@@ -152,11 +159,13 @@ export default async function FishingReportPage({ params }: Props) {
       <div className="border-t border-hairline pt-6">
         <Link
           href="/book"
-          className="inline-block bg-gold text-navy font-grotesk text-15 font-semibold px-5 py-2.5 rounded-btn hover:bg-gold-hover transition-colors"
+          className="inline-block font-plex-mono text-[12px] font-semibold tracking-[.1em] text-white bg-orange hover:bg-orange-press transition-colors"
+          style={{ padding: "13px 22px" }}
         >
-          Book a Trip
+          BOOK A TRIP
         </Link>
       </div>
-    </main>
+      </main>
+    </div>
   );
 }

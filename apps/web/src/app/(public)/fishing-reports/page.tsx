@@ -4,6 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import { getOperatorRecord } from "@/lib/operator";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { SiteHeader } from "@/components/SiteHeader";
 
 // Force dynamic: Next.js ISR keys by path, not host. In centralized mode
 // multiple operators share the same path and would get each other's cached data.
@@ -50,7 +51,13 @@ export default async function FishingReportsPage() {
     .limit(20);
 
   return (
-    <main className="max-w-3xl mx-auto px-4 py-10">
+    <div className="min-h-screen bg-deck font-archivo">
+      <SiteHeader
+        operatorName={operator.name ?? "Fishing Charter"}
+        phone={operator.phone ?? null}
+        dockAddress={operator.dockAddress ?? null}
+      />
+      <main className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-3xl font-bold text-ink mb-2">Fishing Reports</h1>
       <p className="text-muted mb-8">See what&apos;s been biting on recent trips.</p>
 
@@ -101,6 +108,7 @@ export default async function FishingReportsPage() {
           ))}
         </div>
       )}
-    </main>
+      </main>
+    </div>
   );
 }

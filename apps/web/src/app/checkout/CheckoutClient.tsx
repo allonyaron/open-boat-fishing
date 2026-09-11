@@ -6,179 +6,186 @@ import { Elements } from "@stripe/react-stripe-js";
 import { CheckoutForm } from "./CheckoutForm";
 import posthog from "posthog-js";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
-import { dollars } from "@openboat/utils";
+import { BookingNav } from "@/components/BookingCalendar";
 import { fmtTimeET } from "@/lib/format";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtDollars(cents: number) {
+  return `$${Math.round(cents / 100)}`;
+}
+
 function fmtDate(d: string) {
   return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {
-    weekday: "long",
     month: "long",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 
-function ArrowRight() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M5 12h14" />
-      <path d="m12 5 7 7-7 7" />
-    </svg>
-  );
+function fmtPhoneDisplay(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
-function Stepper({
+function validateEmail(v: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+}
+function validatePhone(v: string) {
+  return v.replace(/\D/g, "").length === 10;
+}
+
+// ─── Input field with blur validation ────────────────────────────────────────
+
+function Field({
+  id,
+  label,
+  type = "text",
   value,
   onChange,
-  max,
-  label,
+  onBlur,
+  error,
+  placeholder,
+  required,
+  disabled,
+  autoComplete,
+  inputMode,
 }: {
-  value: number;
-  onChange: (n: number) => void;
-  max: number;
+  id: string;
   label: string;
+  type?: string;
+  value: string;
+  onChange: (v: string) => void;
+  onBlur: () => void;
+  error: string | null;
+  placeholder?: string;
+  required?: boolean;
+  disabled?: boolean;
+  autoComplete?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
 }) {
   return (
-    <div className="flex items-center gap-3" role="group" aria-label={`${label} quantity`}>
-      <button
-        type="button"
-        onClick={() => onChange(Math.max(0, value - 1))}
-        disabled={value === 0}
-        aria-label={`Decrease ${label.toLowerCase()} count`}
-        className={`w-9 h-9 rounded-pill flex items-center justify-center text-lg transition-colors ${value === 0 ? "border border-hairline text-disabled-text cursor-default" : "border-1.5 border-gold text-gold"}`}
-      >
-        −
-      </button>
-      <span
-        className="font-grotesk text-17 font-semibold w-5 text-center"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        {value}
+    <label htmlFor={id} style={{ display: "block" }}>
+      <span style={{ display: "block", fontSize: 14, fontWeight: 600, marginBottom: 6, fontFamily: "var(--font-archivo)" }}>
+        {label}
       </span>
-      <button
-        type="button"
-        onClick={() => onChange(Math.min(max, value + 1))}
-        disabled={value >= max}
-        aria-label={`Increase ${label.toLowerCase()} count`}
-        className="w-9 h-9 rounded-pill bg-gold text-navy flex items-center justify-center text-lg hover:bg-gold-hover transition-colors disabled:bg-disabled disabled:text-disabled-text"
-      >
-        +
-      </button>
-    </div>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        required={required}
+        disabled={disabled}
+        autoComplete={autoComplete}
+        inputMode={inputMode}
+        style={{
+          width: "100%",
+          boxSizing: "border-box",
+          border: `1px solid ${error ? "#8c3b12" : "#9aa8ae"}`,
+          background: "#fff",
+          padding: 16,
+          fontFamily: "var(--font-archivo)",
+          fontSize: 17,
+          color: "#0d1c26",
+          borderRadius: 0,
+          outline: "none",
+          opacity: disabled ? 0.6 : 1,
+        }}
+        onFocus={(e) => { e.currentTarget.style.outline = "2px solid #d1541f"; e.currentTarget.style.outlineOffset = "2px"; }}
+        onBlurCapture={(e) => { e.currentTarget.style.outline = "none"; }}
+      />
+      {error && (
+        <span style={{ display: "block", fontSize: 14, color: "#8c3b12", marginTop: 4, fontFamily: "var(--font-archivo)" }}>
+          {error}
+        </span>
+      )}
+    </label>
   );
 }
 
-function TripCard({
-  item,
-  onQtyChange,
-  onRemove,
-  locked,
-}: {
-  item: EnrichedCartItem;
-  onQtyChange: (type: "adult" | "child", qty: number) => void;
-  onRemove: () => void;
-  locked: boolean;
-}) {
+// ─── Order summary card ───────────────────────────────────────────────────────
+
+function OrderCard({ items, totalCents }: { items: EnrichedCartItem[]; totalCents: number }) {
   return (
-    <div className="bg-white rounded-card border border-card-border p-5">
-      <div className="flex items-start gap-3 mb-4">
-        <div
-          className="w-1 self-stretch rounded-pill flex-shrink-0 mt-0.5"
-          style={{ backgroundColor: item.vesselColor }}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="text-11 font-bold uppercase tracking-label text-gold mb-0.5">
-            {item.category}
-          </div>
-          <div className="font-grotesk text-15 font-semibold text-ink">{item.productName}</div>
-          <div className="text-13 text-muted mt-0.5">{item.vesselName}</div>
-          <div className="text-13 text-muted">{fmtDate(item.departureDate)}</div>
-          <div className="text-13 text-muted">
-            {fmtTimeET(item.startTime)} – {fmtTimeET(item.endTime)}
-          </div>
-        </div>
-        {!locked && (
-          <button
-            type="button"
-            onClick={onRemove}
-            aria-label={`Remove ${item.productName} from cart`}
-            className="text-13 text-faint hover:text-error transition-colors flex-shrink-0"
+    <div style={{ background: "#fff", border: "1px solid #cdd6da", marginTop: 24 }}>
+      {items.map((item) => {
+        const subtotal = item.tickets.reduce((s, t) => s + t.quantity * t.priceCents, 0);
+        const faresLabel = item.tickets
+          .map((t) => `${t.quantity} ${t.ticketType} × ${fmtDollars(t.priceCents)}`)
+          .join(" · ");
+        return (
+          <div
+            key={item.tripId}
+            style={{ padding: "18px 20px", borderBottom: "1px solid #e3e9eb", display: "flex", justifyContent: "space-between", gap: 16 }}
           >
-            Remove
-          </button>
-        )}
-      </div>
-
-      <div className="space-y-4 pt-4 border-t border-hairline">
-        {item.tickets.map((ticket) => {
-          const otherQty = item.tickets
-            .filter((t) => t.ticketType !== ticket.ticketType)
-            .reduce((s, t) => s + t.quantity, 0);
-          return (
-            <div key={ticket.ticketType} className="flex items-center justify-between gap-4">
-              <div className="flex-shrink-0">
-                <div className="text-14 font-semibold text-ink capitalize">
-                  {ticket.ticketType}
-                </div>
-                <div className="text-12 text-faint">{dollars(ticket.priceCents)} each</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--font-archivo)" }}>
+                {item.productName}
               </div>
-              {locked ? (
-                <div className="font-grotesk text-15 font-semibold text-ink">
-                  {ticket.quantity} × {dollars(ticket.priceCents)}
-                </div>
-              ) : (
-                <div className="flex items-center gap-4">
-                  <Stepper
-                    value={ticket.quantity}
-                    onChange={(n) => onQtyChange(ticket.ticketType, n)}
-                    max={item.seatsRemaining - otherQty}
-                    label={ticket.ticketType.charAt(0).toUpperCase() + ticket.ticketType.slice(1)}
-                  />
-                  <div className="w-[64px] text-right font-grotesk text-15 font-semibold text-ink">
-                    {dollars(ticket.priceCents * ticket.quantity)}
-                  </div>
-                </div>
-              )}
+              <div style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 13, color: "#41565f", marginTop: 4 }}>
+                {fmtDate(item.departureDate)} · {fmtTimeET(item.startTime)}
+              </div>
+              <div style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 13, color: "#41565f", marginTop: 2 }}>
+                {faresLabel}
+              </div>
             </div>
-          );
-        })}
+            <div style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 18, fontWeight: 600, whiteSpace: "nowrap" }}>
+              {fmtDollars(subtotal)}
+            </div>
+          </div>
+        );
+      })}
+      {/* Hull total footer */}
+      <div
+        style={{ padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "baseline", background: "#0d1c26", color: "#fff" }}
+      >
+        <span style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".16em", color: "#8fa3ad" }}>
+          TOTAL DUE TODAY
+        </span>
+        <span style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 30, fontWeight: 700 }}>
+          {fmtDollars(totalCents)}
+        </span>
       </div>
     </div>
   );
 }
 
-function CheckoutInner({ operatorName }: { operatorName: string }) {
+// ─── Checkout inner ───────────────────────────────────────────────────────────
+
+function CheckoutInner({
+  operatorName,
+  phone,
+  dockAddress,
+}: {
+  operatorName: string;
+  phone: string | null;
+  dockAddress: string | null;
+}) {
   const [items, setItems] = useState<EnrichedCartItem[]>([]);
-  const [phase, setPhase] = useState<"order" | "payment">("order");
+  const [phase, setPhase] = useState<"contact" | "payment">("contact");
 
-  // contact form fields
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [showName, setShowName] = useState(false);
+  // contact fields
   const [name, setName] = useState("");
-  const [showNotes, setShowNotes] = useState(false);
-  const [notes, setNotes] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
 
-  // payment phase state
+  // touched state for blur validation
+  const [touched, setTouched] = useState({ name: false, mobile: false, email: false });
+
+  // payment phase
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [meta, setMeta] = useState<{
     totalCents: number;
     confirmationCode: string;
-    ticketCount: number;
     bookingId: string;
     holdExpiresAt: string;
+    ticketCount: number;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -188,37 +195,18 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
     try {
       const raw = localStorage.getItem("openboat_cart");
       if (raw) setItems(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
     posthog.capture("checkout_view");
   }, []);
 
-  useEffect(() => {
-    if (items.length === 0) return;
-    localStorage.setItem("openboat_cart", JSON.stringify(items));
-  }, [items]);
-
-  function setQty(tripId: string, ticketType: "adult" | "child", qty: number) {
-    setItems((prev) =>
-      prev
-        .map((item) => {
-          if (item.tripId !== tripId) return item;
-          const tickets =
-            qty === 0
-              ? item.tickets.filter((t) => t.ticketType !== ticketType)
-              : item.tickets.map((t) =>
-                  t.ticketType === ticketType ? { ...t, quantity: qty } : t,
-                );
-          return { ...item, tickets };
-        })
-        .filter((item) => item.tickets.length > 0),
-    );
-  }
-
-  function removeTrip(tripId: string) {
-    setItems((prev) => prev.filter((item) => item.tripId !== tripId));
-  }
+  // inline validation
+  const nameError = touched.name && !name.trim() ? "Name is required" : null;
+  const mobileError = touched.mobile && mobile && !validatePhone(mobile)
+    ? "Enter a 10-digit US number"
+    : null;
+  const emailError = touched.email && !validateEmail(email)
+    ? "Enter a valid email address"
+    : null;
 
   const totalCents = items.reduce(
     (sum, item) => sum + item.tickets.reduce((s, t) => s + t.priceCents * t.quantity, 0),
@@ -231,6 +219,10 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
 
   async function handleContactSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // mark all touched for final validation
+    setTouched({ name: true, mobile: true, email: true });
+    if (!name.trim() || !validateEmail(email) || (mobile && !validatePhone(mobile))) return;
+
     setSubmitting(true);
     setSubmitError(null);
 
@@ -245,10 +237,10 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cart,
-          customerName: name.trim() || null,
+          customerName: name.trim(),
           customerEmail: email.trim(),
-          customerPhone: phone.trim() || null,
-          notes: notes.trim() || null,
+          customerPhone: mobile.trim() || null,
+          notes: null,
         }),
       });
       const data = await res.json();
@@ -262,12 +254,13 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
       setMeta({
         totalCents: data.totalCents,
         confirmationCode: data.confirmationCode,
-        ticketCount: data.ticketCount,
         bookingId: data.bookingId,
         holdExpiresAt: data.holdExpiresAt,
+        ticketCount: data.ticketCount,
       });
       localStorage.removeItem("openboat_cart");
       setPhase("payment");
+      setSubmitting(false);
       setTimeout(
         () => paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
         50,
@@ -278,246 +271,226 @@ function CheckoutInner({ operatorName }: { operatorName: string }) {
     }
   }
 
-  const nav = (
-    <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-glass border-b border-hairline h-navbar flex items-center px-5 md:px-8 gap-3">
-      <a href="/" className="flex items-center gap-3" aria-label={`${operatorName} home`}>
-        <div className="w-logo h-logo rounded-icon bg-navy flex items-center justify-center" aria-hidden="true">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="white"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2" />
-            <path d="M4 20l2-8h12l2 8" />
-            <path d="M12 4v8" />
-            <path d="M8 8h8" />
-          </svg>
-        </div>
-        <span className="font-grotesk text-17 font-semibold text-ink">{operatorName}</span>
-      </a>
-    </header>
-  );
-
-  if (items.length === 0 && phase === "order") {
+  if (items.length === 0 && phase === "contact") {
     return (
-      <div className="min-h-screen bg-surface font-jakarta">
-        {nav}
-        <div className="flex flex-col items-center justify-center py-24 text-center px-5">
-          <div className="font-grotesk text-18 font-semibold text-ink mb-2">
-            Your cart is empty
+      <div style={{ maxWidth: 1440, margin: "0 auto", borderLeft: "2px solid #cdd6da", borderRight: "2px solid #cdd6da", minHeight: "100vh", background: "#eef1f0" }}>
+        <BookingNav operatorName={operatorName} dockAddress={dockAddress} phone={phone} step={2} />
+        <div style={{ maxWidth: 760, margin: "0 auto", padding: "60px 24px", textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 13, letterSpacing: ".12em", color: "#41565f", marginBottom: 12 }}>
+            YOUR CART IS EMPTY
           </div>
-          <div className="text-14 text-muted mb-6">Select a trip to add tickets.</div>
           <a
-            href="/"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-btn bg-gold text-navy font-grotesk font-semibold hover:bg-gold-hover transition-colors"
+            href="/book"
+            style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".1em", color: "#8c3b12", textDecoration: "underline" }}
           >
-            Browse trips <ArrowRight />
+            ← PICK A TRIP
           </a>
         </div>
       </div>
     );
   }
 
+  const displayTotal = meta?.totalCents ?? totalCents;
+
   return (
-    <div className="min-h-screen bg-surface font-jakarta">
-      {nav}
+    <div
+      className="font-archivo"
+      style={{ maxWidth: 1440, margin: "0 auto", borderLeft: "2px solid #cdd6da", borderRight: "2px solid #cdd6da", minHeight: "100vh", background: "#eef1f0" }}
+    >
+      <BookingNav operatorName={operatorName} dockAddress={dockAddress} phone={phone} step={2} />
 
-      <div className="max-w-lg mx-auto px-5 py-8 pb-16">
-        {/* ── Order summary ────────────────────────────────────────── */}
-        <h1 className="font-grotesk text-22 font-semibold text-ink mb-5">Checkout</h1>
+      <div style={{ maxWidth: 760, margin: "0 auto", padding: "34px 24px 90px" }}>
+        {/* Back link */}
+        <a
+          href="/book"
+          style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".1em", color: "#8c3b12", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
+        >
+          ← ADD ANOTHER TRIP
+        </a>
 
-        <div className="space-y-4 mb-6">
-          {items.map((item) => (
-            <TripCard
-              key={item.tripId}
-              item={item}
-              onQtyChange={(type, qty) => setQty(item.tripId, type, qty)}
-              onRemove={() => removeTrip(item.tripId)}
-              locked={phase === "payment"}
+        {/* H1 */}
+        <h1
+          style={{ margin: "16px 0 0", fontFamily: "var(--font-archivo)", fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "-.02em", lineHeight: 1, color: "#0d1c26" }}
+        >
+          One page. Then you&apos;re fishing.
+        </h1>
+
+        {/* Order card */}
+        <OrderCard items={items} totalCents={displayTotal} />
+
+        {/* Contact form */}
+        <form onSubmit={handleContactSubmit} noValidate>
+          <div
+            style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".16em", color: "#41565f", margin: "34px 0 12px" }}
+          >
+            WHO&apos;S FISHING
+          </div>
+
+          <div className="booking-co-grid">
+            <Field
+              id="checkout-name"
+              label="Name on the manifest"
+              value={name}
+              onChange={setName}
+              onBlur={() => setTouched((t) => ({ ...t, name: true }))}
+              error={nameError}
+              placeholder="Sal Marino"
+              required
+              disabled={phase === "payment"}
+              autoComplete="name"
             />
-          ))}
-        </div>
-
-        <div className="bg-white rounded-card border border-card-border p-5 mb-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-11 font-bold uppercase tracking-widest text-faint mb-0.5">
-                Order total
-              </div>
-              <div className="font-grotesk text-28 font-bold text-ink">
-                {dollars(meta?.totalCents ?? totalCents)}
-              </div>
-            </div>
-            <div className="text-13 text-muted">
-              {meta?.ticketCount ?? totalTickets} ticket
-              {(meta?.ticketCount ?? totalTickets) !== 1 ? "s" : ""}
-            </div>
+            <Field
+              id="checkout-mobile"
+              label="Mobile — we text if weather cancels"
+              type="tel"
+              value={mobile}
+              onChange={(v) => setMobile(fmtPhoneDisplay(v))}
+              onBlur={() => setTouched((t) => ({ ...t, mobile: true }))}
+              error={mobileError}
+              placeholder="(631) 555-0100"
+              disabled={phase === "payment"}
+              autoComplete="tel"
+              inputMode="numeric"
+            />
           </div>
-        </div>
 
-        {/* ── Contact form ─────────────────────────────────────────── */}
-        {phase === "order" && (
-          <form onSubmit={handleContactSubmit} className="mb-8">
-            <h2 className="font-grotesk text-18 font-semibold text-ink mb-4">Your details</h2>
+          <div style={{ marginTop: 16 }}>
+            <Field
+              id="checkout-email"
+              label="Email — receipt and boarding pass"
+              type="email"
+              value={email}
+              onChange={setEmail}
+              onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+              error={emailError}
+              placeholder="you@example.com"
+              required
+              disabled={phase === "payment"}
+              autoComplete="email"
+            />
+          </div>
 
-            <div className="space-y-3 mb-4">
-              <div>
-                <label htmlFor="checkout-email" className="text-11 font-bold uppercase tracking-wide text-faint block mb-1.5">
-                  Email
-                </label>
-                <input
-                  id="checkout-email"
-                  required
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="jane@example.com"
-                  className="w-full px-4 py-3 rounded-xl border border-card-border text-15 text-ink placeholder:text-faint focus:outline-none focus:border-gold transition-colors"
-                />
-              </div>
-              <div>
-                <label htmlFor="checkout-phone" className="text-11 font-bold uppercase tracking-wide text-faint block mb-1.5">
-                  Mobile (for text updates)
-                </label>
-                <input
-                  id="checkout-phone"
-                  type="tel"
-                  autoComplete="tel"
-                  inputMode="numeric"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="(555) 000-0000"
-                  className="w-full px-4 py-3 rounded-xl border border-card-border text-15 text-ink placeholder:text-faint focus:outline-none focus:border-gold transition-colors"
-                />
-              </div>
-
-              {showName ? (
-                <div>
-                  <label htmlFor="checkout-name" className="text-11 font-bold uppercase tracking-wide text-faint block mb-1.5">
-                    Full name (optional)
-                  </label>
-                  <input
-                    id="checkout-name"
-                    type="text"
-                    autoComplete="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Jane Smith"
-                    className="w-full px-4 py-3 rounded-xl border border-card-border text-15 text-ink placeholder:text-faint focus:outline-none focus:border-gold transition-colors"
-                  />
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowName(true)}
-                  className="text-13 text-gold underline underline-offset-2"
-                >
-                  + Add a name (optional)
-                </button>
-              )}
-
-              {showNotes ? (
-                <div>
-                  <label htmlFor="checkout-notes" className="text-11 font-bold uppercase tracking-wide text-faint block mb-1.5">
-                    Special requests or notes (optional)
-                  </label>
-                  <textarea
-                    id="checkout-notes"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    maxLength={500}
-                    rows={3}
-                    placeholder="Accessibility needs, dietary requirements, any other notes for the crew…"
-                    className="w-full px-4 py-3 rounded-xl border border-card-border text-15 text-ink placeholder:text-faint focus:outline-none focus:border-gold transition-colors resize-none"
-                  />
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowNotes(true)}
-                  className="text-13 text-gold underline underline-offset-2"
-                >
-                  + Add a special request (optional)
-                </button>
-              )}
-            </div>
-
-            {submitError && (
-              <div className="text-warning text-sm bg-warning-bg border border-warning/20 rounded-lg px-4 py-3 mb-4">
-                {submitError}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-4 rounded-btn bg-gold text-navy font-grotesk text-15 font-semibold hover:bg-gold-hover transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? (
-                "Preparing payment…"
-              ) : (
-                <>
-                  Continue to payment <ArrowRight />
-                </>
-              )}
-            </button>
-
-            <a
-              href="/"
-              className="block text-center text-13 text-muted mt-4 underline hover:text-ink transition-colors"
-            >
-              ← Continue shopping
-            </a>
-          </form>
-        )}
-
-        {/* ── Payment ──────────────────────────────────────────────── */}
-        {phase === "payment" && clientSecret && meta && (
+          {/* Payment section */}
           <div ref={paymentRef}>
-            <h2 className="font-grotesk text-18 font-semibold text-ink mb-4">Payment</h2>
-            <div className="bg-white rounded-card border border-card-border p-5">
-              <Elements
-                stripe={stripePromise}
-                options={{
-                  clientSecret,
-                  appearance: {
-                    theme: "stripe",
-                    variables: {
-                      colorPrimary: "#c99a3f",
-                      borderRadius: "12px",
-                      fontFamily: "Plus Jakarta Sans, sans-serif",
-                    },
-                  },
-                }}
-              >
-                <CheckoutForm
-                  totalCents={meta.totalCents}
-                  confirmationCode={meta.confirmationCode}
-                  customerEmail={email.trim()}
-                  customerPhone={phone.trim()}
-                  bookingId={meta.bookingId}
-                  holdExpiresAt={meta.holdExpiresAt}
-                  cartItems={items}
-                />
-              </Elements>
+            <div
+              style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".16em", color: "#41565f", margin: "34px 0 12px" }}
+            >
+              PAYMENT
             </div>
+
+            {phase === "contact" ? (
+              <>
+                {submitError && (
+                  <div
+                    style={{ fontFamily: "var(--font-archivo)", fontSize: 14, color: "#8c3b12", background: "#fff", border: "1px solid #8c3b12", padding: "12px 16px", marginBottom: 12 }}
+                  >
+                    {submitError}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  style={{
+                    marginTop: 10,
+                    width: "100%",
+                    background: submitting ? "#b1440f" : "#d1541f",
+                    color: "#fff",
+                    border: "none",
+                    fontFamily: "var(--font-archivo)",
+                    fontSize: 20,
+                    fontWeight: 700,
+                    letterSpacing: ".06em",
+                    textTransform: "uppercase",
+                    padding: 24,
+                    cursor: submitting ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {submitting ? "PROCESSING…" : `Pay ${fmtDollars(totalCents)} · book my seats`}
+                </button>
+              </>
+            ) : clientSecret && meta ? (
+              <div style={{ background: "#fff", border: "1px solid #cdd6da", padding: 20 }}>
+                <Elements
+                  stripe={stripePromise}
+                  options={{
+                    clientSecret,
+                    appearance: {
+                      theme: "flat",
+                      variables: {
+                        colorPrimary: "#d1541f",
+                        colorBackground: "#ffffff",
+                        colorText: "#0d1c26",
+                        colorDanger: "#8c3b12",
+                        fontFamily: "Archivo, Helvetica, sans-serif",
+                        borderRadius: "0px",
+                        fontSizeBase: "17px",
+                      },
+                      rules: {
+                        ".Input": {
+                          border: "1px solid #9aa8ae",
+                          padding: "16px",
+                          fontSize: "17px",
+                        },
+                        ".Input:focus": {
+                          border: "1px solid #d1541f",
+                          outline: "2px solid #d1541f",
+                          outlineOffset: "2px",
+                        },
+                        ".Label": {
+                          fontFamily: "Archivo, Helvetica, sans-serif",
+                          fontWeight: "600",
+                          fontSize: "14px",
+                          color: "#0d1c26",
+                          marginBottom: "6px",
+                        },
+                        ".Error": {
+                          color: "#8c3b12",
+                          fontSize: "14px",
+                        },
+                      },
+                    },
+                  }}
+                >
+                  <CheckoutForm
+                    totalCents={meta.totalCents}
+                    confirmationCode={meta.confirmationCode}
+                    customerEmail={email.trim()}
+                    customerPhone={mobile.trim()}
+                    bookingId={meta.bookingId}
+                    holdExpiresAt={meta.holdExpiresAt}
+                    cartItems={items}
+                  />
+                </Elements>
+              </div>
+            ) : null}
           </div>
-        )}
+
+          {/* Reassurance — always visible */}
+          <div
+            style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px", marginTop: 14, fontFamily: "var(--font-ibm-plex-mono)", fontSize: 11, letterSpacing: ".06em", color: "#41565f" }}
+          >
+            <span>FREE CANCELLATION TO 24H BEFORE SAILING</span>
+            <span>WEATHER CANCELLATION = AUTOMATIC REFUND</span>
+            <span>SECURED BY STRIPE</span>
+          </div>
+        </form>
       </div>
     </div>
   );
 }
 
-export function CheckoutClient({ operatorName }: { operatorName: string }) {
+export function CheckoutClient({
+  operatorName,
+  phone,
+  dockAddress,
+}: {
+  operatorName: string;
+  phone: string | null;
+  dockAddress: string | null;
+}) {
   return (
     <Suspense>
-      <CheckoutInner operatorName={operatorName} />
+      <CheckoutInner operatorName={operatorName} phone={phone} dockAddress={dockAddress} />
     </Suspense>
   );
 }

@@ -16,7 +16,7 @@ See `docs/build-status.md` for the full per-step build narrative.
 
 **Testing status:** All phases done. Phase 6 (mobile lib unit tests) complete — 51 tests, 97.97% line coverage, committed `ffea43f`. Maestro mobile E2E and BottomSheet extraction deferred until after launch.
 
-**Security fixes — all complete (committed `424392e`):**
+**Security fixes — all complete (last batch committed `6568cd2`):**
 
 - ✅ **H1 (CRITICAL — money bug):** Cron skips bookings whose PI is `succeeded`/`processing`; webhook guards against already-cancelled bookings.
 - ✅ **H2/H3:** Postgres-backed fixed-window rate limiter (`src/lib/rate-limit.ts`) on all auth routes — OTP request (20/hr IP + 5/hr email), OTP verify (10/15min email), mate PIN (5/15min email), admin login (10/15min IP).
@@ -62,8 +62,11 @@ open-boat-fishing/
     mobile/     # Expo (managed) — two apps from one codebase (consumer + mate)
   packages/
     db/         # Drizzle ORM schema + migrations (shared source of truth)
+    design/     # Shared design tokens (@openboat/design) — colors, typography, spacing
     types/      # Shared TypeScript types
     utils/      # QR gen, Zod validation schemas
+  .github/
+    workflows/  # CI: web-checks.yml, mobile-checks.yml, mobile-preview.yml, mobile-release.yml
 ```
 
 **No separate API server.** All backend logic lives in Next.js API routes (`apps/web/src/app/api/`), deployed as Vercel serverless functions.
@@ -80,7 +83,7 @@ open-boat-fishing/
 8. ✅ Expo mate app — PIN auth, offline manifest, QR scanner + keyboard mode, check-in queue sync
 9. ✅ Admin dashboard — staff auth, trips list, cancellation, manifest, per-ticket refund, revenue, capacity edit
 10. ✅ Fishing reports — captain posts after each trip (web admin + mate app). Catch summary, fish counts, Vercel Blob photos. Public list + detail pages with ISR. Consumer app Reports tab. See `docs/build-status.md` for full detail.
-11. **Next:** Production infra → DNS migration → SEO → load test (k6) → go live
+11. ✅ (partial) Production infra — deploy safety gates landed: `/api/health` endpoint, migration-on-build (`vercel.json` buildCommand runs migrations before `next build`), CI smoke test. Remaining: DNS migration → SEO → load test (k6) → go live
 
 ## Key Architecture Decisions
 
@@ -101,6 +104,8 @@ open-boat-fishing/
 **Trip materialization:** On schedule save — write all `trips` rows for the full date range immediately. Use `(schedule_id, departure_date)` unique constraint to prevent duplicates on re-run.
 
 **Cancellation is one atomic transaction:** refund every ticket, reverse every fee, set status, fire notifications. See `docs/data-model.md` for the full status transition diagram.
+
+**Analytics:** PostHog is wired into the booking funnel (BookingCalendar, CheckoutForm, CheckoutClient) and the `payment_intent.succeeded` webhook. `src/lib/posthog.ts` is the server-side client; `src/components/PostHogProvider.tsx` wraps the app for client-side events.
 
 See `docs/data-model.md` for full schema, `docs/booking-requirements.md` for booking flow decisions, `docs/incumbent-system.md` for migration context.
 
@@ -155,10 +160,14 @@ pnpm migrate                      # run Drizzle migrations against DATABASE_URL
 pnpm db:studio                    # open Drizzle Studio (requires DATABASE_URL)
 pnpm --filter @openboat/db generate   # generate migration from schema changes
 
-# Seed scripts (packages/db)
+# Seed scripts (packages/db/src)
 DATABASE_URL=... tsx src/seed-mate.ts           # create mate@example.com / PIN 1234
 DATABASE_URL=... tsx src/seed-test-trip.ts      # ensure today has a scheduled trip
 DATABASE_URL=... tsx src/seed-test-customers.ts # add 10 bookings (23 tickets) to today's trip
+DATABASE_URL=... tsx src/seed-demo.ts           # seed MV Open Boat demo operator
+DATABASE_URL=... tsx src/seed-trips-dev.ts      # seed dev trips (4 vessels, 157 trips)
+DATABASE_URL=... tsx src/seed-sailed-trip.ts    # seed a past sailed trip for revenue testing
+DATABASE_URL=... tsx src/seed-admin.ts          # create admin staff account
 
 # Individual apps
 pnpm --filter @openboat/web dev
