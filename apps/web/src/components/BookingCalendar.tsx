@@ -794,7 +794,13 @@ export function BookingCalendar({
     try {
       const raw = localStorage.getItem("openboat_cart");
       if (raw) {
-        restoredItems = JSON.parse(raw);
+        const parsed: EnrichedCartItem[] = JSON.parse(raw);
+        const seen = new Set<string>();
+        restoredItems = parsed.filter((item) => {
+          if (seen.has(item.tripId)) return false;
+          seen.add(item.tripId);
+          return true;
+        });
         const map = new Map<string, number>();
         const prices = new Map<string, number>();
         restoredItems.forEach((item) => {
