@@ -169,6 +169,7 @@ function CheckoutInner({
 }) {
   const [items, setItems] = useState<EnrichedCartItem[]>([]);
   const [phase, setPhase] = useState<"contact" | "payment">("contact");
+  const [initialized, setInitialized] = useState(false);
 
   // contact fields
   const [name, setName] = useState("");
@@ -194,8 +195,19 @@ function CheckoutInner({
   useEffect(() => {
     try {
       const raw = localStorage.getItem("openboat_cart");
-      if (raw) setItems(JSON.parse(raw));
+      if (raw) {
+        setItems(JSON.parse(raw));
+      } else {
+        // No cart — if there's a pending payment in progress, redirect to confirmation
+        const pending = localStorage.getItem("openboat_pending_payment");
+        if (pending) {
+          const { confirmationCode } = JSON.parse(pending);
+          window.location.href = `/booking/confirmation?code=${confirmationCode}`;
+          return; // skip setInitialized — we're redirecting
+        }
+      }
     } catch { /* ignore */ }
+    setInitialized(true); // safe to render now
     posthog.capture("checkout_view");
   }, []);
 
@@ -258,6 +270,7 @@ function CheckoutInner({
         holdExpiresAt: data.holdExpiresAt,
         ticketCount: data.ticketCount,
       });
+      localStorage.setItem("openboat_pending_payment", JSON.stringify({ confirmationCode: data.confirmationCode }));
       localStorage.removeItem("openboat_cart");
       setPhase("payment");
       setSubmitting(false);
@@ -269,6 +282,15 @@ function CheckoutInner({
       setSubmitError("Something went wrong. Please try again.");
       setSubmitting(false);
     }
+  }
+
+  if (!initialized && items.length === 0) {
+    // Wait for localStorage read before showing empty state
+    return (
+      <div style={{ maxWidth: 1440, margin: "0 auto", borderLeft: "2px solid #cdd6da", borderRight: "2px solid #cdd6da", minHeight: "100vh", background: "#eef1f0" }}>
+        <BookingNav operatorName={operatorName} dockAddress={dockAddress} phone={phone} step={2} />
+      </div>
+    );
   }
 
   if (items.length === 0 && phase === "contact") {

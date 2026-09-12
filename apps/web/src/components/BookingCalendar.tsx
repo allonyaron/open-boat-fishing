@@ -40,7 +40,7 @@ export type EnrichedCartItem = {
 };
 
 type ViewMode = "list" | "calendar";
-type TripFilter = "all" | "half-day" | "full-day" | "weekend";
+type VesselInfo = { name: string; color: string };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,15 +63,6 @@ function fmtDuration(startIso: string, endIso: string) {
   const hrs = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
   return mins === 0 ? `${hrs} hr` : `${hrs} hr ${mins} min`;
-}
-function tripDurationHours(trip: Trip) {
-  return (new Date(trip.endTime).getTime() - new Date(trip.startTime).getTime()) / 3600000;
-}
-function fmtFare(prices: { ticketType: string; priceCents: number }[]) {
-  if (prices.length === 0) return "";
-  const min = Math.min(...prices.map((p) => p.priceCents));
-  const dollars = Math.round(min / 100);
-  return prices.length > 1 ? `from $${dollars}` : `$${dollars}`;
 }
 function fmtDayLabel(dateStr: string): { main: string; sub: string } {
   const dt = new Date(dateStr + "T12:00:00Z");
@@ -122,9 +113,13 @@ export function BookingNav({
       )}
       {/* Brand + step nav */}
       <div className="bg-hull px-6 flex flex-wrap gap-4 items-center justify-between" style={{ borderBottom: "3px solid #d1541f", padding: "14px 24px" }}>
-        <span className="text-[22px] font-bold tracking-[.05em] text-white uppercase font-archivo">
+        <a
+          href="/"
+          className="text-[22px] font-bold tracking-[.05em] text-white uppercase font-archivo"
+          style={{ textDecoration: "none" }}
+        >
           {operatorName}
-        </span>
+        </a>
         <div className="flex gap-[6px] font-plex-mono text-[11px]">
           {steps.map(([n, label]) => {
             const active = n === step;
@@ -149,6 +144,7 @@ function FilterBar({
   month,
   view,
   filter,
+  vessels,
   onPrevMonth,
   onNextMonth,
   onViewChange,
@@ -156,20 +152,15 @@ function FilterBar({
 }: {
   month: string;
   view: ViewMode;
-  filter: TripFilter;
+  filter: string;
+  vessels: VesselInfo[];
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onViewChange: (v: ViewMode) => void;
-  onFilterChange: (f: TripFilter) => void;
+  onFilterChange: (f: string) => void;
 }) {
   const { year, mon } = parseMonth(month);
   const monthLabel = `${MONTHS[mon - 1].toUpperCase()} ${year}`;
-  const filters: { key: TripFilter; label: string }[] = [
-    { key: "all", label: "ALL TRIPS" },
-    { key: "half-day", label: "HALF-DAY" },
-    { key: "full-day", label: "FULL-DAY" },
-    { key: "weekend", label: "WEEKEND" },
-  ];
   const viewChipStyle = (active: boolean) =>
     `px-[18px] py-[11px] font-plex-mono text-[11px] font-semibold tracking-[.14em] cursor-pointer border transition-colors ${
       active
@@ -182,6 +173,8 @@ function FilterBar({
         ? "bg-orange border-orange text-white"
         : "bg-transparent border-hull-line text-white hover:border-white/50"
     }`;
+
+  const showVesselFilter = vessels.length > 1;
 
   return (
     <div className="bg-hull-2 flex flex-wrap gap-[14px] items-center justify-between" style={{ padding: "14px 24px" }}>
@@ -216,14 +209,28 @@ function FilterBar({
           <button type="button" onClick={() => onViewChange("list")} className={viewChipStyle(view === "list")}>LIST</button>
           <button type="button" onClick={() => onViewChange("calendar")} className={viewChipStyle(view === "calendar")}>CALENDAR</button>
         </div>
-        {/* Trip type filter */}
-        <div className="flex flex-wrap gap-2">
-          {filters.map(({ key, label }) => (
-            <button key={key} type="button" onClick={() => onFilterChange(key)} className={filterChipStyle(filter === key)}>
-              {label}
+        {/* Vessel filter — hidden when only 1 vessel */}
+        {showVesselFilter && (
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => onFilterChange("all")} className={filterChipStyle(filter === "all")}>
+              ALL
             </button>
-          ))}
-        </div>
+            {vessels.map((v) => (
+              <button
+                key={v.name}
+                type="button"
+                onClick={() => onFilterChange(v.name)}
+                className={filterChipStyle(filter === v.name)}
+              >
+                <span
+                  className="inline-block rounded-full mr-[6px]"
+                  style={{ width: 7, height: 7, background: filter === v.name ? "#fff" : v.color, verticalAlign: "middle" }}
+                />
+                {v.name.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -245,26 +252,26 @@ function InlineStepper({
   label?: string;
 }) {
   return (
-    <div>
+    <div className="flex items-center justify-between gap-3">
       {label && (
-        <div className="font-plex-mono text-[10px] font-semibold tracking-[.12em] text-ink-dark-3 mb-[4px]">
+        <div className="font-plex-mono text-[10px] font-semibold tracking-[.12em] text-ink-dark-3 flex-shrink-0">
           {label}
         </div>
       )}
-      <div className="flex items-stretch" style={{ border: "1px solid #0d1c26", height: 46 }}>
+      <div className="flex items-stretch flex-shrink-0" style={{ border: "1px solid #0d1c26", height: 34 }}>
         <button
           type="button"
           onClick={onDec}
           disabled={value === 0}
           aria-label="One fewer seat"
-          className="flex items-center justify-center bg-white text-hull text-[20px] font-semibold cursor-pointer disabled:opacity-40 hover:bg-deck-3 transition-colors border-none"
-          style={{ width: 46, borderRight: "1px solid #0d1c26" }}
+          className="flex items-center justify-center bg-white text-hull text-[18px] font-semibold cursor-pointer disabled:opacity-40 hover:bg-deck-3 transition-colors border-none"
+          style={{ width: 34, borderRight: "1px solid #0d1c26" }}
         >
           −
         </button>
         <span
-          className="flex items-center justify-center font-plex-mono text-[17px] font-semibold"
-          style={{ minWidth: 46 }}
+          className="flex items-center justify-center font-plex-mono text-[15px] font-semibold"
+          style={{ width: 40 }}
           aria-live="polite"
           aria-atomic="true"
         >
@@ -275,8 +282,8 @@ function InlineStepper({
           onClick={onInc}
           disabled={value >= max}
           aria-label="One more seat"
-          className="flex items-center justify-center bg-hull text-white text-[20px] font-semibold cursor-pointer disabled:opacity-40 hover:bg-hull-2 transition-colors border-none"
-          style={{ width: 46, borderLeft: "1px solid #0d1c26" }}
+          className="flex items-center justify-center bg-hull text-white text-[18px] font-semibold cursor-pointer disabled:opacity-40 hover:bg-hull-2 transition-colors border-none"
+          style={{ width: 34, borderLeft: "1px solid #0d1c26" }}
         >
           +
         </button>
@@ -306,7 +313,7 @@ function TripRow({
       ? "SOLD OUT"
       : trip.seatsRemaining <= 10
       ? `${trip.seatsRemaining} SEATS LEFT`
-      : "SEATS OPEN";
+      : `${trip.seatsRemaining} OPEN`;
   const seatColorClass = soldOut
     ? "text-[#9aa8ae]"
     : trip.seatsRemaining <= 10
@@ -336,12 +343,7 @@ function TripRow({
         </div>
       </div>
 
-      {/* Col 2: fare */}
-      <div className="trip-col-fare font-plex-mono text-[20px] font-semibold self-center whitespace-nowrap">
-        {fmtFare(activePrices)}
-      </div>
-
-      {/* Col 3: seat state */}
+      {/* Col 2: seat state */}
       <div className={`trip-col-seats font-plex-mono text-[12px] font-semibold tracking-[.06em] self-center ${seatColorClass}`}>
         {seatLabel}
       </div>
@@ -370,7 +372,7 @@ function TripRow({
                 onDec={() => onSetQty(trip.id, price.ticketType, Math.max(0, qty - 1))}
                 onInc={() => onSetQty(trip.id, price.ticketType, Math.min(maxForType, qty + 1))}
                 max={maxForType}
-                label={activePrices.length > 1 ? price.ticketType.toUpperCase() : undefined}
+                label={`${price.ticketType.toUpperCase()} · ${dollars(price.priceCents)}`}
               />
             );
           })
@@ -417,95 +419,197 @@ function CartRail({
   cartItems,
   totalCents,
   totalSeats,
+  selectedDay,
+  dayTrips,
+  getQty,
+  onSetQty,
   onRemove,
   onCheckout,
 }: {
   cartItems: EnrichedCartItem[];
   totalCents: number;
   totalSeats: number;
+  selectedDay: string | null;
+  dayTrips: Trip[];
+  getQty: (tripId: string, ticketType: string) => number;
+  onSetQty: (tripId: string, ticketType: string, qty: number) => void;
   onRemove: (tripId: string) => void;
   onCheckout: () => void;
 }) {
+  const outerRef = useRef<HTMLDivElement>(null);
+  const [railHeight, setRailHeight] = useState("100vh");
+
+  // Measure distance from viewport top on mount so the rail never overflows the
+  // bottom of the screen when the nav + filter bar are still above it.
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    const top = el.getBoundingClientRect().top;
+    if (top > 0) setRailHeight(`calc(100vh - ${Math.round(top)}px)`);
+  }, []);
+
+  const showPickSeats = selectedDay && dayTrips.length > 0;
+
   return (
     <div
-      className="booking-rail flex flex-col gap-[18px]"
+      ref={outerRef}
+      className="booking-rail"
       style={{
         borderLeft: "2px solid #cdd6da",
         background: "#e6eaea",
-        minHeight: "100vh",
-        padding: "28px 22px",
         position: "sticky",
         top: 0,
+        height: railHeight,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
       }}
     >
-      <div className="font-plex-mono text-[12px] tracking-[.16em] text-ink-2">YOUR SEATS</div>
+      {/* ── Scrollable content ── */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "22px 22px 8px" }}>
 
-      {cartItems.length === 0 ? (
-        <div style={{ border: "1px dashed #a9b6bc", padding: 22, background: "#eef1f0" }}>
-          <div className="text-[17px] font-bold font-archivo">No seats yet.</div>
-          <div className="text-[15px] text-ink-2 mt-[6px]" style={{ lineHeight: 1.5 }}>
-            Hit <strong>+</strong> on any trip. Nothing is charged until you pay.
+        {/* PICK YOUR SEATS */}
+        {showPickSeats && (
+          <div style={{ marginBottom: 20 }}>
+            <div
+              className="font-plex-mono text-[11px] font-semibold tracking-[.16em] text-ink-2 uppercase mb-3"
+            >
+              {fmtDayLabel(selectedDay).main}
+            </div>
+            {dayTrips.map((trip) => {
+              const activePrices = trip.product.prices.filter((p) => p.priceCents > 0);
+              const soldOut = trip.seatsRemaining === 0;
+              const totalQty = activePrices.reduce((s, p) => s + getQty(trip.id, p.ticketType), 0);
+              const inCart = totalQty > 0;
+              return (
+                <div
+                  key={`pick-${trip.id}`}
+                  style={{
+                    background: "#fff",
+                    border: `1px solid ${inCart ? "#d1541f" : "#cdd6da"}`,
+                    padding: "14px 16px",
+                    marginBottom: 8,
+                    opacity: soldOut ? 0.55 : 1,
+                  }}
+                >
+                  <div className="font-plex-mono text-[10px] tracking-[.16em] text-orange-ink mb-[3px]">
+                    {trip.product.category.toUpperCase()}
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2 mb-1">
+                    <div className="font-archivo text-[16px] font-bold leading-tight">{trip.product.displayName}</div>
+                    {!soldOut && (
+                      <div className={`font-plex-mono text-[11px] font-semibold flex-shrink-0 ${trip.seatsRemaining <= 10 ? "text-orange-press" : "text-green-open"}`}>
+                        {trip.seatsRemaining <= 10 ? `${trip.seatsRemaining} LEFT` : `${trip.seatsRemaining} OPEN`}
+                      </div>
+                    )}
+                  </div>
+                  <div className="font-plex-mono text-[11px] text-ink-2 mb-3">
+                    {fmtTimeET(trip.startTime)} – {fmtTimeET(trip.endTime)} · {trip.vessel.name}
+                  </div>
+                  {soldOut ? (
+                    <div className="font-plex-mono text-[11px] text-[#9aa8ae]">SOLD OUT</div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {activePrices.map((price) => {
+                        const qty = getQty(trip.id, price.ticketType);
+                        const otherQty = activePrices
+                          .filter((p) => p.ticketType !== price.ticketType)
+                          .reduce((s, p) => s + getQty(trip.id, p.ticketType), 0);
+                        return (
+                          <InlineStepper
+                            key={price.ticketType}
+                            value={qty}
+                            onDec={() => onSetQty(trip.id, price.ticketType, Math.max(0, qty - 1))}
+                            onInc={() => onSetQty(trip.id, price.ticketType, Math.min(trip.seatsRemaining - otherQty, qty + 1))}
+                            max={trip.seatsRemaining - otherQty}
+                            label={`${price.ticketType.toUpperCase()} · ${dollars(price.priceCents)}`}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </div>
-      ) : (
-        <>
-          {cartItems.map((item) => {
-            const subtotal = item.tickets.reduce((s, t) => s + t.quantity * t.priceCents, 0);
-            const seatsLabel = item.tickets
-              .map((t) => `${t.quantity} ${t.ticketType}`)
-              .join(" · ");
-            const { main: dateMain } = fmtDayLabel(item.departureDate);
-            const dateShort = (() => {
-              const dt = new Date(item.departureDate + "T12:00:00Z");
-              return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-            })();
-            return (
-              <div key={item.tripId} style={{ background: "#fff", border: "1px solid #cdd6da", padding: 16 }}>
-                <div className="flex justify-between gap-3">
+        )}
+
+        {/* YOUR SEATS */}
+        <div className="font-plex-mono text-[12px] tracking-[.16em] text-ink-2 mb-2">YOUR SEATS</div>
+
+        {cartItems.length === 0 ? (
+          <div style={{ border: "1px dashed #a9b6bc", padding: "18px 16px", background: "#eef1f0" }}>
+            <div className="text-[15px] font-bold font-archivo">No seats yet.</div>
+            <div className="text-[13px] text-ink-2 mt-1" style={{ lineHeight: 1.5 }}>
+              Select a day, then hit <strong>+</strong> on a trip.
+            </div>
+          </div>
+        ) : (
+          <div>
+            {cartItems.map((item) => {
+              const subtotal = item.tickets.reduce((s, t) => s + t.quantity * t.priceCents, 0);
+              const seatsLabel = item.tickets.map((t) => `${t.quantity} ${t.ticketType}`).join(" · ");
+              const dateShort = new Date(item.departureDate + "T12:00:00Z").toLocaleDateString("en-US", {
+                month: "short", day: "numeric", timeZone: "UTC",
+              });
+              return (
+                <div
+                  key={`cart-${item.tripId}`}
+                  className="flex items-start justify-between gap-2"
+                  style={{ borderBottom: "1px solid #cdd6da", padding: "10px 0" }}
+                >
                   <div className="min-w-0">
-                    <div className="text-[16px] font-bold font-archivo truncate">{item.productName}</div>
-                    <div className="font-plex-mono text-[12px] text-ink-2 mt-1">
+                    <div className="font-archivo text-[13px] font-bold truncate">{item.productName}</div>
+                    <div className="font-plex-mono text-[11px] text-ink-2 mt-[2px]">
                       {dateShort} · {fmtTimeET(item.startTime)}
                     </div>
-                    <div className="font-plex-mono text-[12px] text-ink-2 mt-[2px]">
-                      {seatsLabel} × {dollars(item.tickets[0]?.priceCents ?? 0)}
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="font-plex-mono text-[17px] font-semibold">{dollars(subtotal)}</div>
+                    <div className="font-plex-mono text-[11px] text-ink-2">{seatsLabel}</div>
                     <button
                       type="button"
                       onClick={() => onRemove(item.tripId)}
-                      className="font-plex-mono text-[11px] tracking-[.1em] text-orange-press cursor-pointer bg-transparent border-none mt-[6px] underline hover:text-orange-ink"
+                      className="font-plex-mono text-[10px] tracking-[.1em] text-orange-press cursor-pointer bg-transparent border-none mt-[3px] underline hover:text-orange-ink p-0"
                     >
                       REMOVE
                     </button>
                   </div>
+                  <div className="font-plex-mono text-[14px] font-semibold flex-shrink-0">
+                    {dollars(subtotal)}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-
-          <div>
-            <div className="flex justify-between items-baseline pt-[14px]" style={{ borderTop: "2px solid #cdd6da" }}>
-              <span className="font-plex-mono text-[12px] tracking-[.16em] text-ink-2">TOTAL</span>
-              <span className="font-plex-mono text-[30px] font-bold">{dollars(totalCents)}</span>
-            </div>
-            <button
-              type="button"
-              onClick={onCheckout}
-              className="w-full bg-orange text-white font-archivo text-[16px] font-bold tracking-[.08em] uppercase cursor-pointer hover:bg-orange-press transition-colors border-none mt-[14px]"
-              style={{ padding: "19px 20px" }}
-            >
-              Check out · {dollars(totalCents)} →
-            </button>
-            <div className="font-plex-mono text-[11px] text-ink-2 mt-3 tracking-[.04em]" style={{ lineHeight: 1.7 }}>
-              FREE CANCELLATION TO 24H<br />
-              WEATHER REFUNDS AUTOMATIC<br />
-              NO ACCOUNT NEEDED
-            </div>
+              );
+            })}
           </div>
-        </>
+        )}
+      </div>
+
+      {/* ── Sticky checkout ── */}
+      {cartItems.length > 0 && (
+        <div
+          style={{
+            flexShrink: 0,
+            padding: "16px 22px 20px",
+            borderTop: "2px solid #cdd6da",
+            background: "#e6eaea",
+          }}
+        >
+          <div className="flex justify-between items-baseline mb-3">
+            <span className="font-plex-mono text-[12px] tracking-[.16em] text-ink-2">TOTAL</span>
+            <span className="font-plex-mono text-[30px] font-bold">{dollars(totalCents)}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onCheckout}
+            className="w-full bg-orange text-white font-archivo text-[16px] font-bold tracking-[.08em] uppercase cursor-pointer hover:bg-orange-press transition-colors border-none"
+            style={{ padding: "19px 20px" }}
+          >
+            Check out · {dollars(totalCents)} →
+          </button>
+          <div className="font-plex-mono text-[11px] text-ink-2 mt-3 tracking-[.04em]" style={{ lineHeight: 1.7 }}>
+            FREE CANCELLATION TO 24H<br />
+            WEATHER REFUNDS AUTOMATIC<br />
+            NO ACCOUNT NEEDED
+          </div>
+        </div>
       )}
     </div>
   );
@@ -658,6 +762,8 @@ export function BookingCalendar({
   phone,
   dockAddress,
   termsUrl,
+  initialDate,
+  initialTripId,
 }: {
   initialTrips: Trip[];
   initialMonth: string;
@@ -665,13 +771,15 @@ export function BookingCalendar({
   phone: string | null;
   dockAddress: string | null;
   termsUrl: string | null;
+  initialDate?: string;
+  initialTripId?: string;
 }) {
   const [month, setMonth] = useState(initialMonth);
   const [trips, setTrips] = useState<Trip[]>(initialTrips);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [tripFilter, setTripFilter] = useState<TripFilter>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("calendar");
+  const [selectedDay, setSelectedDay] = useState<string | null>(initialDate ?? null);
+  const [vesselFilter, setVesselFilter] = useState<string>("all");
 
   // cart: tripId:ticketType -> quantity
   const [cart, setCart] = useState<Map<string, number>>(new Map());
@@ -680,24 +788,59 @@ export function BookingCalendar({
   // enriched cart items (written to localStorage for checkout page)
   const [cartItems, setCartItems] = useState<EnrichedCartItem[]>([]);
 
-  // restore cart from localStorage on mount
+  // restore cart from localStorage, then pre-add initialTripId if provided
   useEffect(() => {
+    let restoredItems: EnrichedCartItem[] = [];
     try {
       const raw = localStorage.getItem("openboat_cart");
-      if (!raw) return;
-      const items: EnrichedCartItem[] = JSON.parse(raw);
-      const map = new Map<string, number>();
-      const prices = new Map<string, number>();
-      items.forEach((item) => {
-        item.tickets.forEach((t) => {
-          map.set(`${item.tripId}:${t.ticketType}`, t.quantity);
-          prices.set(`${item.tripId}:${t.ticketType}`, t.priceCents);
+      if (raw) {
+        restoredItems = JSON.parse(raw);
+        const map = new Map<string, number>();
+        const prices = new Map<string, number>();
+        restoredItems.forEach((item) => {
+          item.tickets.forEach((t) => {
+            map.set(`${item.tripId}:${t.ticketType}`, t.quantity);
+            prices.set(`${item.tripId}:${t.ticketType}`, t.priceCents);
+          });
         });
-      });
-      if (map.size > 0) setCart(map);
-      if (prices.size > 0) setCartPrices(prices);
-      if (items.length > 0) setCartItems(items);
+        if (map.size > 0) setCart(map);
+        if (prices.size > 0) setCartPrices(prices);
+        if (restoredItems.length > 0) setCartItems(restoredItems);
+      }
     } catch { /* ignore corrupt data */ }
+
+    // Pre-add 1 adult ticket for the initial trip (homepage BOOK button)
+    if (initialTripId && !restoredItems.some((i) => i.tripId === initialTripId)) {
+      const trip = initialTrips.find((t) => t.id === initialTripId);
+      if (trip) {
+        const adultPrice =
+          trip.product.prices.find((p) => p.ticketType.toLowerCase() === "adult") ??
+          trip.product.prices[0];
+        if (adultPrice && trip.seatsRemaining > 0) {
+          const k = `${trip.id}:${adultPrice.ticketType}`;
+          setCart((prev) => new Map(prev).set(k, 1));
+          setCartPrices((prev) => new Map(prev).set(k, adultPrice.priceCents));
+          setCartItems((prev) => [
+            ...prev,
+            {
+              tripId: trip.id,
+              departureDate: trip.departureDate,
+              startTime: trip.startTime,
+              endTime: trip.endTime,
+              vesselName: trip.vessel.name,
+              vesselColor: trip.vessel.color,
+              category: trip.product.category,
+              productName: trip.product.displayName,
+              seatsRemaining: trip.seatsRemaining,
+              tickets: [{ ticketType: adultPrice.ticketType, quantity: 1, priceCents: adultPrice.priceCents }],
+            },
+          ]);
+          // Pre-select the day in calendar view
+          setSelectedDay(trip.departureDate);
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // sync cartItems to localStorage
@@ -710,7 +853,7 @@ export function BookingCalendar({
   }, [cartItems]);
 
   useEffect(() => {
-    posthog.capture("list_view");
+    posthog.capture("booking_view");
   }, []);
 
   const { year, mon } = parseMonth(month);
@@ -820,16 +963,18 @@ export function BookingCalendar({
     window.location.href = "/checkout";
   }
 
-  // filter trips
-  const filteredTrips = trips.filter((t) => {
-    if (tripFilter === "half-day" && tripDurationHours(t) >= 6) return false;
-    if (tripFilter === "full-day" && tripDurationHours(t) < 6) return false;
-    if (tripFilter === "weekend") {
-      const dow = new Date(t.departureDate + "T12:00:00Z").getUTCDay();
-      if (dow !== 0 && dow !== 6) return false;
-    }
-    return true;
-  });
+  // unique vessels from current month's trips
+  const vessels = Array.from(
+    trips.reduce((map, t) => {
+      if (!map.has(t.vessel.name)) map.set(t.vessel.name, t.vessel);
+      return map;
+    }, new Map<string, VesselInfo>()).values()
+  );
+
+  // filter trips by vessel
+  const filteredTrips = vesselFilter === "all"
+    ? trips
+    : trips.filter((t) => t.vessel.name === vesselFilter);
 
   const byDate = filteredTrips.reduce<Record<string, Trip[]>>((acc, t) => {
     (acc[t.departureDate] ??= []).push(t);
@@ -853,11 +998,12 @@ export function BookingCalendar({
       <FilterBar
         month={month}
         view={viewMode}
-        filter={tripFilter}
+        filter={vesselFilter}
+        vessels={vessels}
         onPrevMonth={prevMonth}
         onNextMonth={nextMonth}
         onViewChange={setViewMode}
-        onFilterChange={setTripFilter}
+        onFilterChange={setVesselFilter}
       />
 
       <div className="booking-shell">
@@ -894,19 +1040,6 @@ export function BookingCalendar({
                     onDaySelect={setSelectedDay}
                     totalQtyForTrip={totalQtyForTrip}
                   />
-                  {selectedDay && dayTrips.length > 0 && (
-                    <div style={{ paddingTop: 30 }}>
-                      <div className="flex items-baseline gap-3 pb-2" style={{ borderBottom: "2px solid #cdd6da" }}>
-                        <span className="font-plex-mono text-[13px] font-semibold tracking-[.14em] uppercase">
-                          {fmtDayLabel(selectedDay).main}
-                        </span>
-                        <span className="font-plex-mono text-[12px] text-ink-3 tracking-[.08em]">PICK YOUR SEATS</span>
-                      </div>
-                      {dayTrips.map((trip) => (
-                        <TripRow key={trip.id} trip={trip} getQty={getQty} onSetQty={setQty} />
-                      ))}
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -918,6 +1051,10 @@ export function BookingCalendar({
           cartItems={cartItems}
           totalCents={totalCents}
           totalSeats={totalSeats}
+          selectedDay={selectedDay}
+          dayTrips={dayTrips}
+          getQty={getQty}
+          onSetQty={setQty}
           onRemove={removeFromCart}
           onCheckout={goToCheckout}
         />
@@ -928,6 +1065,15 @@ export function BookingCalendar({
         totalSeats={totalSeats}
         onCheckout={goToCheckout}
       />
+
+      {/* Footer */}
+      <div
+        className="bg-hull font-plex-mono text-[12px] tracking-[.06em]"
+        style={{ padding: "18px 24px", color: "#8fa3ad", borderTop: "2px solid #cdd6da", display: "flex", flexWrap: "wrap", gap: "8px 28px", justifyContent: "space-between", position: "sticky", bottom: 0, zIndex: 10 }}
+      >
+        <span>FREE CANCELLATION TO 24H · RODS &amp; BAIT ABOARD · WEATHER REFUNDS AUTOMATIC</span>
+        <a href="/" style={{ color: "#b6c6ce", textDecoration: "none" }}>← BACK TO HOME</a>
+      </div>
     </div>
   );
 }
