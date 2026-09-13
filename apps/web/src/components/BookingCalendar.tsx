@@ -1085,7 +1085,6 @@ export function BookingCalendar({
         }
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sync cartItems to localStorage
