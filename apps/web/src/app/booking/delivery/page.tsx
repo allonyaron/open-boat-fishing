@@ -5,6 +5,7 @@ import { and, eq, count } from "drizzle-orm";
 import { getOperatorRecord } from "@/lib/operator";
 import { notFound, redirect } from "next/navigation";
 import { BookingNav } from "@/components/BookingCalendar";
+import { ClearPendingPayment } from "@/components/ClearPendingPayment";
 import { dollars } from "@openboat/utils";
 
 function fmtDateShort(d: string) {
@@ -107,6 +108,7 @@ export default async function DeliveryPage({
 
   return (
     <div className="min-h-screen bg-deck font-archivo">
+      <ClearPendingPayment />
       <BookingNav
         operatorName={operatorName}
         dockAddress={op.dockAddress ?? null}

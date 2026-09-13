@@ -45,7 +45,7 @@ export default async function HomePage() {
     return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   });
 
-  const [weekTripRows, latestReportRows, priceRows, categoryRows] = await Promise.all([
+  const [weekTripRows, latestReportRows, , categoryRows] = await Promise.all([
     db
       .select({
         tripId: trips.id,
@@ -120,13 +120,19 @@ export default async function HomePage() {
   }
   const sailings = Array.from(tripMap.values());
 
-  const allPriceCents = priceRows.map((r) => r.priceCents);
-  const fromPrice = allPriceCents.length > 0 ? Math.min(...allPriceCents) : null;
   const categories = categoryRows.map((r) => r.category);
   const latestReport = latestReportRows[0] ?? null;
   const operatorName = operator.name ?? "Fishing Charter";
 
   const datesWithTrips = new Set(sailings.map((t) => t.departureDate));
+
+  // Group sailings by date for alternating row shading
+  const sailingsByDate = new Map<string, typeof sailings>();
+  for (const trip of sailings) {
+    if (!sailingsByDate.has(trip.departureDate)) sailingsByDate.set(trip.departureDate, []);
+    sailingsByDate.get(trip.departureDate)!.push(trip);
+  }
+  const sailingDates = Array.from(sailingsByDate.keys());
 
   const weekStart = new Date(todayStr + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase();
   const weekEndLabel = new Date(weekEndStr + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase();
@@ -221,7 +227,7 @@ export default async function HomePage() {
             className="inline-block bg-orange font-plex-mono text-[13px] tracking-[.2em] text-white"
             style={{ padding: "6px 12px", marginBottom: 14 }}
           >
-            {fromPrice ? `FROM ${dollars(fromPrice)} PER ANGLER` : "PARTY FISHING DAILY"}
+            PARTY FISHING DAILY
           </div>
           <div
             className="font-archivo font-bold text-white uppercase"
@@ -266,7 +272,7 @@ export default async function HomePage() {
                 return (
                   <Link
                     key={dateStr}
-                    href="/book"
+                    href={`/book?date=${dateStr}`}
                     className="text-center block"
                     style={{
                       background: isFirst ? "#d1541f" : "transparent",
@@ -352,7 +358,7 @@ export default async function HomePage() {
           </div>
 
           <div style={{ padding: "20px 28px 0" }}>
-            <div className="bg-white" style={{ border: "1px solid #cdd6da" }}>
+            <div className="bg-white" style={{ border: "1px solid #cdd6da", maxHeight: 560, overflowY: "auto" }}>
               {/* Table header */}
               <div
                 className="hidden sm:grid font-plex-mono text-[11px] tracking-[.12em] bg-hull"
@@ -362,6 +368,9 @@ export default async function HomePage() {
                   padding: "11px 20px",
                   color: "#8fa3ad",
                   alignItems: "center",
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 1,
                 }}
               >
                 <span>DATE</span>
@@ -372,84 +381,88 @@ export default async function HomePage() {
                 <span />
               </div>
 
-              {sailings.map((trip, i) => {
-                const soldOut = trip.seatsRemaining === 0;
-                const fewLeft = !soldOut && trip.seatsRemaining <= 10;
-                const seatLabel = soldOut
-                  ? "SOLD OUT"
-                  : fewLeft
-                  ? `${trip.seatsRemaining} LEFT`
-                  : "OPEN";
-                const seatColor = soldOut
-                  ? "#9aa8ae"
-                  : fewLeft
-                  ? "#8c3b12"
-                  : "#186a4a";
+              {sailingDates.map((date, dateIdx) => {
+                const dayTrips = sailingsByDate.get(date)!;
+                const shade = dateIdx % 2 === 1;
+                return dayTrips.map((trip, i) => {
+                  const soldOut = trip.seatsRemaining === 0;
+                  const fewLeft = !soldOut && trip.seatsRemaining <= 10;
+                  const seatLabel = soldOut
+                    ? "SOLD OUT"
+                    : fewLeft
+                    ? `${trip.seatsRemaining} LEFT`
+                    : `${trip.seatsRemaining} OPEN`;
+                  const seatColor = soldOut
+                    ? "#9aa8ae"
+                    : fewLeft
+                    ? "#8c3b12"
+                    : "#186a4a";
 
-                return (
-                  <div
-                    key={trip.tripId}
-                    className="sm:grid"
-                    style={{
-                      gridTemplateColumns: "120px minmax(0,1fr) 120px 100px 130px 130px",
-                      gap: 16,
-                      padding: "16px 20px",
-                      borderTop: i === 0 ? "1px solid #e3e9eb" : "1px solid #e3e9eb",
-                      alignItems: "center",
-                      background: soldOut ? "#f1f4f5" : "transparent",
-                    }}
-                  >
-                    <span
-                      className="font-plex-mono text-[14px]"
-                      style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}
+                  return (
+                    <div
+                      key={trip.tripId}
+                      className="sm:grid"
+                      style={{
+                        gridTemplateColumns: "120px minmax(0,1fr) 120px 100px 130px 130px",
+                        gap: 16,
+                        padding: "16px 20px",
+                        borderTop: "1px solid #e3e9eb",
+                        alignItems: "center",
+                        background: soldOut ? "#f1f4f5" : shade ? "#f7f9f9" : "transparent",
+                      }}
                     >
-                      {fmtSailDateShort(trip.departureDate)}
-                    </span>
-                    <span
-                      className="font-archivo text-[17px] font-semibold block mt-2 sm:mt-0"
-                      style={{ color: soldOut ? "#9aa8ae" : undefined }}
-                    >
-                      {trip.productName}
-                    </span>
-                    <span
-                      className="font-plex-mono text-[14px] block mt-1 sm:mt-0"
-                      style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}
-                    >
-                      {fmtTimeET(trip.startTime)}
-                    </span>
-                    <span
-                      className="font-plex-mono text-[17px] font-semibold block mt-1 sm:mt-0"
-                      style={{ color: soldOut ? "#9aa8ae" : undefined }}
-                    >
-                      {trip.minCents != null ? dollars(trip.minCents) : "—"}
-                    </span>
-                    <span
-                      className="font-plex-mono text-[13px] font-semibold block mt-1 sm:mt-0"
-                      style={{ color: seatColor }}
-                    >
-                      {seatLabel}
-                    </span>
-                    <div className="flex justify-start sm:justify-end mt-2 sm:mt-0">
-                      {soldOut ? (
-                        <Link
-                          href="/book"
-                          className="font-plex-mono text-[12px] font-bold tracking-[.1em] text-ink-2"
-                          style={{ border: "1px solid #9aa8ae", padding: "10px 16px", textDecoration: "none" }}
-                        >
-                          WAITLIST
-                        </Link>
-                      ) : (
-                        <Link
-                          href="/book"
-                          className="bg-hull hover:bg-hull-2 transition-colors text-white font-plex-mono text-[12px] font-bold tracking-[.1em]"
-                          style={{ padding: "11px 22px", textDecoration: "none" }}
-                        >
-                          BOOK
-                        </Link>
-                      )}
+                      <span
+                        className="font-plex-mono text-[14px]"
+                        style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}
+                      >
+                        {i === 0 ? fmtSailDateShort(trip.departureDate) : ""}
+                      </span>
+                      <span
+                        className="font-archivo text-[17px] font-semibold block mt-2 sm:mt-0"
+                        style={{ color: soldOut ? "#9aa8ae" : undefined }}
+                      >
+                        {trip.productName}
+                      </span>
+                      <span
+                        className="font-plex-mono text-[14px] block mt-1 sm:mt-0"
+                        style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}
+                      >
+                        {fmtTimeET(trip.startTime)}
+                      </span>
+                      <span
+                        className="font-plex-mono text-[17px] font-semibold block mt-1 sm:mt-0"
+                        style={{ color: soldOut ? "#9aa8ae" : undefined }}
+                      >
+                        {trip.minCents != null ? dollars(trip.minCents) : "—"}
+                      </span>
+                      <span
+                        className="font-plex-mono text-[13px] font-semibold block mt-1 sm:mt-0"
+                        style={{ color: seatColor }}
+                      >
+                        {seatLabel}
+                      </span>
+                      <div className="flex justify-start sm:justify-end mt-2 sm:mt-0">
+                        {soldOut ? (
+                          <Link
+                            href="/book"
+                            className="font-plex-mono text-[12px] font-bold tracking-[.1em] text-ink-2"
+                            style={{ border: "1px solid #9aa8ae", padding: "10px 16px", textDecoration: "none" }}
+                          >
+                            WAITLIST
+                          </Link>
+                        ) : (
+                          <Link
+                            href={`/book?trip=${trip.tripId}`}
+                            className="bg-orange hover:bg-orange-press transition-colors text-white font-plex-mono text-[12px] font-bold tracking-[.1em]"
+                            style={{ padding: "11px 22px", textDecoration: "none" }}
+                          >
+                            BOOK
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
+                  );
+                });
               })}
             </div>
           </div>

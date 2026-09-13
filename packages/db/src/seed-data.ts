@@ -20,6 +20,7 @@ export type VesselSeed = {
   name: string;
   slug: string;
   color: string; // hex, e.g. "#000099"
+  code?: string; // short display code, e.g. "BW"
   capacity: number;
   products: ProductSeed[];
 };
@@ -58,6 +59,7 @@ export const fleetData: VesselSeed[] = [
   {
     name: "Blue Wave",
     slug: "blue-wave",
+    code: "BW",
     color: "#000099",
     capacity: 29,
     products: [
@@ -120,6 +122,7 @@ export const fleetData: VesselSeed[] = [
   {
     name: "Blue Wave Express",
     slug: "blue-wave-express",
+    code: "BWX",
     color: "#CC0000",
     capacity: 29,
     products: [
@@ -230,13 +233,14 @@ export const fleetData: VesselSeed[] = [
   {
     name: "Harbor Princess",
     slug: "harbor-princess",
+    code: "HP",
     color: "#CC00CC",
     capacity: 120,
     products: [
       {
         displayName: "13 Hour Deepwater Sea Bass",
         category: "Sea Bass",
-        showRemaining: false,
+        showRemaining: true,
         adult: 155,
         child: 155,
       },
@@ -326,6 +330,7 @@ export const fleetData: VesselSeed[] = [
   {
     name: "Harbor Star",
     slug: "harbor-star",
+    code: "HS",
     color: "#FFC107",
     capacity: 115,
     products: [
