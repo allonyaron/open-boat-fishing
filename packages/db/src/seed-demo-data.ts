@@ -30,6 +30,7 @@ export const demoFleetData: VesselSeed[] = [
   {
     name: "MV Open Boat I",
     slug: "open-boat-1",
+    code: "OBI",
     color: "#0B2545",
     capacity: 24,
     products: [
@@ -52,6 +53,7 @@ export const demoFleetData: VesselSeed[] = [
   {
     name: "MV Open Boat II",
     slug: "open-boat-2",
+    code: "OBII",
     color: "#0087A8",
     capacity: 32,
     products: [
@@ -74,6 +76,7 @@ export const demoFleetData: VesselSeed[] = [
   {
     name: "MV Open Boat Nightfall",
     slug: "open-boat-nightfall",
+    code: "OBN",
     color: "#C99A3F",
     capacity: 28,
     products: [

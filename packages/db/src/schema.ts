@@ -75,6 +75,7 @@ export const vessels = pgTable("vessels", {
   name: text("name").notNull(),
   slug: text("slug").notNull(),
   color: text("color").notNull(),                    // hex, e.g. "#1D4ED8"
+  code: text("code"),                                // short display code, e.g. "LLX"
   capacity: integer("capacity").notNull(),
   certificateCapacity: integer("certificate_capacity"),   // legal max; null = not configured
   description: text("description"),

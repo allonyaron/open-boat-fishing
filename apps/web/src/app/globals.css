@@ -80,6 +80,19 @@
   .booking-mobile-bar { display: flex !important; }
 }
 
+/* ── Focus-visible (accessibility) ───────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid #d1541f;
+  outline-offset: 2px;
+}
+
+/* Hull bars (dark navy/teal bg) — orange outline is invisible; use white instead */
+.hull :focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
 /* 2-col checkout / who's fishing fields */
 .booking-co-grid {
   display: grid;
