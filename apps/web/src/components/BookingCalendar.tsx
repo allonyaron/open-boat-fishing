@@ -142,7 +142,7 @@ export function BookingNav({
         </div>
       )}
       {/* Brand + step nav */}
-      <div className="hull bg-hull px-6 flex flex-wrap gap-4 items-center justify-between" style={{ borderBottom: "3px solid #d1541f", padding: "14px 24px" }}>
+      <div className="hull bg-hull px-6 flex flex-wrap gap-4 items-center justify-between" style={{ borderBottom: "3px solid #c94510", padding: "14px 24px" }}>
         <a
           href="/"
           className="text-[22px] font-bold tracking-[.05em] text-white uppercase font-archivo"
@@ -367,7 +367,7 @@ function TripRow({
       } ${soldOut ? "opacity-[.55]" : ""}`}
       style={{
         padding: "18px 20px",
-        border: `1px solid ${inCart ? "#d1541f" : "#dde4e6"}`,
+        border: `1px solid ${inCart ? "#c94510" : "#dde4e6"}`,
       }}
     >
       {/* Col 1: trip info */}
@@ -549,7 +549,7 @@ function CartRail({
                     }}
                     style={{
                       background: isFocused ? "#fdf1ec" : "#ffffff",
-                      border: `${isFocused || inCart ? "2px" : "1px"} solid ${isFocused || inCart ? "#d1541f" : "#cdd6da"}`,
+                      border: `${isFocused || inCart ? "2px" : "1px"} solid ${isFocused || inCart ? "#c94510" : "#cdd6da"}`,
                       padding: "14px 16px",
                       opacity: soldOut ? 0.55 : 1,
                     }}
@@ -806,9 +806,9 @@ function MonthGrid({
 
               const cellBg = !hasTrips ? "#eceaea" : isSelected ? "#fdf1ec" : "#f8f4f4";
               const cellBorder = isSelected
-                ? "2px solid #d1541f"
+                ? "2px solid #c94510"
                 : inCart && !isSelected
-                ? "1px solid #d1541f"
+                ? "1px solid #c94510"
                 : "1px solid #d7d3d3";
 
               return (
@@ -868,7 +868,7 @@ function MonthGrid({
                       fontSize: 16,
                       fontWeight: 800,
                       color: hasTrips ? "#201e1d" : "#7d7979",
-                      borderBottom: isToday ? "3px solid #d1541f" : "none",
+                      borderBottom: isToday ? "3px solid #c94510" : "none",
                       marginBottom: hasTrips ? 6 : 0,
                     }}
                   >

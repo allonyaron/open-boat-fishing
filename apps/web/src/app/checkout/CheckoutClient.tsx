@@ -97,7 +97,7 @@ function Field({
           outline: "none",
           opacity: disabled ? 0.6 : 1,
         }}
-        onFocus={(e) => { e.currentTarget.style.outline = "2px solid #d1541f"; e.currentTarget.style.outlineOffset = "2px"; }}
+        onFocus={(e) => { e.currentTarget.style.outline = "2px solid #c94510"; e.currentTarget.style.outlineOffset = "2px"; }}
         onBlurCapture={(e) => { e.currentTarget.style.outline = "none"; }}
       />
       {error && (
@@ -414,7 +414,7 @@ function CheckoutInner({
                   style={{
                     marginTop: 10,
                     width: "100%",
-                    background: submitting ? "#b1440f" : "#d1541f",
+                    background: submitting ? "#b1440f" : "#c94510",
                     color: "#fff",
                     border: "none",
                     fontFamily: "var(--font-archivo)",
@@ -438,7 +438,7 @@ function CheckoutInner({
                     appearance: {
                       theme: "flat",
                       variables: {
-                        colorPrimary: "#d1541f",
+                        colorPrimary: "#c94510",
                         colorBackground: "#ffffff",
                         colorText: "#0d1c26",
                         colorDanger: "#8c3b12",
@@ -453,8 +453,8 @@ function CheckoutInner({
                           fontSize: "17px",
                         },
                         ".Input:focus": {
-                          border: "1px solid #d1541f",
-                          outline: "2px solid #d1541f",
+                          border: "1px solid #c94510",
+                          outline: "2px solid #c94510",
                           outlineOffset: "2px",
                         },
                         ".Label": {

@@ -22,7 +22,7 @@ export function SiteHeader({
       )}
       <div
         className="bg-hull flex items-center justify-between gap-6"
-        style={{ borderBottom: "3px solid #d1541f", padding: "16px 28px" }}
+        style={{ borderBottom: "3px solid #c94510", padding: "16px 28px" }}
       >
         <Link
           href="/"
