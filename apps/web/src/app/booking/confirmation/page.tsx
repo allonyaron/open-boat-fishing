@@ -25,6 +25,10 @@ export default async function ConfirmationPage({
 
   if (!code) notFound();
 
+  if (redirect_status && redirect_status !== "succeeded") {
+    console.error("[confirmation] non-succeeded redirect_status", { code, redirect_status });
+  }
+
   const operator = await getOperatorRecord();
   if (!operator) notFound();
   const op = operator;

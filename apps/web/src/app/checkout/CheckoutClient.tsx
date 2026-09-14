@@ -229,9 +229,7 @@ function CheckoutInner({
     0,
   );
 
-  async function handleContactSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    // mark all touched for final validation
+  async function handleContactSubmit() {
     setTouched({ name: true, mobile: true, email: true });
     if (!name.trim() || !validateEmail(email) || (mobile && !validatePhone(mobile))) return;
 
@@ -340,8 +338,8 @@ function CheckoutInner({
         {/* Order card */}
         <OrderCard items={items} totalCents={displayTotal} />
 
-        {/* Contact form */}
-        <form onSubmit={handleContactSubmit} noValidate>
+        {/* Contact + payment section */}
+        <div>
           <div
             style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".16em", color: "#41565f", margin: "34px 0 12px" }}
           >
@@ -410,7 +408,8 @@ function CheckoutInner({
                   </div>
                 )}
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleContactSubmit}
                   disabled={submitting}
                   style={{
                     marginTop: 10,
@@ -495,7 +494,7 @@ function CheckoutInner({
             <span>WEATHER CANCELLATION = AUTOMATIC REFUND</span>
             <span>SECURED BY STRIPE</span>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
