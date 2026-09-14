@@ -63,16 +63,19 @@ The demo runs in Stripe test mode so anyone can book with card `4242 4242 4242 4
 
 All in the **Production** environment. Anything marked "generate" should be created with `openssl rand -hex 32`.
 
-| Variable                      | Value                                                       |
-| ----------------------------- | ----------------------------------------------------------- |
-| `DATABASE_URL`                | Neon connection string from Step 1                          |
-| `SESSION_SECRET`              | generate (≥ 32 chars)                                       |
-| `STRIPE_SECRET_KEY`           | Stripe test secret key (`sk_test_...`)                      |
-| `STRIPE_WEBHOOK_SECRET`       | From Step 2                                                 |
-| `STRIPE_CONNECTED_ACCOUNT_ID` | From Step 2 (`acct_test_...`)                               |
-| `CRON_SECRET`                 | generate — used by all three cron endpoints                 |
-| `RESEND_API_KEY`              | From your Resend account (production key)                   |
-| `DEMO_MODE`                   | `true` — enables the banner + gates the nightly reset cron  |
+| Variable                             | Value / notes                                                                       |
+| ------------------------------------ | ----------------------------------------------------------------------------------- |
+| `DATABASE_URL`                       | Neon connection string from Step 1                                                  |
+| `SESSION_SECRET`                     | generate (≥ 32 chars)                                                               |
+| `STRIPE_SECRET_KEY`                  | Stripe test secret key (`sk_test_...`)                                              |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe test publishable key (`pk_test_...`) — **must be Config type, not Secret.** Secrets are not baked into the JS bundle, so the checkout Stripe.js call silently fails. |
+| `STRIPE_WEBHOOK_SECRET`              | From Step 2 (`whsec_...`)                                                           |
+| `STRIPE_CONNECTED_ACCOUNT_ID`        | From Step 2 (`acct_test_...`)                                                       |
+| `CRON_SECRET`                        | generate — used by all three cron endpoints                                         |
+| `RESEND_API_KEY`                     | From your Resend account (production key)                                           |
+| `DEMO_MODE`                          | `true` — enables the banner + gates the nightly reset cron                          |
+
+> **Config vs Secret in Vercel:** `NEXT_PUBLIC_*` variables must be added as **Config** type (not Secret). Secrets are write-only and not exposed during build, so `NEXT_PUBLIC_` substitution silently produces `undefined`. If you accidentally add one as Secret, you must delete it and re-add it as Config.
 
 `DEMO_MODE=true` is the switch that identifies this as the demo deployment. It:
 
@@ -215,6 +218,13 @@ Tracked in the plan file (`~/.claude/plans/i-wanted-to-know-foamy-puffin.md`) bu
 ---
 
 ## Troubleshooting
+
+**Payment completes but user sees "Almost there." / booking stays `pending_payment`.**
+Two possible causes, check in order:
+
+1. **`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is Secret type or is the live key.** If it was added as a Secret, the value is `undefined` in the browser and `stripe.confirmPayment()` silently exits — no payment is sent to Stripe, no webhook fires. Fix: delete the variable in Vercel, re-add it as **Config** type with the `pk_test_...` value, redeploy. Confirm in Stripe → Events that `payment_intent.succeeded` appears after a test payment.
+
+2. **`payment_intent.succeeded` webhook not configured.** Go to Stripe → Developers → Webhooks → your endpoint and verify `payment_intent.succeeded` is in the event list. If missing, add it. The webhook URL must be `https://openboatfishing.com/api/webhooks/stripe` and `STRIPE_WEBHOOK_SECRET` must match the endpoint's signing secret.
 
 **Deploy fails at "Collecting page data" with `ERR_INVALID_URL`.**
 Your `DATABASE_URL` env var is missing or invalid in Vercel. Next.js tries to construct the Postgres client at build time; without a valid URL it crashes on the first page-data pass.

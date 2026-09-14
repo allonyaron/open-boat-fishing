@@ -79,18 +79,22 @@ export function CheckoutForm({
     });
 
     if (error) {
-      const isExpired =
-        error.code === "payment_intent_unexpected_state" || error.type === "invalid_request_error";
+      posthog.capture("payment_failure", {
+        total_cents: totalCents,
+        error_code: error.code,
+        error_type: error.type,
+        error_message: error.message,
+      });
+      console.error("[checkout] stripe.confirmPayment error", {
+        code: error.code,
+        type: error.type,
+        message: error.message,
+      });
 
-      if (isExpired) {
+      if (error.code === "payment_intent_unexpected_state") {
         setExpired(true);
       } else {
-        posthog.capture("payment_failure", {
-          total_cents: totalCents,
-          error_code: error.code,
-          error_type: error.type,
-        });
-        setError(error.message ?? "Payment failed");
+        setError(error.message ?? "Payment failed. Please try again.");
       }
       setProcessing(false);
     }
