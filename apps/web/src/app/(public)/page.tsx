@@ -7,16 +7,17 @@ import { and, eq, ne, desc, gte, lte } from "drizzle-orm";
 import Image from "next/image";
 import Link from "next/link";
 import { fmtTimeET } from "@/lib/format";
+import { SailingsSection } from "@/components/SailingsSection";
+import type { FormattedSailing } from "@/components/SailingsSection";
 
-function dollars(cents: number) {
-  return `$${Math.round(cents / 100)}`;
-}
-
-function fmtSailDate(dateStr: string) {
-  const dt = new Date(dateStr + "T12:00:00Z");
-  const dow = dt.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).toUpperCase();
-  const day = dt.getUTCDate();
-  return { dow, day };
+function fishImagePath(category: string): string | null {
+  const lower = category.toLowerCase();
+  if (lower.includes("bluefish")) return "/fish-images/bluefish.jpeg";
+  if (lower.includes("sea bass") || lower.includes("bsb")) return "/fish-images/bsb.jpeg";
+  if (lower.includes("blackfish") || lower.includes("tautog")) return "/fish-images/tautog.jpeg";
+  if (lower.includes("striper") || lower.includes("striped bass")) return "/fish-images/striper.jpeg";
+  if (lower.includes("fluke")) return "/fish-images/fluke.jpeg";
+  return null;
 }
 
 function fmtSailDateShort(dateStr: string) {
@@ -40,7 +41,7 @@ export default async function HomePage() {
   const weekEndDate = new Date(now.getTime() + 7 * 86400000);
   const weekEndStr = weekEndDate.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
-  const dayChips = Array.from({ length: 5 }, (_, i) => {
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(now.getTime() + i * 86400000);
     return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   });
@@ -118,21 +119,19 @@ export default async function HomePage() {
       existing.minCents = row.priceCents;
     }
   }
-  const sailings = Array.from(tripMap.values());
+  const formattedSailings: FormattedSailing[] = Array.from(tripMap.values()).map((s) => ({
+    tripId: s.tripId,
+    departureDate: s.departureDate,
+    productName: s.productName,
+    seatsRemaining: s.seatsRemaining,
+    minCents: s.minCents,
+    startTimeFormatted: fmtTimeET(s.startTime),
+    departureDateFormatted: fmtSailDateShort(s.departureDate),
+  }));
 
   const categories = categoryRows.map((r) => r.category);
   const latestReport = latestReportRows[0] ?? null;
   const operatorName = operator.name ?? "Fishing Charter";
-
-  const datesWithTrips = new Set(sailings.map((t) => t.departureDate));
-
-  // Group sailings by date for alternating row shading
-  const sailingsByDate = new Map<string, typeof sailings>();
-  for (const trip of sailings) {
-    if (!sailingsByDate.has(trip.departureDate)) sailingsByDate.set(trip.departureDate, []);
-    sailingsByDate.get(trip.departureDate)!.push(trip);
-  }
-  const sailingDates = Array.from(sailingsByDate.keys());
 
   const weekStart = new Date(todayStr + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase();
   const weekEndLabel = new Date(weekEndStr + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase();
@@ -169,7 +168,7 @@ export default async function HomePage() {
       {/* ── Nav ────────────────────────────────────────────────── */}
       <div
         className="bg-hull flex flex-wrap gap-[18px] items-center justify-between"
-        style={{ borderBottom: "3px solid #d1541f", padding: "16px 28px" }}
+        style={{ borderBottom: "3px solid #c94510", padding: "16px 28px" }}
       >
         <Link
           href="/"
@@ -183,6 +182,7 @@ export default async function HomePage() {
           <a href="#species" style={{ color: "#b6c6ce", textDecoration: "none" }}>What we fish</a>
           <Link href="/fishing-reports" style={{ color: "#b6c6ce", textDecoration: "none" }}>Reports</Link>
           <a href="#boat" style={{ color: "#b6c6ce", textDecoration: "none" }}>The boat</a>
+          <a href="#boat" style={{ color: "#b6c6ce", textDecoration: "none" }}>First time?</a>
         </nav>
         <Link
           href="/book"
@@ -243,89 +243,6 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {/* ── Booking bar ────────────────────────────────────────── */}
-      <div
-        id="book"
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 20,
-          background: "#16303f",
-          padding: "20px 28px",
-          boxShadow: "0 6px 18px rgba(13,28,38,.28)",
-        }}
-      >
-        <div className="flex flex-wrap gap-6 items-end">
-          {/* Day chips */}
-          <div>
-            <div
-              className="font-plex-mono text-[11px] tracking-[.14em]"
-              style={{ color: "#8fa3ad", marginBottom: 8 }}
-            >
-              DAY
-            </div>
-            <div className="flex flex-wrap gap-[6px]">
-              {dayChips.map((dateStr, i) => {
-                const { dow, day } = fmtSailDate(dateStr);
-                const hasTrip = datesWithTrips.has(dateStr);
-                const isFirst = i === 0;
-                return (
-                  <Link
-                    key={dateStr}
-                    href={`/book?date=${dateStr}`}
-                    className="text-center block"
-                    style={{
-                      background: isFirst ? "#d1541f" : "transparent",
-                      border: isFirst ? "none" : "1px solid #3c5867",
-                      color: hasTrip ? (isFirst ? "#fff" : "#dfe8ec") : "#6f8794",
-                      padding: "9px 14px",
-                      minWidth: 52,
-                      textDecoration: "none",
-                    }}
-                  >
-                    <div className="font-plex-mono" style={{ fontSize: 10 }}>{dow}</div>
-                    <div className="font-archivo font-bold" style={{ fontSize: 20, lineHeight: 1 }}>{day}</div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* First available trip */}
-          {sailings[0] && (
-            <div className="flex-1 min-w-0">
-              <div
-                className="font-plex-mono text-[11px] tracking-[.14em]"
-                style={{ color: "#8fa3ad", marginBottom: 8 }}
-              >
-                TRIP
-              </div>
-              <div
-                className="bg-white flex flex-wrap gap-[10px] justify-between items-center"
-                style={{ padding: "14px 16px" }}
-              >
-                <span className="font-archivo text-[16px] font-semibold">
-                  {fmtTimeET(sailings[0].startTime)} · {sailings[0].productName}
-                </span>
-                {sailings[0].seatsRemaining > 0 && sailings[0].seatsRemaining <= 10 && (
-                  <span className="font-plex-mono text-[13px] text-orange-press">
-                    {sailings[0].seatsRemaining} SEATS LEFT ▾
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          <Link
-            href="/book"
-            className="bg-orange hover:bg-orange-press transition-colors text-white font-archivo font-bold text-[15px] tracking-[.08em] uppercase"
-            style={{ padding: "18px 28px", textDecoration: "none", flexShrink: 0 }}
-          >
-            Book now →
-          </Link>
-        </div>
-      </div>
-
       {/* ── Reassurance strip ──────────────────────────────────── */}
       <div
         className="bg-hull font-plex-mono text-[12px] tracking-[.06em]"
@@ -335,144 +252,18 @@ export default async function HomePage() {
       </div>
 
       {/* ── Sailings this week ─────────────────────────────────── */}
-      {sailings.length > 0 && (
-        <div id="sailings">
-          <div
-            style={{
-              padding: "48px 28px 0",
-              borderTop: "2px solid #cdd6da",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 12,
-              alignItems: "baseline",
-              justifyContent: "space-between",
-            }}
-          >
-            <h2
-              className="font-archivo font-bold uppercase"
-              style={{ margin: 0, fontSize: "clamp(26px, 3.4vw, 34px)", letterSpacing: "-.02em" }}
-            >
-              Everything sailing this week
-            </h2>
-            <span className="font-plex-mono text-[13px] text-ink-3">{weekLabel}</span>
-          </div>
-
-          <div style={{ padding: "20px 28px 0" }}>
-            <div className="bg-white" style={{ border: "1px solid #cdd6da", maxHeight: 560, overflowY: "auto" }}>
-              {/* Table header */}
-              <div
-                className="hidden sm:grid font-plex-mono text-[11px] tracking-[.12em] bg-hull"
-                style={{
-                  gridTemplateColumns: "120px minmax(0,1fr) 120px 100px 130px 130px",
-                  gap: 16,
-                  padding: "11px 20px",
-                  color: "#8fa3ad",
-                  alignItems: "center",
-                  position: "sticky",
-                  top: 0,
-                  zIndex: 1,
-                }}
-              >
-                <span>DATE</span>
-                <span>TRIP</span>
-                <span>DEPARTS</span>
-                <span>FARE</span>
-                <span>SEATS</span>
-                <span />
-              </div>
-
-              {sailingDates.map((date, dateIdx) => {
-                const dayTrips = sailingsByDate.get(date)!;
-                const shade = dateIdx % 2 === 1;
-                return dayTrips.map((trip, i) => {
-                  const soldOut = trip.seatsRemaining === 0;
-                  const fewLeft = !soldOut && trip.seatsRemaining <= 10;
-                  const seatLabel = soldOut
-                    ? "SOLD OUT"
-                    : fewLeft
-                    ? `${trip.seatsRemaining} LEFT`
-                    : `${trip.seatsRemaining} OPEN`;
-                  const seatColor = soldOut
-                    ? "#9aa8ae"
-                    : fewLeft
-                    ? "#8c3b12"
-                    : "#186a4a";
-
-                  return (
-                    <div
-                      key={trip.tripId}
-                      className="sm:grid"
-                      style={{
-                        gridTemplateColumns: "120px minmax(0,1fr) 120px 100px 130px 130px",
-                        gap: 16,
-                        padding: "16px 20px",
-                        borderTop: "1px solid #e3e9eb",
-                        alignItems: "center",
-                        background: soldOut ? "#f1f4f5" : shade ? "#f7f9f9" : "transparent",
-                      }}
-                    >
-                      <span
-                        className="font-plex-mono text-[14px]"
-                        style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}
-                      >
-                        {i === 0 ? fmtSailDateShort(trip.departureDate) : ""}
-                      </span>
-                      <span
-                        className="font-archivo text-[17px] font-semibold block mt-2 sm:mt-0"
-                        style={{ color: soldOut ? "#9aa8ae" : undefined }}
-                      >
-                        {trip.productName}
-                      </span>
-                      <span
-                        className="font-plex-mono text-[14px] block mt-1 sm:mt-0"
-                        style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}
-                      >
-                        {fmtTimeET(trip.startTime)}
-                      </span>
-                      <span
-                        className="font-plex-mono text-[17px] font-semibold block mt-1 sm:mt-0"
-                        style={{ color: soldOut ? "#9aa8ae" : undefined }}
-                      >
-                        {trip.minCents != null ? dollars(trip.minCents) : "—"}
-                      </span>
-                      <span
-                        className="font-plex-mono text-[13px] font-semibold block mt-1 sm:mt-0"
-                        style={{ color: seatColor }}
-                      >
-                        {seatLabel}
-                      </span>
-                      <div className="flex justify-start sm:justify-end mt-2 sm:mt-0">
-                        {soldOut ? (
-                          <Link
-                            href="/book"
-                            className="font-plex-mono text-[12px] font-bold tracking-[.1em] text-ink-2"
-                            style={{ border: "1px solid #9aa8ae", padding: "10px 16px", textDecoration: "none" }}
-                          >
-                            WAITLIST
-                          </Link>
-                        ) : (
-                          <Link
-                            href={`/book?trip=${trip.tripId}`}
-                            className="bg-orange hover:bg-orange-press transition-colors text-white font-plex-mono text-[12px] font-bold tracking-[.1em]"
-                            style={{ padding: "11px 22px", textDecoration: "none" }}
-                          >
-                            BOOK
-                          </Link>
-                        )}
-                      </div>
-                    </div>
-                  );
-                });
-              })}
-            </div>
-          </div>
-        </div>
+      {formattedSailings.length > 0 && (
+        <SailingsSection
+          sailings={formattedSailings}
+          weekLabel={weekLabel}
+          weekDates={weekDates}
+        />
       )}
 
       {/* ── Calendar CTA band ──────────────────────────────────── */}
       <div
         className="bg-hull flex flex-wrap gap-6 items-center justify-between"
-        style={{ margin: "28px 28px 0", borderLeft: "8px solid #d1541f", padding: 32 }}
+        style={{ margin: "28px 28px 0", borderLeft: "8px solid #c94510", padding: 32 }}
       >
         <div className="min-w-0">
           <div
@@ -483,7 +274,7 @@ export default async function HomePage() {
           </div>
           <div
             className="font-archivo text-[16px]"
-            style={{ marginTop: 8, color: "#8fa3ad", maxWidth: "56ch" }}
+            style={{ marginTop: 8, color: "#8fa3ad", maxWidth: "80ch" }}
           >
             Every sailing through the end of the season — species runs, tides and open seats, all on one calendar.
           </div>
@@ -524,29 +315,44 @@ export default async function HomePage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
                 gap: 2,
                 background: "#cdd6da",
               }}
             >
-              {categories.map((cat) => (
-                <Link
-                  key={cat}
-                  href="/book"
-                  className="bg-deck hover:bg-deck-2 transition-colors"
-                  style={{ padding: "16px 14px", textDecoration: "none" }}
-                >
-                  <div
-                    className="font-archivo font-bold uppercase text-[15px]"
-                    style={{ color: "#0d1c26" }}
+              {categories.map((cat) => {
+                const img = fishImagePath(cat);
+                return (
+                  <Link
+                    key={cat}
+                    href="/book"
+                    className="relative overflow-hidden group"
+                    style={{ aspectRatio: "4/3", display: "block", textDecoration: "none", background: "#0d1c26" }}
                   >
-                    {cat}
-                  </div>
-                  <div className="font-plex-mono text-[12px] text-ink-3" style={{ marginTop: 4 }}>
-                    BOOK NOW →
-                  </div>
-                </Link>
-              ))}
+                    {img && (
+                      <Image
+                        src={img}
+                        alt={cat}
+                        fill
+                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                        sizes="(max-width: 768px) 50vw, 17vw"
+                      />
+                    )}
+                    <div
+                      className="absolute inset-0"
+                      style={{ background: "linear-gradient(to top, rgba(13,28,38,.88) 0%, rgba(13,28,38,.3) 55%, rgba(13,28,38,0) 100%)" }}
+                    />
+                    <div className="absolute bottom-0 left-0 right-0" style={{ padding: "14px 14px 16px" }}>
+                      <div className="font-archivo font-bold uppercase text-white" style={{ fontSize: 15 }}>
+                        {cat}
+                      </div>
+                      <div className="font-plex-mono" style={{ fontSize: 11, letterSpacing: ".1em", color: "rgba(255,255,255,.65)", marginTop: 3 }}>
+                        BOOK NOW →
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -717,7 +523,7 @@ export default async function HomePage() {
         className="bg-hull"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
           gap: 28,
           padding: "44px 28px",
           color: "#8fa3ad",
@@ -760,7 +566,7 @@ export default async function HomePage() {
       <div
         className="font-plex-mono text-[11px] tracking-[.08em] flex flex-wrap gap-4 justify-between"
         style={{
-          background: "#0a161e",
+          background: "#102030",
           color: "#5b6f79",
           padding: "16px 28px",
         }}

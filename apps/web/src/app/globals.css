@@ -46,31 +46,39 @@
 
 /* ── Consumer booking flow ────────────────────────────────────────────────── */
 
-/* Trip row: 3-col on desktop, stacked on small mobile */
+/* List column: container for responsive trip rows (container query, not viewport) */
+.booking-list-col {
+  container-type: inline-size;
+  container-name: triplist;
+}
+
+/* Trip row: 4-col desktop layout */
 .booking-trip-row {
   display: grid;
-  grid-template-columns: minmax(0,1fr) 104px 168px;
+  grid-template-columns: minmax(0,1fr) auto auto 292px;
   gap: 20px;
   align-items: center;
 }
-@media (max-width: 700px) {
+
+/* Collapsed layout at narrow list column — content spans both, fare/seats split, steppers full-width */
+@container triplist (max-width: 760px) {
   .booking-trip-row {
-    grid-template-columns: minmax(0,1fr);
-    gap: 10px;
+    grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+    gap: 12px;
   }
-  .booking-trip-row .trip-col-main   { grid-column: 1; }
-  .booking-trip-row .trip-col-seats  { grid-column: 1; }
-  .booking-trip-row .trip-col-action { grid-column: 1; }
+  .booking-trip-row .trip-col-main   { grid-column: 1 / -1; }
+  .booking-trip-row .trip-col-action { grid-column: 1 / -1; }
 }
 
-/* Booking shell: 2-col with fixed rail on large screens, 1-col below 1000px */
+/* Booking shell: 2-col with stretching rail on large screens, 1-col below 1000px */
 .booking-shell {
   display: grid;
   grid-template-columns: minmax(0,1fr) 372px;
   align-items: start;
 }
 .booking-rail {
-  align-self: start;
+  align-self: stretch;
+  height: 100%;
 }
 @media (max-width: 1000px) {
   .booking-shell {
@@ -80,10 +88,17 @@
   .booking-mobile-bar { display: flex !important; }
 }
 
+/* Rail calendar responsive: hide full grid at short viewport heights */
+.booking-rail-cal-compact { display: none; }
+@media (max-height: 720px) {
+  .booking-rail-cal-grid { display: none; }
+  .booking-rail-cal-compact { display: block; }
+}
+
 /* ── Focus-visible (accessibility) ───────────────────────────────────────── */
 
 :focus-visible {
-  outline: 2px solid #d1541f;
+  outline: 2px solid #c94510;
   outline-offset: 2px;
 }
 

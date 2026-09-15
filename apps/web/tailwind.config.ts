@@ -26,7 +26,7 @@ const config: Config = {
         rule: { DEFAULT: "#cdd6da", soft: "#e3e9eb" },
         "border-input": "#9aa8ae",
         orange: {
-          DEFAULT: "#d1541f",
+          DEFAULT: "#c94510",
           ink: "#b1440f",
           press: "#8c3b12",
           light: "#ff8a5c",
