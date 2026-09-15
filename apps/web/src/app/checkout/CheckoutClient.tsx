@@ -103,7 +103,7 @@ function CheckoutInner({
             variables: {
               colorPrimary: "#c94510",
               colorBackground: "#ffffff",
-              colorText: "#0d1c26",
+              colorText: "#16354a",
               colorDanger: "#8c3b12",
               fontFamily: "Archivo, Helvetica, sans-serif",
               borderRadius: "0px",
@@ -124,7 +124,7 @@ function CheckoutInner({
                 fontFamily: "Archivo, Helvetica, sans-serif",
                 fontWeight: "600",
                 fontSize: "14px",
-                color: "#0d1c26",
+                color: "#16354a",
                 marginBottom: "6px",
               },
               ".Error": {
@@ -141,7 +141,7 @@ function CheckoutInner({
       {/* Checkout footer — trust/contact line only, not the full site footer */}
       <div
         className="hull bg-hull font-plex-mono text-[12px] tracking-[.06em]"
-        style={{ padding: "20px 24px", color: "#8fa3ad", display: "flex", flexWrap: "wrap", gap: "10px 26px", justifyContent: "space-between" }}
+        style={{ padding: "20px 24px", color: "#c9d6dd", display: "flex", flexWrap: "wrap", gap: "10px 26px", justifyContent: "space-between" }}
       >
         <span>{dockAddress ?? ""}</span>
         {phone && <span>QUESTIONS? {phone}</span>}

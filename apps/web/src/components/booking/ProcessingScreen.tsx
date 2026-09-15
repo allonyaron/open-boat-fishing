@@ -21,21 +21,20 @@ export function ProcessingScreen() {
 
   return (
     <div
-      className="flex flex-col items-center justify-center gap-4 px-6 py-[60px] text-center font-archivo"
-      style={{ minHeight: "72vh" }}
+      className="flex flex-col items-center justify-center gap-4 text-center font-archivo"
+      style={{ minHeight: 620, padding: "40px 24px" }}
     >
-      <div className="font-plex-mono text-[12px] font-semibold tracking-[.18em]" style={{ color: "#5b6f79" }}>
+      <div className="font-plex-mono font-semibold" style={{ fontSize: 12, letterSpacing: ".18em", color: "#5b6f79" }}>
         PAYMENT PROCESSING
       </div>
       <h1
-        className="font-bold uppercase leading-none"
-        style={{ fontSize: "clamp(28px, 4vw, 40px)", letterSpacing: "-.02em", color: "#0d1c26" }}
+        className="font-archivo font-bold uppercase leading-none"
+        style={{ fontSize: 34, letterSpacing: "-.02em", color: "#16354a" }}
       >
-        Almost there.
+        ALMOST THERE.
       </h1>
-      <div className="text-[17px] leading-normal" style={{ color: "#41565f", maxWidth: "44ch" }}>
-        Your bank is confirming the charge. This screen moves on by itself — no need to touch
-        anything.
+      <div className="font-archivo" style={{ fontSize: 17, lineHeight: 1.5, color: "#41565f", maxWidth: "30ch" }}>
+        Your bank is confirming the charge. This screen moves on by itself — no need to touch anything.
       </div>
       <div style={{ width: 220, height: 6, background: "#dde4e6", overflow: "hidden" }}>
         <div
@@ -50,8 +49,8 @@ export function ProcessingScreen() {
       <button
         type="button"
         onClick={() => router.refresh()}
-        className="font-plex-mono text-[12px] font-semibold tracking-[.1em]"
-        style={{ background: "none", border: "1px solid #9aa8ae", color: "#41565f", padding: "15px 22px", cursor: "pointer" }}
+        className="font-plex-mono font-semibold"
+        style={{ fontSize: 12, letterSpacing: ".1em", background: "none", border: "1px solid #9aa8ae", color: "#41565f", padding: "16px 22px", cursor: "pointer" }}
       >
         TAKING TOO LONG? CHECK AGAIN
       </button>

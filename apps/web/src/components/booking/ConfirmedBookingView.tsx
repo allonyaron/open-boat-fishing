@@ -26,59 +26,71 @@ export function ConfirmedBookingView({
   return (
     <div className="min-h-screen bg-deck font-archivo">
       <ClearPendingPayment />
-      <BookingNav operatorName={operatorName} dockAddress={dockAddress} phone={phone} step={3} />
+      <BookingNav
+        operatorName={operatorName}
+        dockAddress={dockAddress}
+        phone={phone}
+        step={3}
+        rightLabelOverride="CONFIRMED"
+        rightLabelColor="#ff8a5c"
+      />
 
-      <div className="max-w-[760px] mx-auto px-6 md:px-[34px] pt-[34px] pb-[60px]">
+      <div className="max-w-[760px] mx-auto px-4 lg:px-[34px] pt-0 pb-[60px]">
         {/* Hull banner */}
-        <div className="bg-hull px-7 py-8">
+        <div className="bg-hull" style={{ padding: "24px 16px 26px" }}>
           <div
-            className="font-plex-mono text-[12px] font-semibold tracking-[.18em] uppercase"
-            style={{ color: "#ff8a5c" }}
+            className="font-plex-mono font-semibold tracking-[.18em] uppercase"
+            style={{ fontSize: 12, color: "#ff8a5c" }}
           >
             YOU&apos;RE ON THE BOAT
           </div>
           <h1
             className="font-archivo font-bold uppercase leading-none mt-3"
-            style={{ fontSize: "clamp(28px, 4.4vw, 44px)", letterSpacing: "-.02em", color: "#fff" }}
+            style={{ fontSize: 34, letterSpacing: "-.02em", color: "#fff" }}
           >
-            Seats confirmed.
+            SEATS CONFIRMED.
           </h1>
-          <p className="font-archivo text-[17px] leading-relaxed mt-3" style={{ color: "#b6c6ce" }}>
+          <p className="font-archivo mt-3" style={{ fontSize: 16, lineHeight: 1.55, color: "#b6c6ce" }}>
             Receipt is on its way to your email. This screen alone is enough to board — show the
             code at the gangway.
           </p>
 
+          {/* QR + confirmation code row — stacks below 360px */}
           <div
-            className="flex flex-wrap gap-[26px] items-start pt-[22px] mt-[26px]"
-            style={{ borderTop: "1px solid #3c5867" }}
+            className="flex flex-wrap items-start"
+            style={{ gap: 18, marginTop: 22, paddingTop: 20, borderTop: "1px solid #3c5867" }}
           >
-            <div className="bg-white p-[10px] flex-none">
-              <img src={qrUrl} alt="Boarding pass QR code" width={156} height={156} />
+            <div className="bg-white flex-none" style={{ padding: 8 }}>
+              <img
+                src={qrUrl}
+                alt="Boarding pass QR code"
+                className="w-[132px] h-[132px] lg:w-[156px] lg:h-[156px]"
+              />
             </div>
             <div>
               <div
-                className="font-plex-mono text-[11px] font-semibold tracking-[.16em] uppercase"
-                style={{ color: "#8fa3ad" }}
+                className="font-plex-mono font-semibold tracking-[.16em] uppercase"
+                style={{ fontSize: 11, color: "#c9d6dd" }}
               >
-                Confirmation
+                CONFIRMATION
               </div>
               <div
-                className="font-plex-mono font-semibold tracking-[.08em] mt-[6px]"
-                style={{ fontSize: "34px", color: "#fff" }}
+                className="font-plex-mono font-semibold mt-[6px]"
+                style={{ fontSize: 27, letterSpacing: ".06em", color: "#fff" }}
               >
                 {booking.confirmationCode}
               </div>
               {booking.berthTime && (
                 <>
                   <div
-                    className="font-plex-mono text-[11px] font-semibold tracking-[.16em] uppercase mt-5"
-                    style={{ color: "#8fa3ad" }}
+                    className="font-plex-mono font-semibold tracking-[.16em] uppercase"
+                    style={{ fontSize: 11, color: "#c9d6dd", marginTop: 18 }}
                   >
-                    Be at dock by
+                    BE AT DOCK BY
                   </div>
                   <div
                     className="font-plex-mono font-semibold mt-[6px]"
-                    style={{ fontSize: "34px", color: "#fff" }}
+                    style={{ fontSize: 27, letterSpacing: ".06em", color: "#fff" }}
                   >
                     {booking.berthTime}
                   </div>
@@ -96,59 +108,62 @@ export function ConfirmedBookingView({
               className="px-5 py-[20px]"
               style={i > 0 ? { borderTop: "1px solid #e3e9eb" } : undefined}
             >
-              <div className="font-archivo text-[19px] font-bold text-hull leading-snug">
+              <div className="font-archivo font-bold text-hull leading-snug" style={{ fontSize: 19 }}>
                 {item.productName}
               </div>
-              <div className="font-plex-mono text-[13px] mt-[5px]" style={{ color: "#41565f" }}>
+              <div className="font-plex-mono mt-[5px]" style={{ fontSize: 13, color: "#41565f" }}>
                 {item.meta}
               </div>
               {item.ticketLines.map((line) => (
-                <div key={line} className="font-plex-mono text-[13px] mt-[2px]" style={{ color: "#41565f" }}>
+                <div key={line} className="font-plex-mono mt-[2px]" style={{ fontSize: 13, color: "#41565f" }}>
                   {line}
                 </div>
               ))}
-              <div className="font-plex-mono text-[13px] font-semibold mt-1">{item.subtotalLabel}</div>
+              <div className="font-plex-mono font-semibold mt-1" style={{ fontSize: 13 }}>{item.subtotalLabel}</div>
             </div>
           ))}
 
-          {/* Action row */}
-          <div className="flex flex-wrap gap-3 px-5 py-4" style={{ borderTop: "1px solid #e3e9eb" }}>
+          {/* Actions — stacked full-width on mobile, inline on desktop */}
+          <div
+            className="flex flex-col lg:flex-row lg:flex-wrap px-4 lg:px-5 py-4"
+            style={{ borderTop: "1px solid #e3e9eb", gap: 8 }}
+          >
             <a
               href={icsUrl}
-              className="font-plex-mono text-[12px] font-semibold tracking-[.1em] uppercase px-5 py-[15px] transition-colors hover:bg-deck-3"
-              style={{ border: "1px solid #0d1c26", color: "#0d1c26" }}
+              className="font-plex-mono font-semibold tracking-[.1em] uppercase text-center transition-colors hover:bg-[#e6ebeb]"
+              style={{ border: "1px solid #16354a", color: "#16354a", padding: "17px 20px", textDecoration: "none", fontSize: 12 }}
             >
-              Add to Calendar
+              Add to calendar
             </a>
             {dockMapsUrl && (
               <a
                 href={dockMapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-plex-mono text-[12px] font-semibold tracking-[.1em] uppercase px-5 py-[15px] transition-colors hover:bg-deck-3"
-                style={{ border: "1px solid #0d1c26", color: "#0d1c26" }}
+                className="font-plex-mono font-semibold tracking-[.1em] uppercase text-center transition-colors hover:bg-[#e6ebeb]"
+                style={{ border: "1px solid #16354a", color: "#16354a", padding: "17px 20px", textDecoration: "none", fontSize: 12 }}
               >
-                Directions to Dock
+                Directions to dock
               </a>
             )}
             <span
-              className="font-plex-mono text-[12px] font-semibold tracking-[.1em] uppercase px-5 py-[15px] cursor-pointer hover:bg-deck-3"
-              style={{ border: "1px solid #0d1c26", color: "#0d1c26" }}
+              className="font-plex-mono font-semibold tracking-[.1em] uppercase text-center transition-colors hover:bg-[#e6ebeb] cursor-pointer"
+              style={{ border: "1px solid #16354a", color: "#16354a", padding: "17px 20px", fontSize: 12 }}
             >
-              Text Me the Pass
+              Text me the pass
             </span>
           </div>
         </div>
 
         {/* Before you go — orange band */}
-        <div className="bg-orange px-6 py-[26px] mt-[26px]">
+        <div className="mt-5" style={{ background: "#c94510", padding: "22px 16px" }}>
           <div
-            className="font-plex-mono text-[12px] font-semibold tracking-[.18em] uppercase"
-            style={{ color: "rgba(255,255,255,.7)" }}
+            className="font-plex-mono font-semibold tracking-[.18em] uppercase"
+            style={{ fontSize: 12, color: "rgba(255,255,255,.75)" }}
           >
             Before you go
           </div>
-          <p className="font-archivo text-[19px] font-bold text-white leading-[1.4] mt-[10px]" style={{ maxWidth: "52ch" }}>
+          <p className="font-archivo font-bold text-white mt-[10px]" style={{ fontSize: 18, lineHeight: 1.4, maxWidth: "52ch" }}>
             {booking.whatToBring.length > 0 ? booking.whatToBring.join(" · ") : DEFAULT_WHAT_TO_BRING}
           </p>
         </div>
@@ -156,8 +171,8 @@ export function ConfirmedBookingView({
 
       {/* Footer — hull ground */}
       <div
-        className="hull bg-hull font-plex-mono text-[12px] tracking-[.05em]"
-        style={{ padding: "22px 24px", color: "#8fa3ad", lineHeight: 1.7 }}
+        className="hull bg-hull font-plex-mono"
+        style={{ padding: "22px 24px", color: "#c9d6dd", fontSize: 12, letterSpacing: ".05em", lineHeight: 1.7 }}
       >
         <div className="max-w-[760px] mx-auto flex flex-wrap gap-[10px_26px] justify-between">
           <span>
