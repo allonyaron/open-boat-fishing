@@ -7,6 +7,10 @@ export type FormattedSailing = {
   tripId: string;
   departureDate: string;
   productName: string;
+  category: string;
+  tripTypeColor: string;
+  tripTypeLabel: string;
+  durationLabel: string;
   seatsRemaining: number;
   minCents: number | null;
   startTimeFormatted: string;
@@ -15,6 +19,30 @@ export type FormattedSailing = {
 
 function dollars(cents: number) {
   return `$${Math.round(cents / 100)}`;
+}
+
+function SeatPill({ seatsRemaining }: { seatsRemaining: number }) {
+  const soldOut = seatsRemaining === 0;
+  const fewLeft = !soldOut && seatsRemaining <= 6;
+  const label = soldOut ? "SOLD OUT" : fewLeft ? `${seatsRemaining} LEFT` : `${seatsRemaining} OPEN`;
+  const color = soldOut ? "#5b6f79" : fewLeft ? "#8c3b12" : "#186a4a";
+  return (
+    <span
+      className="font-plex-mono font-semibold"
+      style={{ fontSize: 11, letterSpacing: ".06em", color }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function fmtDayHeadDate(dateStr: string, todayStr: string): string {
+  const dt = new Date(dateStr + "T12:00:00Z");
+  const dow = dt.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" }).toUpperCase();
+  const mon = dt.toLocaleDateString("en-US", { month: "long", timeZone: "UTC" }).toUpperCase();
+  const day = dt.getUTCDate();
+  const suffix = dateStr === todayStr ? " · TODAY" : "";
+  return `${dow} ${mon} ${day}${suffix}`;
 }
 
 export function SailingsSection({
@@ -26,12 +54,20 @@ export function SailingsSection({
   weekLabel: string;
   weekDates: string[];
 }) {
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const todayStr = weekDates[0] ?? "";
+  const [selectedDate, setSelectedDate] = useState<string | null>(todayStr || null);
+  const [showAllWeek, setShowAllWeek] = useState(false);
 
   const datesWithTrips = new Set(sailings.map((s) => s.departureDate));
+  const tripCountByDate = new Map<string, number>();
+  for (const s of sailings) {
+    tripCountByDate.set(s.departureDate, (tripCountByDate.get(s.departureDate) ?? 0) + 1);
+  }
 
-  const filtered = selectedDate
-    ? sailings.filter((s) => s.departureDate === selectedDate)
+  // If showAllWeek, show all; otherwise show selected date (or today if none)
+  const effectiveDate = showAllWeek ? null : selectedDate;
+  const filtered = effectiveDate
+    ? sailings.filter((s) => s.departureDate === effectiveDate)
     : sailings;
 
   const sailingsByDate = new Map<string, FormattedSailing[]>();
@@ -43,81 +79,181 @@ export function SailingsSection({
 
   return (
     <div id="sailings">
+      {/* ── Section head ─────────────────────────────────── */}
       <div
-        style={{
-          padding: "48px 28px 0",
-          borderTop: "2px solid #cdd6da",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 12,
-          alignItems: "baseline",
-          justifyContent: "space-between",
-        }}
+        style={{ padding: "22px 16px 0" }}
+        className="lg:px-[28px] lg:pt-[48px] lg:border-t-2 lg:border-rule"
       >
-        <h2
-          className="font-archivo font-bold uppercase"
-          style={{ margin: 0, fontSize: "clamp(26px, 3.4vw, 34px)", letterSpacing: "-.02em" }}
-        >
-          Everything sailing this week
-        </h2>
-        <span className="font-plex-mono text-[13px] text-ink-3">{weekLabel}</span>
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <h2
+            className="font-archivo font-bold uppercase"
+            style={{ margin: 0, fontSize: "clamp(21px, 3.4vw, 34px)", letterSpacing: "-.01em", color: "#16354a" }}
+          >
+            SAILING THIS WEEK
+          </h2>
+          <div className="flex items-center gap-3">
+            <span className="font-plex-mono text-[11px] text-ink-3 hidden lg:inline">{weekLabel}</span>
+            <button
+              type="button"
+              onClick={() => setShowAllWeek((v) => !v)}
+              className="font-plex-mono font-semibold"
+              style={{
+                fontSize: 11,
+                letterSpacing: ".1em",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: showAllWeek ? "#c94510" : "#41565f",
+                padding: 0,
+              }}
+            >
+              {showAllWeek ? "SHOWING ALL WEEK" : "SHOW ALL WEEK"}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Day chips */}
+      {/* ── Week belt (mobile: sticky 7-col grid; desktop: flex chips) ── */}
       <div
-        style={{
-          padding: "18px 28px 0",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 6,
-          alignItems: "stretch",
-        }}
+        className="sticky bg-deck border-b border-rule"
+        style={{ top: 54, zIndex: 10, padding: "10px 16px 10px", marginTop: 10 }}
       >
-        <button
-          onClick={() => setSelectedDate(null)}
-          className="font-plex-mono font-bold"
-          style={{
-            background: selectedDate === null ? "#c94510" : "#fff",
-            color: selectedDate === null ? "#fff" : "#0d1c26",
-            border: selectedDate === null ? "none" : "1px solid #cdd6da",
-            minHeight: 52,
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "0 18px",
-            fontSize: 13,
-            letterSpacing: ".1em",
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-          }}
+        {/* Mobile 7-column grid */}
+        <div
+          className="lg:hidden"
+          style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}
         >
-          All week
-        </button>
+          {weekDates.map((dateStr) => {
+            const dt = new Date(dateStr + "T12:00:00Z");
+            const dow = dt.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).slice(0, 2).toUpperCase();
+            const day = dt.getUTCDate();
+            const hasTrips = datesWithTrips.has(dateStr);
+            const count = tripCountByDate.get(dateStr) ?? 0;
+            const isSelected = !showAllWeek && selectedDate === dateStr;
+            const countLabel = hasTrips ? (count === 1 ? "1 TRIP" : `${count} TRIPS`) : "—";
 
-        {weekDates.map((dateStr) => {
-          const dt = new Date(dateStr + "T12:00:00Z");
-          const dow = dt
-            .toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" })
-            .toUpperCase();
-          const day = dt.getUTCDate();
-          const hasTrips = datesWithTrips.has(dateStr);
-          const isSelected = selectedDate === dateStr;
-
-          if (!hasTrips) {
-            const dayName = dt.toLocaleDateString("en-US", {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-              timeZone: "UTC",
-            });
             return (
-              <span
+              <button
                 key={dateStr}
-                aria-disabled="true"
-                title={`No sailings ${dayName}`}
+                type="button"
+                onClick={() => {
+                  if (!hasTrips) return;
+                  setShowAllWeek(false);
+                  setSelectedDate(dateStr);
+                }}
                 style={{
-                  border: "1px solid #dde4e6",
-                  background: "#f1f4f5",
-                  color: "#5b6f79",
+                  minHeight: 56,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 1,
+                  border: "none",
+                  cursor: hasTrips ? "pointer" : "default",
+                  background: isSelected ? "#c94510" : hasTrips ? "#fff" : "#f1f4f5",
+                  boxShadow: "inset 0 0 0 1px #cdd6da",
+                  padding: "4px 2px",
+                }}
+              >
+                <span
+                  className="font-plex-mono"
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 500,
+                    letterSpacing: ".06em",
+                    color: isSelected ? "#ffe3d6" : "#5b6f79",
+                  }}
+                >
+                  {dow}
+                </span>
+                <span
+                  className="font-archivo font-bold"
+                  style={{
+                    fontSize: 19,
+                    lineHeight: 1,
+                    color: isSelected ? "#fff" : hasTrips ? "#16354a" : "#5b6f79",
+                  }}
+                >
+                  {day}
+                </span>
+                <span
+                  className="font-plex-mono font-semibold"
+                  style={{
+                    fontSize: 9,
+                    letterSpacing: ".06em",
+                    color: isSelected ? "#ffe3d6" : "#5b6f79",
+                  }}
+                >
+                  {countLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Desktop flex chips */}
+        <div className="hidden lg:flex flex-wrap gap-2 items-center">
+          <button
+            type="button"
+            onClick={() => setShowAllWeek(true)}
+            className="font-plex-mono font-bold"
+            style={{
+              background: showAllWeek ? "#c94510" : "#fff",
+              color: showAllWeek ? "#fff" : "#16354a",
+              boxShadow: showAllWeek ? "none" : "inset 0 0 0 1px #cdd6da",
+              border: "none",
+              minHeight: 52,
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "0 18px",
+              fontSize: 13,
+              letterSpacing: ".1em",
+              cursor: "pointer",
+            }}
+          >
+            All week
+          </button>
+          {weekDates.map((dateStr) => {
+            const dt = new Date(dateStr + "T12:00:00Z");
+            const dow = dt.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).toUpperCase();
+            const day = dt.getUTCDate();
+            const hasTrips = datesWithTrips.has(dateStr);
+            const isSelected = !showAllWeek && selectedDate === dateStr;
+
+            if (!hasTrips) {
+              return (
+                <span
+                  key={dateStr}
+                  style={{
+                    background: "#f1f4f5",
+                    boxShadow: "inset 0 0 0 1px #dde4e6",
+                    color: "#5b6f79",
+                    minWidth: 52,
+                    minHeight: 52,
+                    display: "inline-flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 3,
+                    cursor: "default",
+                    padding: "0 10px",
+                  }}
+                >
+                  <span className="font-plex-mono font-bold" style={{ fontSize: 10, letterSpacing: ".12em" }}>{dow}</span>
+                  <span className="font-plex-mono font-bold" style={{ fontSize: 22, lineHeight: 1 }}>{day}</span>
+                </span>
+              );
+            }
+
+            return (
+              <button
+                key={dateStr}
+                type="button"
+                onClick={() => { setShowAllWeek(false); setSelectedDate(isSelected ? null : dateStr); }}
+                style={{
+                  background: isSelected ? "#c94510" : "#fff",
+                  boxShadow: isSelected ? "none" : "inset 0 0 0 1px #cdd6da",
+                  border: "none",
                   minWidth: 52,
                   minHeight: 52,
                   display: "inline-flex",
@@ -125,72 +261,159 @@ export function SailingsSection({
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 3,
-                  cursor: "default",
+                  cursor: "pointer",
                   padding: "0 10px",
                 }}
               >
                 <span
                   className="font-plex-mono font-bold"
-                  style={{ fontSize: 10, letterSpacing: ".12em" }}
+                  style={{ fontSize: 10, letterSpacing: ".12em", color: isSelected ? "rgba(255,255,255,.75)" : "#41565f" }}
                 >
                   {dow}
                 </span>
-                <span className="font-plex-mono font-bold" style={{ fontSize: 22, lineHeight: 1 }}>
+                <span
+                  className="font-plex-mono font-bold"
+                  style={{ fontSize: 22, lineHeight: 1, color: isSelected ? "#fff" : "#16354a" }}
+                >
                   {day}
                 </span>
-              </span>
+              </button>
             );
-          }
-
-          return (
-            <button
-              key={dateStr}
-              onClick={() => setSelectedDate(isSelected ? null : dateStr)}
-              style={{
-                border: isSelected ? "none" : "1px solid #cdd6da",
-                background: isSelected ? "#c94510" : "#fff",
-                minWidth: 52,
-                minHeight: 52,
-                display: "inline-flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 3,
-                cursor: "pointer",
-                padding: "0 10px",
-              }}
-            >
-              <span
-                className="font-plex-mono font-bold"
-                style={{
-                  fontSize: 10,
-                  letterSpacing: ".12em",
-                  color: isSelected ? "rgba(255,255,255,.75)" : "#41565f",
-                }}
-              >
-                {dow}
-              </span>
-              <span
-                className="font-plex-mono font-bold"
-                style={{ fontSize: 22, lineHeight: 1, color: isSelected ? "#fff" : "#0d1c26" }}
-              >
-                {day}
-              </span>
-            </button>
-          );
-        })}
+          })}
+        </div>
       </div>
 
-      {/* Sailings table */}
-      <div style={{ padding: "20px 28px 0" }}>
-        <div className="bg-white" style={{ border: "1px solid #cdd6da" }}>
+      {/* ── Trip list ────────────────────────────────────── */}
+      <div style={{ padding: "0 16px" }} className="lg:px-[28px]">
+
+        {/* Mobile: card layout */}
+        <div className="lg:hidden">
+          {sailingDates.length === 0 && (
+            <div className="font-archivo text-[15px] text-ink-3" style={{ padding: "24px 0" }}>
+              No sailings on that day.
+            </div>
+          )}
+          {sailingDates.map((date) => {
+            const dayTrips = sailingsByDate.get(date)!;
+            const dayHeadLabel = fmtDayHeadDate(date, todayStr);
+            const dayCount = dayTrips.length;
+            return (
+              <div key={date}>
+                {/* Day head row */}
+                <div
+                  className="flex items-center justify-between"
+                  style={{ paddingTop: 20, paddingBottom: 8 }}
+                >
+                  <span
+                    className="font-plex-mono font-semibold"
+                    style={{ fontSize: 11, letterSpacing: ".14em", color: "#41565f" }}
+                  >
+                    {dayHeadLabel}
+                  </span>
+                  <span
+                    className="font-plex-mono"
+                    style={{ fontSize: 11, letterSpacing: ".1em", color: "#5b6f79" }}
+                  >
+                    {dayCount} {dayCount === 1 ? "SAILING" : "SAILINGS"}
+                  </span>
+                </div>
+
+                {/* Trip cards */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {dayTrips.map((trip) => {
+                    const soldOut = trip.seatsRemaining === 0;
+                    return (
+                      <Link
+                        key={trip.tripId}
+                        href={soldOut ? "#" : `/book?date=${trip.departureDate}&trip=${trip.tripId}`}
+                        style={{
+                          display: "flex",
+                          textDecoration: "none",
+                          background: soldOut ? "#f1f4f5" : "#fff",
+                          boxShadow: "inset 0 0 0 1px #cdd6da",
+                          position: "relative",
+                          overflow: "hidden",
+                        }}
+                        aria-disabled={soldOut}
+                      >
+                        {/* Type color bar */}
+                        <div
+                          style={{
+                            width: 6,
+                            flexShrink: 0,
+                            background: soldOut ? "#9aa8ae" : trip.tripTypeColor,
+                          }}
+                        />
+                        {/* Content */}
+                        <div style={{ padding: "14px 14px 14px 12px", flex: 1, minWidth: 0 }}>
+                          {/* Time + price */}
+                          <div className="flex items-baseline justify-between">
+                            <span
+                              className="font-plex-mono font-semibold"
+                              style={{ fontSize: 15, color: soldOut ? "#9aa8ae" : "#16354a" }}
+                            >
+                              {trip.startTimeFormatted}
+                            </span>
+                            <span
+                              className="font-archivo font-bold"
+                              style={{ fontSize: 20, color: soldOut ? "#9aa8ae" : "#16354a" }}
+                            >
+                              {trip.minCents != null ? dollars(trip.minCents) : "—"}
+                            </span>
+                          </div>
+                          {/* Trip name */}
+                          <div
+                            className="font-archivo font-semibold"
+                            style={{
+                              fontSize: 16,
+                              lineHeight: 1.2,
+                              marginTop: 6,
+                              color: soldOut ? "#9aa8ae" : "#16354a",
+                            }}
+                          >
+                            {trip.productName}
+                          </div>
+                          {/* Meta row */}
+                          <div
+                            className="flex flex-wrap items-center"
+                            style={{ marginTop: 8, gap: 12 }}
+                          >
+                            {showAllWeek && (
+                              <span
+                                className="font-plex-mono font-semibold"
+                                style={{ fontSize: 11, letterSpacing: ".14em", color: "#c94510" }}
+                              >
+                                {trip.departureDateFormatted}
+                              </span>
+                            )}
+                            <span
+                              className="font-plex-mono"
+                              style={{ fontSize: 11, color: "#5b6f79" }}
+                            >
+                              {trip.tripTypeLabel} · {trip.durationLabel}
+                            </span>
+                            <SeatPill seatsRemaining={trip.seatsRemaining} />
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop: table layout (unchanged) */}
+        <div className="hidden lg:block bg-white mt-[20px]" style={{ border: "1px solid #cdd6da" }}>
           <div
-            className="hidden sm:grid font-plex-mono text-[11px] tracking-[.12em] bg-hull"
+            className="font-plex-mono text-[11px] tracking-[.12em] bg-hull"
             style={{
+              display: "grid",
               gridTemplateColumns: "120px minmax(0,1fr) 120px 100px 130px 130px",
               gap: 16,
               padding: "11px 20px",
-              color: "#8fa3ad",
+              color: "#c9d6dd",
               alignItems: "center",
             }}
           >
@@ -212,19 +435,11 @@ export function SailingsSection({
             const dayTrips = sailingsByDate.get(date)!;
             return dayTrips.map((trip, i) => {
               const soldOut = trip.seatsRemaining === 0;
-              const fewLeft = !soldOut && trip.seatsRemaining <= 10;
-              const seatLabel = soldOut
-                ? "SOLD OUT"
-                : fewLeft
-                ? `${trip.seatsRemaining} LEFT`
-                : `${trip.seatsRemaining} OPEN`;
-              const seatColor = soldOut ? "#9aa8ae" : fewLeft ? "#8c3b12" : "#186a4a";
-
               return (
                 <div
                   key={trip.tripId}
-                  className="sm:grid"
                   style={{
+                    display: "grid",
                     gridTemplateColumns: "120px minmax(0,1fr) 120px 100px 130px 130px",
                     gap: 16,
                     padding: "16px 20px",
@@ -233,47 +448,29 @@ export function SailingsSection({
                     background: soldOut ? "#f1f4f5" : "transparent",
                   }}
                 >
-                  <span
-                    className="font-plex-mono text-[14px]"
-                    style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}
-                  >
+                  <span className="font-plex-mono text-[14px]" style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}>
                     {i === 0 ? trip.departureDateFormatted : ""}
                   </span>
-                  <span
-                    className="font-archivo text-[17px] font-semibold block mt-2 sm:mt-0"
-                    style={{ color: soldOut ? "#9aa8ae" : undefined }}
-                  >
+                  <span className="font-archivo text-[17px] font-semibold" style={{ color: soldOut ? "#9aa8ae" : undefined }}>
                     {trip.productName}
                   </span>
-                  <span
-                    className="font-plex-mono text-[14px] block mt-1 sm:mt-0"
-                    style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}
-                  >
+                  <span className="font-plex-mono text-[14px]" style={{ color: soldOut ? "#9aa8ae" : "#5b6f79" }}>
                     {trip.startTimeFormatted}
                   </span>
-                  <span
-                    className="font-plex-mono text-[17px] font-semibold block mt-1 sm:mt-0"
-                    style={{ color: soldOut ? "#9aa8ae" : undefined }}
-                  >
+                  <span className="font-plex-mono text-[17px] font-semibold" style={{ color: soldOut ? "#9aa8ae" : undefined }}>
                     {trip.minCents != null ? dollars(trip.minCents) : "—"}
                   </span>
-                  <span
-                    className="font-plex-mono text-[13px] font-semibold block mt-1 sm:mt-0"
-                    style={{ color: seatColor }}
-                  >
-                    {seatLabel}
-                  </span>
-                  <div className="flex justify-start sm:justify-end mt-2 sm:mt-0">
+                  <SeatPill seatsRemaining={trip.seatsRemaining} />
+                  <div className="flex justify-end">
                     {soldOut ? (
                       <Link
                         href="/book"
                         className="font-plex-mono text-[12px] font-bold tracking-[.1em]"
                         style={{
-                          border: "1px solid #9aa8ae",
+                          boxShadow: "inset 0 0 0 1px #9aa8ae",
                           color: "#5b6f79",
                           minWidth: 116,
                           height: 40,
-                          boxSizing: "border-box",
                           display: "inline-flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -289,7 +486,6 @@ export function SailingsSection({
                         style={{
                           minWidth: 116,
                           height: 40,
-                          boxSizing: "border-box",
                           display: "inline-flex",
                           alignItems: "center",
                           justifyContent: "center",

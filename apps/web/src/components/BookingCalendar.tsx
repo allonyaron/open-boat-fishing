@@ -104,27 +104,62 @@ function getDisplayPrices(prices: Trip["product"]["prices"]) {
 
 // ─── BookingNav ───────────────────────────────────────────────────────────────
 
+// Mobile header config per step
+const STEP_MOBILE: Record<1 | 2 | 3, { leftHref: string; leftLabel: string; rightLabel: string }> = {
+  1: { leftHref: "/", leftLabel: "HOME", rightLabel: "ALL TRIPS" },
+  2: { leftHref: "/book", leftLabel: "TRIPS", rightLabel: "STEP 2 OF 3 · CART" },
+  3: { leftHref: "/cart", leftLabel: "CART", rightLabel: "STEP 3 OF 3 · PAY" },
+};
+
 export function BookingNav({
   operatorName,
   dockAddress,
   phone,
   step,
+  rightLabelOverride,
+  rightLabelColor,
 }: {
   operatorName: string;
   dockAddress: string | null;
   phone: string | null;
   step: 1 | 2 | 3;
+  rightLabelOverride?: string;
+  rightLabelColor?: string;
 }) {
   const steps: [number, string][] = [
     [1, "PICK A TRIP"],
     [2, "PAY"],
     [3, "CONFIRMED"],
   ];
+  const mobile = STEP_MOBILE[step];
+  const rightLabel = rightLabelOverride ?? mobile.rightLabel;
+  const rightColor = rightLabelColor ?? "#c9d6dd";
   return (
     <>
+      {/* Mobile header */}
+      <div
+        className="lg:hidden sticky top-0 z-50 flex items-center justify-between bg-hull"
+        style={{ height: 54, padding: "0 16px", borderBottom: "3px solid #c94510" }}
+      >
+        <a
+          href={mobile.leftHref}
+          className="font-plex-mono font-semibold tracking-[.1em] uppercase"
+          style={{ fontSize: 12, color: "#dfe8ec", textDecoration: "none" }}
+        >
+          ← {mobile.leftLabel}
+        </a>
+        <span
+          className="font-plex-mono font-semibold"
+          style={{ fontSize: 11, letterSpacing: ".14em", color: rightColor }}
+        >
+          {rightLabel}
+        </span>
+      </div>
+
+      {/* Desktop header */}
       {(dockAddress || phone) && (
         <div
-          className="bg-hull flex flex-wrap gap-3 justify-between font-plex-mono text-[12px] tracking-[.1em] text-ink-dark-3"
+          className="hidden lg:flex bg-hull flex-wrap gap-3 justify-between font-plex-mono text-[12px] tracking-[.1em] text-ink-dark-3"
           style={{ padding: "9px 24px" }}
         >
           <span>{dockAddress ?? ""}</span>
@@ -132,7 +167,7 @@ export function BookingNav({
         </div>
       )}
       <div
-        className="hull bg-hull flex flex-wrap gap-4 items-center justify-between"
+        className="hidden lg:flex hull bg-hull flex-wrap gap-4 items-center justify-between"
         style={{ borderBottom: "3px solid #c94510", padding: "14px 24px" }}
       >
         <a
@@ -193,7 +228,7 @@ function FilterBar({
 
   return (
     <div
-      className="hull bg-hull-2 flex flex-wrap gap-[10px] items-center justify-between"
+      className="hull bg-hull-2 hidden lg:flex flex-wrap gap-[10px] items-center justify-between"
       style={{ padding: "10px 24px" }}
     >
       <div className="flex items-center flex-wrap gap-2">
@@ -238,7 +273,7 @@ function FilterBar({
           </span>
         )}
       </div>
-      <span className="font-plex-mono text-[12px] tracking-[.1em]" style={{ color: "#8fa3ad" }}>
+      <span className="font-plex-mono text-[12px] tracking-[.1em]" style={{ color: "#c9d6dd" }}>
         {countLabel}
       </span>
     </div>
@@ -263,7 +298,7 @@ function InlineStepper({
   incLabel: string;
 }) {
   return (
-    <div className="flex items-stretch flex-shrink-0" style={{ border: "1px solid #0d1c26" }}>
+    <div className="flex items-stretch flex-shrink-0" style={{ border: "1px solid #16354a" }}>
       <button
         type="button"
         onClick={onDec}
@@ -572,8 +607,8 @@ function RailCalendar({
 
             if (hasSailings) {
               bg = isSelected ? "#c94510" : "#ffffff";
-              textColor = isSelected ? "#ffffff" : "#0d1c26";
-              dotColor = inCart ? "#c94510" : "#0d1c26";
+              textColor = isSelected ? "#ffffff" : "#16354a";
+              dotColor = inCart ? "#c94510" : "#16354a";
               if (isSelected) dotColor = "#ffffff";
               border = isSelected ? "none" : "1px solid #cdd6da";
             }
@@ -632,7 +667,7 @@ function RailCalendar({
                 width: 6,
                 height: 6,
                 borderRadius: "50%",
-                background: "#0d1c26",
+                background: "#16354a",
               }}
             />
             SAILING
@@ -734,7 +769,7 @@ function CartRail({
           <div className="flex items-baseline justify-between gap-2 mb-3" style={{ flexWrap: "wrap" }}>
             <span
               className="font-plex-mono text-[12px] font-semibold tracking-[.16em]"
-              style={{ color: "#0d1c26" }}
+              style={{ color: "#16354a" }}
             >
               YOUR SEATS{totalSeats > 0 ? ` · ${totalSeats}` : ""}
             </span>
@@ -867,7 +902,7 @@ function CartRail({
             </span>
             <span
               className="font-plex-mono text-[30px] font-bold"
-              style={{ lineHeight: 1, color: "#0d1c26" }}
+              style={{ lineHeight: 1, color: "#16354a" }}
             >
               {dollars(totalCents)}
             </span>
@@ -898,37 +933,335 @@ function CartRail({
   );
 }
 
+// ─── MobilePanelCalendar ──────────────────────────────────────────────────────
+
+function MobilePanelCalendar({
+  month,
+  byDate,
+  selectedDay,
+  cartDates,
+  canPrevMonth,
+  canNextMonth,
+  onDaySelect,
+  onPrevMonth,
+  onNextMonth,
+}: {
+  month: string;
+  byDate: Record<string, Trip[]>;
+  selectedDay: string | null;
+  cartDates: Set<string>;
+  canPrevMonth: boolean;
+  canNextMonth: boolean;
+  onDaySelect: (date: string) => void;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+}) {
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const { year, mon } = parseMonth(month);
+  const monthLabel = `${MONTHS[mon - 1].toUpperCase()} ${year}`;
+  const firstDow = new Date(Date.UTC(year, mon - 1, 1)).getUTCDay();
+  const lastDay = new Date(Date.UTC(year, mon, 0)).getUTCDate();
+  const days = Array.from({ length: lastDay }, (_, i) =>
+    `${month}-${String(i + 1).padStart(2, "0")}`
+  );
+  const cells: (string | null)[] = [...Array(firstDow).fill(null), ...days];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const btnBorder = (enabled: boolean) => ({
+    width: 44,
+    height: 40,
+    display: "flex" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    background: "#fff",
+    border: `1px solid ${enabled ? "#16354a" : "#e3e9eb"}`,
+    color: enabled ? "#16354a" : "#b9c3c7",
+    fontSize: 16,
+    cursor: enabled ? "pointer" as const : "default" as const,
+  });
+
+  return (
+    <div
+      className="bg-white"
+      style={{ borderBottom: "1px solid #cdd6da", padding: "14px 16px" }}
+    >
+      {/* Month nav */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <button type="button" onClick={canPrevMonth ? onPrevMonth : undefined} style={btnBorder(canPrevMonth)} aria-label="Previous month">‹</button>
+        <span className="font-plex-mono font-semibold" style={{ fontSize: 14, letterSpacing: ".12em", color: "#16354a" }}>
+          {monthLabel}
+        </span>
+        <button type="button" onClick={canNextMonth ? onNextMonth : undefined} style={btnBorder(canNextMonth)} aria-label="Next month">›</button>
+      </div>
+
+      {/* Grid */}
+      <div style={{ marginTop: 14 }}>
+        {/* Weekday headers */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", paddingBottom: 4 }}>
+          {["S","M","T","W","T","F","S"].map((d, i) => (
+            <div key={i} className="font-plex-mono" style={{ fontSize: 10, fontWeight: 500, letterSpacing: ".08em", color: "#c9d6dd", textAlign: "center" }}>{d}</div>
+          ))}
+        </div>
+        {/* Day cells */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
+          {cells.map((date, i) => {
+            if (!date) return <div key={`e-${i}`} style={{ height: 44 }} />;
+            const isPast = date < todayStr;
+            const hasSailings = (byDate[date]?.length ?? 0) > 0;
+            const inCart = cartDates.has(date);
+            const isSelected = date === selectedDay;
+            const dayNum = parseInt(date.slice(-2));
+
+            let bg = "transparent";
+            let textColor = "#9aa8ae";
+            let dotColor: string | null = null;
+            let boxShadow = "none";
+
+            if (isPast) {
+              bg = "#e6ebeb";
+              textColor = "#8a999f";
+            } else if (hasSailings) {
+              bg = isSelected ? "#16354a" : "#fff";
+              textColor = isSelected ? "#fff" : "#16354a";
+              dotColor = isSelected ? "#c9d6dd" : inCart ? "#c94510" : "#16354a";
+              if (!isSelected) boxShadow = "inset 0 0 0 1px #cdd6da";
+            }
+
+            return (
+              <button
+                key={date}
+                type="button"
+                onClick={() => !isPast && hasSailings && onDaySelect(date)}
+                disabled={isPast || !hasSailings}
+                aria-pressed={isSelected}
+                style={{
+                  height: 44,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 3,
+                  background: bg,
+                  boxShadow,
+                  border: "none",
+                  cursor: !isPast && hasSailings ? "pointer" : "default",
+                  padding: 0,
+                }}
+              >
+                <span className="font-plex-mono font-semibold" style={{ fontSize: 14, lineHeight: 1, color: textColor }}>{dayNum}</span>
+                {dotColor && (
+                  <span style={{ display: "block", width: 4, height: 4, borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 14 }}>
+        <span className="flex items-center gap-[6px] font-plex-mono" style={{ fontSize: 10, fontWeight: 500, letterSpacing: ".08em", color: "#41565f" }}>
+          <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#16354a" }} />
+          SAILING
+        </span>
+        <span className="flex items-center gap-[6px] font-plex-mono" style={{ fontSize: 10, fontWeight: 500, letterSpacing: ".08em", color: "#41565f" }}>
+          <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#c94510" }} />
+          IN YOUR CART
+        </span>
+        <span className="flex items-center gap-[6px] font-plex-mono" style={{ fontSize: 10, fontWeight: 500, letterSpacing: ".08em", color: "#8a999f" }}>
+          <span style={{ display: "inline-block", width: 8, height: 8, background: "#e6ebeb" }} />
+          PAST
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ─── MobileCartBar ────────────────────────────────────────────────────────────
 
 function MobileCartBar({
   totalCents,
   totalSeats,
+  holdSecs,
+  cartItems,
   onCheckout,
+  onRemove,
 }: {
   totalCents: number;
   totalSeats: number;
+  holdSecs: number | null;
+  cartItems: EnrichedCartItem[];
   onCheckout: () => void;
+  onRemove: (tripId: string) => void;
 }) {
-  if (totalSeats === 0) return null;
+  const [open, setOpen] = useState(false);
+
+  const hasSeats = totalSeats > 0;
+  const isExpired = holdSecs !== null && holdSecs <= 0;
+  const isWarning = holdSecs !== null && holdSecs > 0 && holdSecs < 120;
+  const holdLabel = hasSeats && holdSecs !== null
+    ? isExpired ? "HOLD EXPIRED" : `${Math.floor(holdSecs / 60)}:${String(holdSecs % 60).padStart(2,"0")}`
+    : "—";
+  const chipUrgent = isExpired || isWarning;
+
   return (
     <div
-      className="booking-mobile-bar hidden fixed inset-x-0 bottom-0 z-20 bg-hull items-center justify-between gap-[14px]"
-      style={{ padding: "12px 18px" }}
+      className="booking-mobile-bar hidden"
+      style={{
+        position: "sticky",
+        bottom: 0,
+        zIndex: 20,
+        background: "#fff",
+        boxShadow: "0 -10px 24px rgba(13,28,38,.18)",
+        borderTop: "3px solid #c94510",
+      }}
     >
-      <div>
-        <div className="font-plex-mono text-[11px] tracking-[.14em] text-ink-dark-3">
-          {totalSeats} {totalSeats === 1 ? "SEAT" : "SEATS"}
+      {/* Expanded sheet */}
+      {open && (
+        <div
+          style={{
+            maxHeight: 232,
+            overflowY: "auto",
+            background: "#f6f8f8",
+          }}
+        >
+          {cartItems.length === 0 ? (
+            <div className="font-archivo" style={{ padding: "14px 16px", fontSize: 13, color: "#41565f" }}>
+              No seats picked yet — use the steppers above and your tickets land here.
+            </div>
+          ) : (
+            cartItems.map((item) => {
+              const subtotal = item.tickets.reduce((s, t) => s + t.priceCents * t.quantity, 0);
+              const faresLabel = item.tickets.map((t) => `${t.quantity} ${t.displayLabel ?? t.ticketType} × ${dollars(t.priceCents)}`).join(" · ");
+              const dt = new Date(item.departureDate + "T12:00:00Z");
+              const dateLabel = dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase();
+              return (
+                <div
+                  key={item.tripId}
+                  className="flex items-start justify-between gap-2"
+                  style={{ padding: "10px 16px", borderBottom: "1px solid #e3e9eb" }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div className="font-archivo font-semibold" style={{ fontSize: 14, color: "#16354a" }}>{item.productName}</div>
+                    <div className="font-plex-mono" style={{ fontSize: 11, color: "#5b6f79", marginTop: 2 }}>{dateLabel} · {fmtTimeET(item.startTime)}</div>
+                    <div className="font-plex-mono" style={{ fontSize: 11, color: "#5b6f79" }}>{faresLabel}</div>
+                  </div>
+                  <div className="flex flex-col items-end flex-shrink-0">
+                    <span className="font-plex-mono font-bold" style={{ fontSize: 15, color: "#16354a" }}>{dollars(subtotal)}</span>
+                    <button
+                      type="button"
+                      onClick={() => onRemove(item.tripId)}
+                      className="font-plex-mono"
+                      style={{ fontSize: 11, color: "#5b6f79", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", marginTop: 2 }}
+                    >
+                      REMOVE
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
-        <div className="font-plex-mono text-[22px] font-bold text-white">{dollars(totalCents)}</div>
-      </div>
+      )}
+
+      {/* Seats bar (tap to expand) */}
       <button
         type="button"
-        onClick={onCheckout}
-        className="bg-orange text-white font-archivo text-[15px] font-bold tracking-[.08em] uppercase cursor-pointer hover:bg-orange-press transition-colors border-none"
-        style={{ padding: "17px 24px" }}
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "flex",
+          width: "100%",
+          alignItems: "center",
+          justifyContent: "space-between",
+          minHeight: 60,
+          background: "#16354a",
+          border: "none",
+          cursor: "pointer",
+          padding: "0 16px",
+        }}
       >
-        Check out →
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+          <span className="font-archivo font-bold text-white uppercase" style={{ fontSize: 14 }}>
+            YOUR SEATS{totalSeats > 0 ? ` · ${totalSeats} ${totalSeats === 1 ? "TICKET" : "TICKETS"}` : ""}
+          </span>
+          {/* Hold chip */}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "5px 9px",
+              background: chipUrgent ? "#c94510" : "transparent",
+              boxShadow: chipUrgent ? "none" : `inset 0 0 0 1px ${hasSeats ? "#c94510" : "#3c5867"}`,
+              fontSize: 10,
+              fontFamily: "var(--font-ibm-plex-mono)",
+              letterSpacing: ".14em",
+              color: chipUrgent ? "#fff" : hasSeats ? "#c9d6dd" : "#c9d6dd",
+            }}
+          >
+            <span style={{ fontSize: 10, letterSpacing: ".14em", color: chipUrgent ? "#ffe3d6" : hasSeats ? "#c9d6dd" : "#c9d6dd" }}>
+              {hasSeats ? "SEATS HELD" : "NO SEATS HELD"}
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: ".04em", color: chipUrgent ? "#fff" : "#ff8a5c" }}>
+              {holdLabel}
+            </span>
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="font-plex-mono" style={{ fontSize: 11, letterSpacing: ".1em", color: "#c9d6dd" }}>
+            {open ? "HIDE YOUR SEATS" : "SHOW YOUR SEATS"}
+          </span>
+          <div
+            style={{
+              width: 38,
+              height: 38,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "inset 0 0 0 1px #3c5867",
+              color: "#c9d6dd",
+              fontSize: 16,
+            }}
+          >
+            {open ? "▴" : "▾"}
+          </div>
+        </div>
       </button>
+
+      {/* Total + checkout */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "12px 16px",
+        }}
+      >
+        <div>
+          <div className="font-plex-mono" style={{ fontSize: 10, letterSpacing: ".16em", color: "#5b6f79" }}>TOTAL</div>
+          <div className="font-archivo font-bold" style={{ fontSize: 26, color: hasSeats ? "#16354a" : "#9aa8ae" }}>
+            {dollars(totalCents)}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={hasSeats && !isExpired ? onCheckout : undefined}
+          disabled={!hasSeats || isExpired}
+          className="font-archivo font-bold uppercase"
+          style={{
+            height: 58,
+            minWidth: 170,
+            background: hasSeats && !isExpired ? "#c94510" : "#b9c3c7",
+            color: hasSeats && !isExpired ? "#fff" : "#41565f",
+            border: "none",
+            cursor: hasSeats && !isExpired ? "pointer" : "default",
+            fontSize: 15,
+            letterSpacing: ".08em",
+          }}
+        >
+          CHECK OUT →
+        </button>
+      </div>
     </div>
   );
 }
@@ -1326,6 +1659,21 @@ export function BookingCalendar({
         />
       </div>
 
+      {/* Mobile month card — above trip list, hidden on desktop */}
+      <div className="lg:hidden">
+        <MobilePanelCalendar
+          month={month}
+          byDate={byDate}
+          selectedDay={selectedDay}
+          cartDates={cartDates}
+          canPrevMonth={month > toMonthStr(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1)}
+          canNextMonth={true}
+          onDaySelect={handleDaySelect}
+          onPrevMonth={prevMonth}
+          onNextMonth={nextMonth}
+        />
+      </div>
+
       <div className="booking-shell">
         {/* Left: trip list */}
         <div
@@ -1333,7 +1681,7 @@ export function BookingCalendar({
             loading ? "opacity-40 pointer-events-none" : ""
           }`}
           aria-busy={loading}
-          style={{ padding: "8px 24px 120px" }}
+          style={{ padding: "8px 24px 220px" }}
         >
           {dates.length === 0 ? (
             <EmptyState onNextMonth={nextMonth} />
@@ -1373,7 +1721,10 @@ export function BookingCalendar({
       <MobileCartBar
         totalCents={totalCents}
         totalSeats={totalSeats}
+        holdSecs={holdSecs}
+        cartItems={cartItems}
         onCheckout={goToCheckout}
+        onRemove={removeFromCart}
       />
 
       {/* Footer */}

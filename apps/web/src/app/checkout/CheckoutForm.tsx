@@ -91,7 +91,7 @@ function Field({
           padding: 16,
           fontFamily: "var(--font-archivo)",
           fontSize: 17,
-          color: "#0d1c26",
+          color: "#16354a",
           borderRadius: 0,
           outline: "none",
         }}
@@ -139,9 +139,9 @@ function OrderCard({ items, totalCents }: { items: EnrichedCartItem[]; totalCent
       })}
       {/* Hull total footer */}
       <div
-        style={{ padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "baseline", background: "#0d1c26", color: "#fff" }}
+        style={{ padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "baseline", background: "#16354a", color: "#fff" }}
       >
-        <span style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".16em", color: "#8fa3ad" }}>
+        <span style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".16em", color: "#c9d6dd" }}>
           TOTAL DUE TODAY
         </span>
         <span style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 30, fontWeight: 700 }}>
@@ -294,18 +294,19 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ maxWidth: 760, margin: "0 auto", padding: "34px 24px 60px" }}>
+    <form onSubmit={handleSubmit} style={{ maxWidth: 760, margin: "0 auto", padding: "16px 16px 60px" }} className="lg:px-[34px] lg:pt-[34px]">
       <a
         href="/book"
+        className="hidden lg:inline"
         style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".1em", color: "#8c3b12", textDecoration: "underline" }}
       >
         ← BACK TO TRIPS · ADD ANOTHER
       </a>
 
       <h1
-        style={{ margin: "16px 0 0", fontFamily: "var(--font-archivo)", fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "-.02em", lineHeight: 1, color: "#0d1c26" }}
+        style={{ margin: "16px 0 0", fontFamily: "var(--font-archivo)", fontSize: "clamp(30px, 4vw, 40px)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "-.02em", lineHeight: 1, color: "#16354a" }}
       >
-        One page. Then you&apos;re fishing.
+        ONE PAGE.<br />THEN YOU&apos;RE FISHING.
       </h1>
 
       {meta && <HoldBanner holdExpiresAt={meta.holdExpiresAt} />}
@@ -379,23 +380,24 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
         disabled={!stripe || !elements || submitting}
         style={{
           width: "100%",
+          minHeight: 72,
+          padding: "20px 16px",
           background: submitting ? "#b1440f" : "#c94510",
           color: "#fff",
           border: "none",
           fontFamily: "var(--font-archivo)",
-          fontSize: 20,
+          fontSize: 19,
           fontWeight: 700,
           letterSpacing: ".06em",
           textTransform: "uppercase",
-          padding: 24,
           cursor: submitting ? "not-allowed" : "pointer",
         }}
       >
-        {submitting ? "PROCESSING…" : `Pay ${fmtDollars(totalCents)} · book my seats`}
+        {submitting ? "PROCESSING…" : `PAY ${fmtDollars(totalCents)} · BOOK MY SEATS`}
       </button>
 
       <div
-        style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px", marginTop: 14, fontFamily: "var(--font-ibm-plex-mono)", fontSize: 11, letterSpacing: ".06em", color: "#41565f" }}
+        style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14, fontFamily: "var(--font-ibm-plex-mono)", fontSize: 11, letterSpacing: ".06em", color: "#41565f" }}
       >
         <span>FREE CANCELLATION TO 24H BEFORE SAILING</span>
         <span>WEATHER CANCELLATION = AUTOMATIC REFUND</span>

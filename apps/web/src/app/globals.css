@@ -70,7 +70,7 @@
   .booking-trip-row .trip-col-action { grid-column: 1 / -1; }
 }
 
-/* Booking shell: 2-col with stretching rail on large screens, 1-col below 1000px */
+/* Booking shell: 2-col with stretching rail on large screens, 1-col below lg (1024px) */
 .booking-shell {
   display: grid;
   grid-template-columns: minmax(0,1fr) 372px;
@@ -80,12 +80,12 @@
   align-self: stretch;
   height: 100%;
 }
-@media (max-width: 1000px) {
+@media (max-width: 1024px) {
   .booking-shell {
     grid-template-columns: minmax(0,1fr);
   }
   .booking-rail { display: none !important; }
-  .booking-mobile-bar { display: flex !important; }
+  .booking-mobile-bar { display: flex !important; flex-direction: column; }
 }
 
 /* Rail calendar responsive: hide full grid at short viewport heights */
