@@ -36,11 +36,10 @@ export type EnrichedCartItem = {
     ticketType: string;
     quantity: number;
     priceCents: number;
-    displayLabel?: string; // "seat" when all prices equal, otherwise === ticketType
+    displayLabel?: string;
   }[];
 };
 
-type ViewMode = "list" | "calendar";
 type VesselInfo = { name: string; color: string };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -49,11 +48,11 @@ const MONTHS = [
   "January","February","March","April","May","June",
   "July","August","September","October","November","December",
 ];
-const DAYS_LONG = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-const DAYS_SHORT = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+const MONTHS_SHORT = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+const DAYS_SINGLE = ["S","M","T","W","T","F","S"];
 
 function toMonthStr(year: number, mon: number) {
-  return `${year}-${String(mon).padStart(2,"0")}`;
+  return `${year}-${String(mon).padStart(2, "0")}`;
 }
 function parseMonth(month: string) {
   const [y, m] = month.split("-").map(Number);
@@ -82,39 +81,28 @@ function fmtDayLabel(dateStr: string): { main: string; sub: string } {
   else if (isWeekend) sub = "WEEKEND";
   return { main, sub };
 }
-function fmtFullDate(dateStr: string) {
-  const dt = new Date(dateStr + "T12:00:00Z");
-  const dow = DAYS_LONG[dt.getUTCDay()];
-  const mon = MONTHS[dt.getUTCMonth()];
-  const day = dt.getUTCDate();
-  return `${dow}, ${mon} ${day}`;
-}
 function dollars(cents: number) {
   return `$${Math.round(cents / 100)}`;
 }
-// Pluralize a ticket label for cart copy.
-function pluralLabel(label: string, qty: number): string {
-  if (qty === 1) return label;
-  const map: Record<string, string> = {
-    seat: "seats", adult: "adults", child: "children",
-    senior: "seniors", military: "military",
-  };
-  return map[label.toLowerCase()] ?? label + "s";
+function fmtMonthDay(dateStr: string) {
+  const dt = new Date(dateStr + "T12:00:00Z");
+  return `${MONTHS_SHORT[dt.getUTCMonth()]} ${dt.getUTCDate()}`;
+}
+function fmtHoldTime(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// Returns display rows for the trip's seat selector.
-// If all active prices are equal, collapses to a single "Seats" row keyed on first ticketType.
 function getDisplayPrices(prices: Trip["product"]["prices"]) {
   const active = prices.filter((p) => p.priceCents > 0);
   if (active.length === 0) return [];
   const allEqual = active.every((p) => p.priceCents === active[0].priceCents);
-  if (allEqual) {
-    return [{ ...active[0], displayLabel: "seat" }];
-  }
+  if (allEqual) return [{ ...active[0], displayLabel: "seat" }];
   return active.map((p) => ({ ...p, displayLabel: p.ticketType }));
 }
 
-// ─── Booking nav (utility strip + brand bar + step chips) ─────────────────────
+// ─── BookingNav ───────────────────────────────────────────────────────────────
 
 export function BookingNav({
   operatorName,
@@ -134,15 +122,19 @@ export function BookingNav({
   ];
   return (
     <>
-      {/* Utility strip */}
       {(dockAddress || phone) && (
-        <div className="bg-hull px-6 flex flex-wrap gap-3 justify-between font-plex-mono text-[12px] tracking-[.1em] text-ink-dark-3" style={{ padding: "9px 24px" }}>
+        <div
+          className="bg-hull flex flex-wrap gap-3 justify-between font-plex-mono text-[12px] tracking-[.1em] text-ink-dark-3"
+          style={{ padding: "9px 24px" }}
+        >
           <span>{dockAddress ?? ""}</span>
           {phone && <span>QUESTIONS? {phone}</span>}
         </div>
       )}
-      {/* Brand + step nav */}
-      <div className="hull bg-hull px-6 flex flex-wrap gap-4 items-center justify-between" style={{ borderBottom: "3px solid #c94510", padding: "14px 24px" }}>
+      <div
+        className="hull bg-hull flex flex-wrap gap-4 items-center justify-between"
+        style={{ borderBottom: "3px solid #c94510", padding: "14px 24px" }}
+      >
         <a
           href="/"
           className="text-[22px] font-bold tracking-[.05em] text-white uppercase font-archivo"
@@ -157,7 +149,9 @@ export function BookingNav({
               <li
                 key={n}
                 aria-current={active ? "step" : undefined}
-                className={`px-[14px] py-[10px] font-plex-mono text-[13px] font-semibold tracking-[.1em] ${active ? "bg-orange text-white" : "text-ink-dark-3"}`}
+                className={`px-[14px] py-[10px] font-plex-mono text-[13px] font-semibold tracking-[.1em] ${
+                  active ? "bg-orange text-white" : "text-ink-dark-3"
+                }`}
               >
                 {n} · {label}
               </li>
@@ -169,94 +163,57 @@ export function BookingNav({
   );
 }
 
-// ─── Filter bar ───────────────────────────────────────────────────────────────
+// ─── FilterBar ────────────────────────────────────────────────────────────────
 
 function FilterBar({
-  month,
-  view,
   filter,
   vessels,
-  onPrevMonth,
-  onNextMonth,
-  onViewChange,
+  filteredTrips,
   onFilterChange,
-  announceRef,
 }: {
-  month: string;
-  view: ViewMode;
   filter: string;
   vessels: VesselInfo[];
-  onPrevMonth: () => void;
-  onNextMonth: () => void;
-  onViewChange: (v: ViewMode) => void;
+  filteredTrips: Trip[];
   onFilterChange: (f: string) => void;
-  announceRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  const { year, mon } = parseMonth(month);
-  const monthLabel = `${MONTHS[mon - 1].toUpperCase()} ${year}`;
+  const dates = [...new Set(filteredTrips.map((t) => t.departureDate))].sort();
+  const countLabel =
+    filteredTrips.length === 0
+      ? "NO TRIPS"
+      : `${filteredTrips.length} TRIPS${
+          dates.length > 0
+            ? ` · ${fmtMonthDay(dates[0])} — ${fmtMonthDay(dates[dates.length - 1])}`
+            : ""
+        }`;
 
-  function handlePrev() {
-    onPrevMonth();
-    if (announceRef.current) announceRef.current.textContent = `Showing ${MONTHS[mon - 2 < 0 ? 11 : mon - 2]} ${mon - 2 < 0 ? year - 1 : year}`;
-  }
-  function handleNext() {
-    onNextMonth();
-    if (announceRef.current) announceRef.current.textContent = `Showing ${MONTHS[mon % 12]} ${mon === 12 ? year + 1 : year}`;
-  }
-
-  const viewChipStyle = (active: boolean) =>
-    `px-[18px] font-plex-mono text-[13px] font-semibold tracking-[.1em] cursor-pointer border transition-colors min-h-[44px] flex items-center ${
-      active
-        ? "bg-white text-hull border-white"
-        : "bg-transparent text-ink-dark-2 border-hull-line hover:text-white"
+  const chipStyle = (active: boolean) =>
+    `font-plex-mono text-[11px] font-semibold tracking-[.14em] cursor-pointer transition-colors flex items-center ${
+      active ? "bg-orange text-white" : "bg-transparent text-white hover:border-white/50"
     }`;
-  const filterChipStyle = (active: boolean) =>
-    `px-[16px] font-plex-mono text-[13px] font-semibold tracking-[.1em] cursor-pointer border transition-colors min-h-[44px] flex items-center gap-[6px] ${
-      active
-        ? "bg-orange border-orange text-white"
-        : "bg-transparent border-hull-line text-white hover:border-white/50"
-    }`;
-
-  const showVesselFilter = vessels.length > 1;
 
   return (
-    <div className="hull bg-hull-2 flex flex-wrap gap-[14px] items-center justify-between" style={{ padding: "12px 24px" }}>
-      {/* Month stepper */}
-      <div className="flex items-center gap-[10px]">
-        <button
-          type="button"
-          onClick={handlePrev}
-          aria-label="Previous month"
-          className="flex items-center justify-center bg-transparent text-[#dfe8ec] cursor-pointer hover:text-white transition-colors"
-          style={{ width: 44, height: 44, border: "1px solid #3c5867", fontSize: 18 }}
-        >
-          ‹
-        </button>
-        <span className="font-plex-mono text-[15px] font-semibold tracking-[.12em] text-white text-center" style={{ minWidth: 190 }}>
-          {monthLabel}
+    <div
+      className="hull bg-hull-2 flex flex-wrap gap-[10px] items-center justify-between"
+      style={{ padding: "10px 24px" }}
+    >
+      <div className="flex items-center flex-wrap gap-2">
+        <span className="font-plex-mono text-[11px] font-semibold tracking-[.14em] text-ink-dark-3 mr-1">
+          SHOW
         </span>
-        <button
-          type="button"
-          onClick={handleNext}
-          aria-label="Next month"
-          className="flex items-center justify-center bg-transparent text-[#dfe8ec] cursor-pointer hover:text-white transition-colors"
-          style={{ width: 44, height: 44, border: "1px solid #3c5867", fontSize: 18 }}
-        >
-          ›
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-[18px] items-center">
-        {/* View toggle */}
-        <div role="group" aria-label="View" className="flex">
-          <button type="button" onClick={() => onViewChange("list")} aria-pressed={view === "list"} className={viewChipStyle(view === "list")}>LIST</button>
-          <button type="button" onClick={() => onViewChange("calendar")} aria-pressed={view === "calendar"} className={viewChipStyle(view === "calendar")}>CALENDAR</button>
-        </div>
-        {/* Vessel filter — hidden when only 1 vessel */}
-        {showVesselFilter && (
+        {vessels.length > 1 ? (
           <div role="group" aria-label="Filter by boat" className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => onFilterChange("all")} aria-pressed={filter === "all"} className={filterChipStyle(filter === "all")}>
-              ALL
+            <button
+              type="button"
+              onClick={() => onFilterChange("all")}
+              aria-pressed={filter === "all"}
+              className={chipStyle(filter === "all")}
+              style={{
+                border: `1px solid ${filter === "all" ? "#c94510" : "#3c5867"}`,
+                padding: "0 16px",
+                minHeight: 44,
+              }}
+            >
+              ALL BOATS
             </button>
             {vessels.map((v) => (
               <button
@@ -264,24 +221,31 @@ function FilterBar({
                 type="button"
                 onClick={() => onFilterChange(v.name)}
                 aria-pressed={filter === v.name}
-                className={filterChipStyle(filter === v.name)}
+                className={chipStyle(filter === v.name)}
+                style={{
+                  border: `1px solid ${filter === v.name ? "#c94510" : "#3c5867"}`,
+                  padding: "0 16px",
+                  minHeight: 44,
+                }}
               >
-                <span
-                  aria-hidden="true"
-                  className="inline-block rounded-full flex-shrink-0"
-                  style={{ width: 7, height: 7, background: filter === v.name ? "#fff" : v.color }}
-                />
                 {v.name.toUpperCase()}
               </button>
             ))}
           </div>
+        ) : (
+          <span className="font-plex-mono text-[11px] font-semibold tracking-[.14em] text-white">
+            ALL BOATS
+          </span>
         )}
       </div>
+      <span className="font-plex-mono text-[12px] tracking-[.1em]" style={{ color: "#8fa3ad" }}>
+        {countLabel}
+      </span>
     </div>
   );
 }
 
-// ─── Inline stepper ────────────────────────────────────────────────────────────
+// ─── InlineStepper ────────────────────────────────────────────────────────────
 
 function InlineStepper({
   value,
@@ -299,20 +263,20 @@ function InlineStepper({
   incLabel: string;
 }) {
   return (
-    <div className="flex items-stretch flex-shrink-0" style={{ border: "1px solid #0d1c26", height: 44 }}>
+    <div className="flex items-stretch flex-shrink-0" style={{ border: "1px solid #0d1c26" }}>
       <button
         type="button"
         onClick={onDec}
         disabled={value === 0}
         aria-label={decLabel}
-        className="flex items-center justify-center bg-white text-hull text-[18px] font-semibold cursor-pointer disabled:opacity-40 hover:bg-deck-3 transition-colors border-none"
-        style={{ width: 44, borderRight: "1px solid #0d1c26" }}
+        className="flex items-center justify-center bg-hull text-white text-[18px] font-semibold cursor-pointer disabled:opacity-40 hover:bg-hull-2 transition-colors border-none"
+        style={{ width: 45, height: 46, borderRight: "1px solid #3c5867" }}
       >
         −
       </button>
       <span
         className="flex items-center justify-center font-plex-mono text-[15px] font-semibold"
-        style={{ minWidth: 44 }}
+        style={{ minWidth: 46, height: 46 }}
         aria-live="polite"
         aria-atomic="true"
       >
@@ -324,7 +288,7 @@ function InlineStepper({
         disabled={atMax}
         aria-label={incLabel}
         className="flex items-center justify-center bg-hull text-white text-[18px] font-semibold cursor-pointer disabled:opacity-40 hover:bg-hull-2 transition-colors border-none"
-        style={{ width: 44, borderLeft: "1px solid #0d1c26" }}
+        style={{ width: 45, height: 46, borderLeft: "1px solid #3c5867" }}
       >
         +
       </button>
@@ -332,7 +296,7 @@ function InlineStepper({
   );
 }
 
-// ─── Trip Row (list view) ──────────────────────────────────────────────────────
+// ─── TripRow ──────────────────────────────────────────────────────────────────
 
 function TripRow({
   trip,
@@ -348,53 +312,70 @@ function TripRow({
   const totalQty = displayPrices.reduce((sum, p) => sum + getQty(trip.id, p.ticketType), 0);
   const inCart = totalQty > 0;
 
-  const seatLabel =
-    soldOut
-      ? "SOLD OUT"
-      : trip.seatsRemaining <= 10
-      ? `${trip.seatsRemaining} SEATS LEFT`
-      : `${trip.seatsRemaining} OPEN`;
-  const seatColorClass = soldOut
-    ? "text-[#9aa8ae]"
+  const adultFare =
+    trip.product.prices.find((p) => p.ticketType.toLowerCase() === "adult") ??
+    trip.product.prices[0];
+
+  const seatLabel = soldOut
+    ? "SOLD OUT"
     : trip.seatsRemaining <= 10
-    ? "text-[#9a3c12]"
-    : "text-green-open";
+    ? `${trip.seatsRemaining} SEATS LEFT`
+    : "SEATS OPEN";
+  const seatColor = soldOut ? "#41565f" : trip.seatsRemaining <= 10 ? "#8c3b12" : "#186a4a";
 
   return (
     <div
-      className={`booking-trip-row transition-colors ${
-        inCart ? "bg-white" : "bg-deck-3"
-      } ${soldOut ? "opacity-[.55]" : ""}`}
+      className="booking-trip-row"
       style={{
+        marginTop: 12,
         padding: "18px 20px",
         border: `1px solid ${inCart ? "#c94510" : "#dde4e6"}`,
+        background: inCart ? "#ffffff" : "#f6f8f8",
+        opacity: soldOut ? 0.55 : 1,
       }}
     >
-      {/* Col 1: trip info */}
+      {/* Col 1: species kicker + name + meta */}
       <div className="trip-col-main min-w-0">
-        <div className="font-plex-mono text-[12px] tracking-[.16em]" style={{ color: "#9a3c12" }}>
+        <div
+          className="font-plex-mono text-[11px] tracking-[.16em]"
+          style={{ color: "#b1440f" }}
+        >
           {trip.product.category.toUpperCase()}
         </div>
-        <div className="text-[19px] font-bold tracking-[-0.01em] mt-1 font-archivo">
+        <div className="font-archivo text-[19px] font-bold tracking-[-0.01em] mt-1">
           {trip.product.displayName}
         </div>
-        <div className="font-plex-mono text-[13px] mt-[5px]" style={{ color: "#444141" }}>
-          {fmtTimeET(trip.startTime)} – {fmtTimeET(trip.endTime)} · {fmtDuration(trip.startTime, trip.endTime)} · {trip.vessel.name}
+        <div className="font-plex-mono text-[13px] mt-[5px]" style={{ color: "#41565f" }}>
+          {fmtTimeET(trip.startTime)} – {fmtTimeET(trip.endTime)} ·{" "}
+          {fmtDuration(trip.startTime, trip.endTime)} · {trip.vessel.name}
         </div>
       </div>
 
-      {/* Col 2: seat state */}
-      <div className={`trip-col-seats font-plex-mono text-[13px] font-semibold tracking-[.06em] self-center ${seatColorClass}`}>
+      {/* Col 2: adult fare */}
+      <div className="trip-col-fare font-plex-mono text-[20px] font-semibold self-center">
+        {adultFare ? dollars(adultFare.priceCents) : "—"}
+      </div>
+
+      {/* Col 3: seat state */}
+      <div
+        className="trip-col-seats font-plex-mono text-[12px] font-semibold tracking-[.06em] self-center"
+        style={{ color: seatColor }}
+      >
         {seatLabel}
       </div>
 
-      {/* Col 3: stepper or waitlist */}
-      <div className="trip-col-action flex flex-col gap-2 justify-center">
+      {/* Col 4: steppers or waitlist */}
+      <div className="trip-col-action flex flex-col gap-[10px] justify-center">
         {soldOut ? (
           <button
             type="button"
             className="font-plex-mono text-[13px] font-semibold tracking-[.1em] cursor-pointer hover:bg-deck-3 transition-colors bg-transparent"
-            style={{ border: "1px solid #9aa8ae", padding: "11px 18px", color: "#444141", minHeight: 44 }}
+            style={{
+              border: "1px solid #9aa8ae",
+              padding: "11px 18px",
+              color: "#41565f",
+              minHeight: 44,
+            }}
           >
             WAITLIST
           </button>
@@ -408,8 +389,13 @@ function TripRow({
             const label = price.displayLabel ?? price.ticketType;
             return (
               <div key={price.ticketType} className="flex items-center justify-between gap-3">
-                <div className="font-plex-mono text-[13px]" style={{ color: "#201e1d" }}>
-                  {label.charAt(0).toUpperCase() + label.slice(1)} · {dollars(price.priceCents)}
+                <div>
+                  <div className="font-archivo text-[15px] font-bold">
+                    {label.charAt(0).toUpperCase() + label.slice(1)}
+                  </div>
+                  <div className="font-plex-mono text-[13px]" style={{ color: "#41565f" }}>
+                    {dollars(price.priceCents)} each
+                  </div>
                 </div>
                 <InlineStepper
                   value={qty}
@@ -428,28 +414,44 @@ function TripRow({
   );
 }
 
-// ─── Day Group ────────────────────────────────────────────────────────────────
+// ─── DayGroup ─────────────────────────────────────────────────────────────────
 
 function DayGroup({
   dateStr,
   trips,
   getQty,
   onAdjustQty,
+  headerH,
 }: {
   dateStr: string;
   trips: Trip[];
   getQty: (tripId: string, ticketType: string) => number;
   onAdjustQty: (tripId: string, ticketType: string, delta: 1 | -1) => void;
+  headerH: number;
 }) {
   const { main, sub } = fmtDayLabel(dateStr);
+  const dayNum = parseInt(dateStr.slice(-2));
   return (
-    <div style={{ paddingTop: 26 }}>
-      <div className="flex items-baseline gap-3 pb-2" style={{ borderBottom: "2px solid #cdd6da" }}>
+    <div id={`day-${dayNum}`} style={{ paddingTop: 26, scrollMarginTop: headerH + 16 }}>
+      <div
+        className="flex items-baseline gap-3 pb-2 bg-deck"
+        style={{
+          borderBottom: "2px solid #cdd6da",
+          position: "sticky",
+          top: headerH,
+          zIndex: 2,
+        }}
+      >
         <span className="font-plex-mono text-[13px] font-semibold tracking-[.14em] uppercase">
           {main}
         </span>
         {sub && (
-          <span className="font-plex-mono text-[12px] tracking-[.08em]" style={{ color: "#444141" }}>{sub}</span>
+          <span
+            className="font-plex-mono text-[12px] tracking-[.08em]"
+            style={{ color: "#5b6f79" }}
+          >
+            {sub}
+          </span>
         )}
       </div>
       {trips.map((trip) => (
@@ -459,207 +461,381 @@ function DayGroup({
   );
 }
 
-// ─── Cart Rail ────────────────────────────────────────────────────────────────
+// ─── RailCalendar ─────────────────────────────────────────────────────────────
+
+function RailCalendar({
+  month,
+  byDate,
+  selectedDay,
+  cartDates,
+  headerH,
+  onDaySelect,
+  onPrevMonth,
+  onNextMonth,
+}: {
+  month: string;
+  byDate: Record<string, Trip[]>;
+  selectedDay: string | null;
+  cartDates: Set<string>;
+  headerH: number;
+  onDaySelect: (date: string) => void;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+}) {
+  const { year, mon } = parseMonth(month);
+  const monthLabel = `${MONTHS[mon - 1].toUpperCase()} ${year}`;
+  const firstDow = new Date(Date.UTC(year, mon - 1, 1)).getUTCDay();
+  const lastDay = new Date(Date.UTC(year, mon, 0)).getUTCDate();
+  const days = Array.from({ length: lastDay }, (_, i) =>
+    `${month}-${String(i + 1).padStart(2, "0")}`
+  );
+  const cells: (string | null)[] = [...Array(firstDow).fill(null), ...days];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  return (
+    <div
+      className="bg-deck-2"
+      style={{
+        position: "sticky",
+        top: headerH,
+        zIndex: 3,
+        borderBottom: "1px solid #cdd6da",
+        padding: "16px 22px",
+      }}
+    >
+      {/* Month navigation */}
+      <div className="flex items-center justify-between mb-3">
+        <button
+          type="button"
+          onClick={onPrevMonth}
+          aria-label="Previous month"
+          className="flex items-center justify-center bg-transparent text-hull cursor-pointer hover:text-hull-2 transition-colors border-none"
+          style={{
+            width: 44,
+            height: 44,
+            border: "1px solid #3c5867",
+            fontSize: 20,
+            lineHeight: 1,
+          }}
+        >
+          ‹
+        </button>
+        <span className="font-plex-mono text-[13px] font-semibold tracking-[.1em] text-hull">
+          {monthLabel}
+        </span>
+        <button
+          type="button"
+          onClick={onNextMonth}
+          aria-label="Next month"
+          className="flex items-center justify-center bg-transparent text-hull cursor-pointer hover:text-hull-2 transition-colors border-none"
+          style={{
+            width: 44,
+            height: 44,
+            border: "1px solid #3c5867",
+            fontSize: 20,
+            lineHeight: 1,
+          }}
+        >
+          ›
+        </button>
+      </div>
+
+      {/* Full grid — hidden at max-height: 720px */}
+      <div className="booking-rail-cal-grid">
+        {/* Weekday headers */}
+        <div className="grid grid-cols-7 mb-1">
+          {DAYS_SINGLE.map((d, i) => (
+            <div
+              key={i}
+              className="font-plex-mono text-[10px] text-center"
+              style={{ color: "#a7b3b8" }}
+            >
+              {d}
+            </div>
+          ))}
+        </div>
+
+        {/* Day cells */}
+        <div className="grid grid-cols-7" style={{ gap: 4 }}>
+          {cells.map((date, i) => {
+            if (!date) return <div key={`empty-${i}`} style={{ height: 38 }} />;
+
+            const hasSailings = (byDate[date]?.length ?? 0) > 0;
+            const inCart = cartDates.has(date);
+            const isSelected = date === selectedDay;
+            const dayNum = parseInt(date.slice(-2));
+
+            let bg = "transparent";
+            let textColor = "#a7b3b8";
+            let dotColor: string | null = null;
+            let border = "none";
+
+            if (hasSailings) {
+              bg = isSelected ? "#c94510" : "#ffffff";
+              textColor = isSelected ? "#ffffff" : "#0d1c26";
+              dotColor = inCart ? "#c94510" : "#0d1c26";
+              if (isSelected) dotColor = "#ffffff";
+              border = isSelected ? "none" : "1px solid #cdd6da";
+            }
+
+            return (
+              <button
+                key={date}
+                type="button"
+                onClick={() => hasSailings && onDaySelect(date)}
+                disabled={!hasSailings}
+                aria-pressed={isSelected}
+                aria-label={`${date}${hasSailings ? ", has sailings" : ", no sailings"}`}
+                className="flex flex-col items-center justify-center transition-colors border-none"
+                style={{
+                  height: 38,
+                  background: bg,
+                  border,
+                  cursor: hasSailings ? "pointer" : "default",
+                  gap: 3,
+                  fontFamily: "inherit",
+                  padding: 0,
+                }}
+              >
+                <span
+                  className="font-plex-mono text-[12px]"
+                  style={{ color: textColor, lineHeight: 1 }}
+                >
+                  {dayNum}
+                </span>
+                {dotColor && (
+                  <span
+                    style={{
+                      display: "block",
+                      width: 5,
+                      height: 5,
+                      borderRadius: "50%",
+                      background: dotColor,
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="flex items-center gap-4 mt-3">
+          <span
+            className="flex items-center gap-[6px] font-plex-mono text-[11px]"
+            style={{ color: "#41565f" }}
+          >
+            <span
+              style={{
+                display: "inline-block",
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#0d1c26",
+              }}
+            />
+            SAILING
+          </span>
+          <span
+            className="flex items-center gap-[6px] font-plex-mono text-[11px]"
+            style={{ color: "#41565f" }}
+          >
+            <span
+              style={{
+                display: "inline-block",
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#c94510",
+              }}
+            />
+            IN YOUR CART
+          </span>
+        </div>
+      </div>
+
+      {/* Compact fallback — shown at max-height: 720px instead of grid */}
+      <div className="booking-rail-cal-compact">
+        <p className="font-plex-mono text-[12px] m-0" style={{ color: "#5b6f79" }}>
+          Scroll the list to browse dates.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── CartRail ─────────────────────────────────────────────────────────────────
 
 function CartRail({
   cartItems,
   totalCents,
   totalSeats,
+  holdSecs,
+  month,
+  byDate,
   selectedDay,
-  selectedTripId,
-  dayTrips,
-  getQty,
-  onAdjustQty,
+  cartDates,
+  headerH,
   onRemove,
   onCheckout,
-  tripCardRefs,
-  scrollRef,
-  footerRef,
-  headerH,
-  announceRef,
+  onDaySelect,
+  onPrevMonth,
+  onNextMonth,
 }: {
   cartItems: EnrichedCartItem[];
   totalCents: number;
   totalSeats: number;
+  holdSecs: number | null;
+  month: string;
+  byDate: Record<string, Trip[]>;
   selectedDay: string | null;
-  selectedTripId: string | null;
-  dayTrips: Trip[];
-  getQty: (tripId: string, ticketType: string) => number;
-  onAdjustQty: (tripId: string, ticketType: string, delta: 1 | -1) => void;
+  cartDates: Set<string>;
+  headerH: number;
   onRemove: (tripId: string) => void;
   onCheckout: () => void;
-  tripCardRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
-  scrollRef: React.RefObject<HTMLDivElement | null>;
-  footerRef: React.RefObject<HTMLDivElement | null>;
-  headerH: number;
-  announceRef: React.RefObject<HTMLDivElement | null>;
+  onDaySelect: (date: string) => void;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
 }) {
-  const [footerH, setFooterH] = useState(0);
-
-  useEffect(() => {
-    const footer = footerRef.current;
-    if (!footer) return;
-    const measure = () => setFooterH(footer.offsetHeight);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(footer);
-    return () => ro.disconnect();
-  }, [footerRef]);
-
-  const hasDay = selectedDay && dayTrips.length > 0;
+  const hasSeats = totalSeats > 0;
+  const isExpired = holdSecs !== null && holdSecs <= 0;
+  const isWarning = holdSecs !== null && holdSecs > 0 && holdSecs < 120;
 
   return (
     <div
       className="booking-rail"
-      style={{
-        borderLeft: "2px solid #cdd6da",
-        background: "#f8f4f4",
-        position: "sticky",
-        top: headerH,
-        height: `calc(100vh - ${headerH}px - ${footerH}px)`,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
+      style={{ borderLeft: "2px solid #cdd6da", background: "#e6eaea" }}
     >
-      {/* ── Top: day trips (scrollable) ── */}
-      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 20px 8px" }}>
+      {/* Inner flex column — min-height: 100vh so total shelf is always at the bottom of the longest page */}
+      <div
+        style={{
+          height: "100%",
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* 1. Month calendar — sticky at top */}
+        <RailCalendar
+          month={month}
+          byDate={byDate}
+          selectedDay={selectedDay}
+          cartDates={cartDates}
+          headerH={headerH}
+          onDaySelect={onDaySelect}
+          onPrevMonth={onPrevMonth}
+          onNextMonth={onNextMonth}
+        />
 
-        {hasDay ? (
-          <div style={{ marginBottom: 16 }}>
-            <h2 style={{ fontSize: 16, letterSpacing: "0.1em", textTransform: "uppercase", margin: "0 0 4px", color: "#201e1d" }}>
-              {fmtDayLabel(selectedDay!).main.replace(/,\s*/, ", ")}
-            </h2>
-            <div style={{ fontSize: 13, color: "#444141", marginBottom: 12 }}>
-              {dayTrips.length} {dayTrips.length === 1 ? "trip" : "trips"} · pick a departure and add seats below
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {dayTrips.map((trip) => {
-                const displayPrices = getDisplayPrices(trip.product.prices);
-                const soldOut = trip.seatsRemaining === 0;
-                const totalQty = displayPrices.reduce((s, p) => s + getQty(trip.id, p.ticketType), 0);
-                const inCart = totalQty > 0;
-                const isFocused = trip.id === selectedTripId;
-                return (
-                  <div
-                    key={`pick-${trip.id}`}
-                    ref={(el) => {
-                      if (el) tripCardRefs.current.set(trip.id, el);
-                      else tripCardRefs.current.delete(trip.id);
-                    }}
-                    style={{
-                      background: isFocused ? "#fdf1ec" : "#ffffff",
-                      border: `${isFocused || inCart ? "2px" : "1px"} solid ${isFocused || inCart ? "#c94510" : "#cdd6da"}`,
-                      padding: "14px 16px",
-                      opacity: soldOut ? 0.55 : 1,
-                    }}
-                  >
-                    <div className="font-plex-mono text-[12px] tracking-[.16em] mb-[3px]" style={{ color: "#9a3c12" }}>
-                      {trip.product.category.toUpperCase()}
-                    </div>
-                    <div className="flex items-baseline justify-between gap-2 mb-1">
-                      <div className="font-archivo text-[16px] font-bold leading-tight">{trip.product.displayName}</div>
-                      {!soldOut && trip.product.showRemaining && trip.seatsRemaining <= 10 && (
-                        <div className="font-plex-mono text-[13px] font-semibold flex-shrink-0" style={{ color: "#9a3c12" }}>
-                          {trip.seatsRemaining} LEFT
-                        </div>
-                      )}
-                    </div>
-                    <div className="font-plex-mono text-[13px] mb-3" style={{ color: "#444141" }}>
-                      {fmtTimeET(trip.startTime)} – {fmtTimeET(trip.endTime)} · {trip.vessel.name}
-                    </div>
-                    {soldOut ? (
-                      <div className="font-plex-mono text-[12px]" style={{ color: "#9aa8ae" }}>SOLD OUT</div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {displayPrices.map((price) => {
-                          const qty = getQty(trip.id, price.ticketType);
-                          const otherQty = displayPrices
-                            .filter((p) => p.ticketType !== price.ticketType)
-                            .reduce((s, p) => s + getQty(trip.id, p.ticketType), 0);
-                          const atMax = qty >= trip.seatsRemaining - otherQty;
-                          const label = price.displayLabel ?? price.ticketType;
-                          return (
-                            <div key={price.ticketType} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                              <div style={{ fontSize: 14, color: "#201e1d" }}>
-                                {label.charAt(0).toUpperCase() + label.slice(1)}
-                              </div>
-                              <InlineStepper
-                                value={qty}
-                                onDec={() => onAdjustQty(trip.id, price.ticketType, -1)}
-                                onInc={() => onAdjustQty(trip.id, price.ticketType, 1)}
-                                atMax={atMax}
-                                decLabel={`One fewer ${label} seat`}
-                                incLabel={`One more ${label} seat`}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+        {/* 2. Cart body — flex:1, scrolls with the page */}
+        <div style={{ flex: 1, padding: "18px 22px 24px" }}>
+          {/* YOUR SEATS header + hold countdown */}
+          <div className="flex items-baseline justify-between gap-2 mb-3" style={{ flexWrap: "wrap" }}>
+            <span
+              className="font-plex-mono text-[12px] font-semibold tracking-[.16em]"
+              style={{ color: "#0d1c26" }}
+            >
+              YOUR SEATS{totalSeats > 0 ? ` · ${totalSeats}` : ""}
+            </span>
+            {holdSecs !== null && (
+              <span
+                className="font-plex-mono text-[12px] font-semibold tracking-[.08em]"
+                style={{ color: isWarning || isExpired ? "#8c3b12" : "#41565f" }}
+              >
+                {isExpired
+                  ? "HOLD EXPIRED — SEATS RELEASED"
+                  : `SEATS HELD ${fmtHoldTime(holdSecs)}`}
+              </span>
+            )}
           </div>
-        ) : (
-          <div style={{ border: "1px dashed #7d7979", background: "#f3f2f2", padding: "20px 18px" }}>
-            <div style={{ fontSize: 17, fontWeight: 800 }}>No day chosen yet.</div>
-            <div style={{ fontSize: 14, color: "#444141", marginTop: 6, lineHeight: 1.5 }}>
-              Pick a day on the calendar and every trip sailing that day lands here — departure window, boat, seats left and its own fare.
-            </div>
-          </div>
-        )}
-      </div>
 
-      {/* ── Bottom: Your seats (permanent) ── */}
-      <div style={{ flexShrink: 0, borderTop: "2px solid #d7d3d3", background: "#f8f4f4" }}>
-        <h2 style={{ fontSize: 14, letterSpacing: "0.14em", textTransform: "uppercase", margin: 0, padding: "14px 20px 10px", color: "#201e1d" }}>
-          Your seats
-        </h2>
-        <div style={{ padding: "0 20px", maxHeight: 260, overflowY: "auto" }}>
-
+          {/* Empty state */}
           {cartItems.length === 0 ? (
-            <div style={{ border: "1px dashed #7d7979", padding: "18px 16px", background: "transparent", marginBottom: 14 }}>
-              <div className="text-[16px] font-bold font-archivo">No seats yet.</div>
-              <div className="text-[14px] mt-1" style={{ lineHeight: 1.5, color: "#444141" }}>
-                Pick a day, then hit <strong>+</strong> on a trip.
+            <div
+              style={{
+                border: "1px dashed #a9b6bc",
+                background: "#eef1f0",
+                padding: "18px 16px",
+              }}
+            >
+              <div className="font-archivo text-[16px] font-bold">No seats yet.</div>
+              <div
+                className="font-archivo text-[14px] mt-1"
+                style={{ lineHeight: 1.5, color: "#41565f" }}
+              >
+                Hit <strong>+</strong> on a ticket type. Nothing is charged until you pay.
               </div>
             </div>
           ) : (
-            <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column" }}>
+            <ul
+              style={{
+                listStyle: "none",
+                margin: 0,
+                padding: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
               {cartItems.map((item) => {
-                const subtotal = item.tickets.reduce((s, t) => s + t.quantity * t.priceCents, 0);
-                const seatsLabel = item.tickets
-                  .map((t) => {
-                    const lbl = t.displayLabel ?? t.ticketType;
-                    return `${t.quantity} ${pluralLabel(lbl, t.quantity)}`;
-                  })
-                  .join(" · ");
-                const dateShort = new Date(item.departureDate + "T12:00:00Z").toLocaleDateString("en-US", {
-                  month: "short", day: "numeric", timeZone: "UTC",
+                const subtotal = item.tickets.reduce(
+                  (s, t) => s + t.quantity * t.priceCents,
+                  0
+                );
+                const dateShort = new Date(
+                  item.departureDate + "T12:00:00Z"
+                ).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  timeZone: "UTC",
                 });
                 return (
                   <li
                     key={`cart-${item.tripId}`}
-                    style={{ padding: "12px 0", borderBottom: "1px solid #d7d3d3" }}
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid #cdd6da",
+                      padding: "16px",
+                    }}
                   >
-                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                      <div className="font-archivo text-[15px] font-bold">{item.productName}</div>
-                      <div className="font-plex-mono text-[15px] font-bold flex-shrink-0">{dollars(subtotal)}</div>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="font-archivo text-[16px] font-bold">{item.productName}</div>
+                      <div className="font-plex-mono text-[17px] font-semibold flex-shrink-0">
+                        {dollars(subtotal)}
+                      </div>
                     </div>
-                    <div className="font-plex-mono text-[13px] mt-[2px]" style={{ color: "#444141" }}>
+                    <div
+                      className="font-plex-mono text-[12px] mt-[3px]"
+                      style={{ color: "#41565f" }}
+                    >
                       {dateShort} · {fmtTimeET(item.startTime)}
                     </div>
-                    <div className="font-plex-mono text-[13px]" style={{ color: "#201e1d" }}>
-                      {seatsLabel}
-                    </div>
+                    {item.tickets.map((t) => {
+                      const lbl = t.displayLabel ?? t.ticketType;
+                      return (
+                        <div
+                          key={t.ticketType}
+                          className="font-plex-mono text-[12px] mt-[2px]"
+                          style={{ color: "#41565f" }}
+                        >
+                          {t.quantity} × {lbl.charAt(0).toUpperCase() + lbl.slice(1)} ·{" "}
+                          {dollars(t.priceCents)}
+                        </div>
+                      );
+                    })}
                     <button
                       type="button"
                       onClick={() => onRemove(item.tripId)}
                       aria-label={`Remove ${item.productName} from cart`}
-                      className="font-plex-mono text-[13px] font-semibold tracking-[.06em] cursor-pointer bg-transparent border-none mt-[3px] underline"
-                      style={{ color: "#9a3c12", padding: "6px 0", minHeight: 44, display: "block" }}
+                      className="font-plex-mono text-[11px] font-semibold tracking-[.06em] cursor-pointer bg-transparent border-none mt-2 underline"
+                      style={{
+                        color: "#8c3b12",
+                        padding: 0,
+                        minHeight: 44,
+                        display: "flex",
+                        alignItems: "center",
+                      }}
                     >
                       REMOVE
                     </button>
@@ -670,36 +846,59 @@ function CartRail({
           )}
         </div>
 
-        {/* Checkout */}
-        {cartItems.length > 0 && (
-          <div style={{ padding: "14px 20px 20px", borderTop: "2px solid #201e1d", background: "#f3f2f2" }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-              <div className="font-plex-mono text-[14px] tracking-[.14em] uppercase" style={{ color: "#444141" }}>Total</div>
-              <div className="font-plex-mono text-[34px] font-bold" style={{ lineHeight: 1 }}>{dollars(totalCents)}</div>
-            </div>
-            <div className="font-plex-mono text-[13px] mt-1" style={{ color: "#444141" }}>
-              {totalSeats} {totalSeats === 1 ? "seat" : "seats"}
-            </div>
-            <button
-              type="button"
-              onClick={onCheckout}
-              className="w-full bg-orange text-white font-archivo text-[17px] font-bold tracking-[.06em] uppercase cursor-pointer hover:bg-orange-press transition-colors border-none flex items-center justify-between gap-3 mt-[14px]"
-              style={{ padding: "0 18px", minHeight: 56 }}
+        {/* 3. Total shelf — sticky at bottom */}
+        <div
+          style={{
+            position: "sticky",
+            bottom: 0,
+            zIndex: 3,
+            borderTop: "2px solid #cdd6da",
+            boxShadow: "0 -8px 16px rgba(13,28,38,.09)",
+            background: "#e6eaea",
+            padding: "14px 22px 18px",
+          }}
+        >
+          <div className="flex items-baseline justify-between gap-2 mb-3">
+            <span
+              className="font-plex-mono text-[12px] font-semibold tracking-[.16em]"
+              style={{ color: "#41565f" }}
             >
-              <span>CHECK OUT</span>
-              <span>{dollars(totalCents)} →</span>
-            </button>
-            <div className="font-plex-mono text-[13px] mt-[10px]" style={{ lineHeight: 1.7, color: "#201e1d" }}>
-              Pay in full now · Free cancellation up to 24h before departure · Automatic refund if weather cancels the trip.
-            </div>
+              TOTAL
+            </span>
+            <span
+              className="font-plex-mono text-[30px] font-bold"
+              style={{ lineHeight: 1, color: "#0d1c26" }}
+            >
+              {dollars(totalCents)}
+            </span>
           </div>
-        )}
+          <button
+            type="button"
+            onClick={hasSeats ? onCheckout : undefined}
+            aria-disabled={!hasSeats}
+            className="w-full font-archivo text-[16px] font-bold tracking-[.08em] uppercase border-none text-white flex items-center justify-between gap-3"
+            style={{
+              background: hasSeats ? "#c94510" : "#b9c4c8",
+              padding: "19px 20px",
+              cursor: hasSeats ? "pointer" : "default",
+            }}
+          >
+            <span>Check out</span>
+            <span>{dollars(totalCents)} →</span>
+          </button>
+          <div
+            className="font-plex-mono text-[11px] tracking-[.1em] mt-3 text-center"
+            style={{ color: "#5b6f79" }}
+          >
+            FREE CANCELLATION · WEATHER REFUNDS · NO ACCOUNT NEEDED
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── Mobile cart bar ──────────────────────────────────────────────────────────
+// ─── MobileCartBar ────────────────────────────────────────────────────────────
 
 function MobileCartBar({
   totalCents,
@@ -717,7 +916,7 @@ function MobileCartBar({
       style={{ padding: "12px 18px" }}
     >
       <div>
-        <div className="font-plex-mono text-[13px] tracking-[.14em] text-ink-dark-3">
+        <div className="font-plex-mono text-[11px] tracking-[.14em] text-ink-dark-3">
           {totalSeats} {totalSeats === 1 ? "SEAT" : "SEATS"}
         </div>
         <div className="font-plex-mono text-[22px] font-bold text-white">{dollars(totalCents)}</div>
@@ -734,239 +933,22 @@ function MobileCartBar({
   );
 }
 
-// ─── Calendar grid ────────────────────────────────────────────────────────────
-
-function MonthGrid({
-  month,
-  byDate,
-  selectedDay,
-  selectedTripId,
-  onDaySelect,
-  onTripSelect,
-  totalQtyForTrip,
-  announceRef,
-}: {
-  month: string;
-  byDate: Record<string, Trip[]>;
-  selectedDay: string | null;
-  selectedTripId: string | null;
-  onDaySelect: (d: string) => void;
-  onTripSelect: (d: string, tripId: string) => void;
-  totalQtyForTrip: (id: string) => number;
-  announceRef: React.RefObject<HTMLDivElement | null>;
-}) {
-  const { year, mon } = parseMonth(month);
-  const firstDow = new Date(Date.UTC(year, mon - 1, 1)).getUTCDay();
-  const lastDay = new Date(Date.UTC(year, mon, 0)).getUTCDate();
-  const today = new Date().toISOString().slice(0, 10);
-  const days = Array.from({ length: lastDay }, (_, i) => `${month}-${String(i + 1).padStart(2,"0")}`);
-  const cells: (string | null)[] = [...Array(firstDow).fill(null), ...days];
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  // Build week rows
-  const weeks: (string | null)[][] = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-
-  // Roving tabindex: the selected day (or first day with trips) is the tab stop
-  const firstTripsDay = days.find((d) => (byDate[d]?.length ?? 0) > 0);
-  const tabDay = selectedDay ?? firstTripsDay ?? days[0];
-
-  return (
-    <div>
-      <div className="grid grid-cols-7 mb-2">
-        {DAYS_SHORT.map((d) => (
-          <div key={d} className="font-plex-mono text-[12px] font-semibold tracking-[.12em] pb-[4px]" style={{ color: "#444141" }}>{d}</div>
-        ))}
-      </div>
-      <div role="grid" aria-label="Trip calendar" className="grid grid-cols-7 gap-[6px]">
-        {weeks.map((week, wi) => (
-          <div key={wi} role="row" style={{ display: "contents" }}>
-            {week.map((date, ci) => {
-              if (!date) {
-                return (
-                  <div
-                    key={`empty-${wi}-${ci}`}
-                    role="gridcell"
-                    aria-hidden="true"
-                    style={{ background: "#eceaea", border: "1px solid #d7d3d3", minHeight: 128 }}
-                  />
-                );
-              }
-
-              const dayTrips = byDate[date] ?? [];
-              const isSelected = date === selectedDay;
-              const isToday = date === today;
-              const hasTrips = dayTrips.length > 0;
-              const inCart = dayTrips.some((t) => totalQtyForTrip(t.id) > 0);
-              const dayNum = parseInt(date.slice(-2));
-              const dtObj = new Date(date + "T12:00:00Z");
-              const fullDateLabel = `${DAYS_LONG[dtObj.getUTCDay()]}, ${MONTHS[dtObj.getUTCMonth()]} ${dayNum}`;
-              const tripCount = dayTrips.length;
-              const ariaLabel = `${fullDateLabel}${isToday ? ", today" : ""}${hasTrips ? `, ${tripCount} ${tripCount === 1 ? "trip" : "trips"}` : ", no trips"}`;
-
-              const cellBg = !hasTrips ? "#eceaea" : isSelected ? "#fdf1ec" : "#f8f4f4";
-              const cellBorder = isSelected
-                ? "2px solid #c94510"
-                : inCart && !isSelected
-                ? "1px solid #c94510"
-                : "1px solid #d7d3d3";
-
-              return (
-                <div
-                  key={date}
-                  role="gridcell"
-                  onClick={() => hasTrips && onDaySelect(date)}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 0,
-                    alignItems: "flex-start",
-                    minHeight: 128,
-                    padding: "9px 8px",
-                    background: cellBg,
-                    border: cellBorder,
-                    cursor: hasTrips ? "pointer" : "default",
-                    width: "100%",
-                  }}
-                >
-                  {/* Day numeral — accessible button, carries keyboard handling */}
-                  <button
-                    type="button"
-                    data-iso={date}
-                    tabIndex={date === tabDay ? 0 : -1}
-                    aria-label={ariaLabel}
-                    aria-pressed={isSelected}
-                    aria-current={isToday ? "date" : undefined}
-                    disabled={!hasTrips}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (hasTrips) {
-                        onDaySelect(date);
-                        if (announceRef.current) {
-                          announceRef.current.textContent = `${fullDateLabel} selected, ${tripCount} ${tripCount === 1 ? "trip" : "trips"}`;
-                        }
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      const grid = e.currentTarget.closest("[role='grid']");
-                      if (!grid) return;
-                      const allButtons = Array.from(grid.querySelectorAll<HTMLButtonElement>("button[data-iso]"));
-                      const idx = allButtons.indexOf(e.currentTarget);
-                      const moves: Record<string, number> = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 7, ArrowUp: -7 };
-                      if (moves[e.key] !== undefined) {
-                        e.preventDefault();
-                        const next = allButtons[idx + moves[e.key]];
-                        if (next) next.focus();
-                      }
-                    }}
-                    style={{
-                      background: "none",
-                      border: 0,
-                      padding: isToday ? "0 0 1px" : 0,
-                      fontFamily: "inherit",
-                      cursor: hasTrips ? "pointer" : "default",
-                      fontSize: 16,
-                      fontWeight: 800,
-                      color: hasTrips ? "#201e1d" : "#7d7979",
-                      borderBottom: isToday ? "3px solid #c94510" : "none",
-                      marginBottom: hasTrips ? 6 : 0,
-                    }}
-                  >
-                    {dayNum}
-                  </button>
-
-                  {/* Trip rows — full list, no truncation */}
-                  {hasTrips && (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", width: "100%", minWidth: 0 }}>
-                      {dayTrips.map((t, i) => {
-                        const low = t.product.showRemaining && t.seatsRemaining <= 6;
-                        const isRowFocused = t.id === selectedTripId && isSelected;
-                        const adultPrice = t.product.prices[0];
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            tabIndex={isSelected ? 0 : -1}
-                            aria-label={`${t.product.displayName}, ${fmtTimeET(t.startTime)}, ${t.vessel.name}${t.vessel.code ? ` (${t.vessel.code})` : ""}, ${adultPrice ? dollars(adultPrice.priceCents) : ""}${low ? `, only ${t.seatsRemaining} left` : ""} — open this trip`}
-                            aria-pressed={isRowFocused}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onTripSelect(date, t.id);
-                              if (announceRef.current) {
-                                announceRef.current.textContent = `${t.product.displayName} at ${fmtTimeET(t.startTime)} on ${fmtFullDate(date)} — ${dayTrips.length} ${dayTrips.length === 1 ? "trip" : "trips"} that day`;
-                              }
-                            }}
-                            style={{
-                              boxSizing: "border-box",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 1,
-                              minWidth: 0,
-                              width: "100%",
-                              fontFamily: "inherit",
-                              textAlign: "left",
-                              cursor: "pointer",
-                              background: isRowFocused ? "#fbe0d3" : "transparent",
-                              padding: "5px 0 5px 7px",
-                              border: 0,
-                              borderLeft: `4px solid ${t.vessel.color}`,
-                              borderBottom: i < dayTrips.length - 1 ? "1px solid #e0dcdc" : "none",
-                            }}
-                          >
-                            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 6 }}>
-                              <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", color: "#201e1d" }}>
-                                {fmtTimeET(t.startTime)}
-                              </span>
-                              {adultPrice && (
-                                <span style={{ fontSize: 13, color: "#201e1d", flexShrink: 0 }}>
-                                  {dollars(adultPrice.priceCents)}
-                                </span>
-                              )}
-                            </div>
-                            <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 5 }}>
-                              <span style={{ fontSize: 12, lineHeight: 1.25, color: "#444141", textAlign: "left" }}>
-                                {t.product.displayName}
-                              </span>
-                              {t.vessel.code && (
-                                <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.04em", color: "#201e1d" }}>
-                                  {t.vessel.code}
-                                </span>
-                              )}
-                              {low && (
-                                <span style={{ fontSize: 12, fontWeight: 600, color: "#9a3c12", marginLeft: "auto", paddingLeft: 6, whiteSpace: "nowrap" }}>
-                                  {t.seatsRemaining} left
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-      <p style={{ margin: "16px 0 0", fontSize: 13, color: "#444141", maxWidth: "62ch" }}>
-        Every sailing that day is listed, with the adult fare. Pick a day to see every ticket type and add seats.
-      </p>
-    </div>
-  );
-}
-
-// ─── Empty state ──────────────────────────────────────────────────────────────
+// ─── EmptyState ───────────────────────────────────────────────────────────────
 
 function EmptyState({ onNextMonth }: { onNextMonth: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
-      <div className="font-plex-mono text-[13px] font-semibold tracking-[.1em] mb-3" style={{ color: "#7d7979" }}>NO TRIPS THIS MONTH</div>
+      <div
+        className="font-plex-mono text-[13px] font-semibold tracking-[.1em] mb-3"
+        style={{ color: "#5b6f79" }}
+      >
+        NO TRIPS THIS MONTH
+      </div>
       <button
         type="button"
         onClick={onNextMonth}
         className="font-plex-mono text-[13px] font-semibold underline hover:opacity-75 transition-opacity tracking-[.08em]"
-        style={{ color: "#9a3c12" }}
+        style={{ color: "#8c3b12" }}
       >
         SEE NEXT AVAILABLE MONTH →
       </button>
@@ -974,7 +956,7 @@ function EmptyState({ onNextMonth }: { onNextMonth: () => void }) {
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── BookingCalendar (main) ───────────────────────────────────────────────────
 
 export function BookingCalendar({
   initialTrips,
@@ -998,26 +980,24 @@ export function BookingCalendar({
   const [month, setMonth] = useState(initialMonth);
   const [trips, setTrips] = useState<Trip[]>(initialTrips);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [selectedDay, setSelectedDay] = useState<string | null>(initialDate ?? null);
-  const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [vesselFilter, setVesselFilter] = useState<string>("all");
   const [headerH, setHeaderH] = useState(0);
 
-  // cart: tripId:ticketType -> quantity
   const [cart, setCart] = useState<Map<string, number>>(new Map());
-  // cached prices so total stays correct across month navigation
   const [cartPrices, setCartPrices] = useState<Map<string, number>>(new Map());
-  // enriched cart items (written to localStorage for checkout page)
   const [cartItems, setCartItems] = useState<EnrichedCartItem[]>([]);
 
-  // Refs for scroll targeting
-  const tripCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const railScrollRef = useRef<HTMLDivElement>(null);
-  const footerRef = useRef<HTMLDivElement>(null);
+  // Seat hold timer
+  const [holdExpiresAt, setHoldExpiresAt] = useState<number | null>(null);
+  const [holdSecs, setHoldSecs] = useState<number | null>(null);
+  const holdStartedRef = useRef(false);
+  const cartRestoredRef = useRef(false);
+
   const announceRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
 
+  // Measure sticky header height
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
@@ -1028,7 +1008,7 @@ export function BookingCalendar({
     return () => ro.disconnect();
   }, []);
 
-  // Restore cart from localStorage, then pre-add initialTripId if provided
+  // Restore cart + hold from localStorage on mount
   useEffect(() => {
     let restoredItems: EnrichedCartItem[] = [];
     try {
@@ -1055,7 +1035,25 @@ export function BookingCalendar({
       }
     } catch { /* ignore corrupt data */ }
 
-    // Pre-add 1 adult ticket for the initial trip (homepage BOOK button)
+    // Restore hold timer if still valid and cart is non-empty
+    if (restoredItems.length > 0) {
+      try {
+        const storedHold = localStorage.getItem("openboat_hold_expires");
+        if (storedHold) {
+          const expiresAt = parseInt(storedHold);
+          if (expiresAt > Date.now()) {
+            setHoldExpiresAt(expiresAt);
+            holdStartedRef.current = true;
+          } else {
+            localStorage.removeItem("openboat_hold_expires");
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    cartRestoredRef.current = true;
+
+    // Pre-add 1 adult ticket when navigating from homepage BOOK button
     if (initialTripId && !restoredItems.some((i) => i.tripId === initialTripId)) {
       const trip = initialTrips.find((t) => t.id === initialTripId);
       if (trip) {
@@ -1078,16 +1076,31 @@ export function BookingCalendar({
               category: trip.product.category,
               productName: trip.product.displayName,
               seatsRemaining: trip.seatsRemaining,
-              tickets: [{ ticketType: adultPrice.ticketType, quantity: 1, priceCents: adultPrice.priceCents }],
+              tickets: [
+                {
+                  ticketType: adultPrice.ticketType,
+                  quantity: 1,
+                  priceCents: adultPrice.priceCents,
+                },
+              ],
             },
           ]);
           setSelectedDay(trip.departureDate);
+          // Start hold for this initial seat
+          if (!holdStartedRef.current) {
+            const expiresAt = Date.now() + 10 * 60 * 1000;
+            holdStartedRef.current = true;
+            setHoldExpiresAt(expiresAt);
+            try {
+              localStorage.setItem("openboat_hold_expires", String(expiresAt));
+            } catch { /* ignore */ }
+          }
         }
       }
     }
-  }, []);
+  }, []); // intentional: run once on mount only
 
-  // Sync cartItems to localStorage
+  // Persist cart to localStorage
   useEffect(() => {
     if (cartItems.length === 0) {
       localStorage.removeItem("openboat_cart");
@@ -1096,30 +1109,19 @@ export function BookingCalendar({
     }
   }, [cartItems]);
 
+  // Hold timer tick
+  useEffect(() => {
+    if (holdExpiresAt === null) return;
+    const tick = () =>
+      setHoldSecs(Math.max(0, Math.round((holdExpiresAt - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [holdExpiresAt]);
+
   useEffect(() => {
     posthog.capture("booking_view");
   }, []);
-
-  // Scroll to focused trip card after selectedTripId changes
-  useEffect(() => {
-    if (!selectedTripId) return;
-    requestAnimationFrame(() => {
-      const card = tripCardRefs.current.get(selectedTripId);
-      const rail = railScrollRef.current;
-      if (!card) return;
-      if (rail && rail.scrollHeight > rail.clientHeight + 4) {
-        rail.scrollTo({
-          top: rail.scrollTop + card.getBoundingClientRect().top - rail.getBoundingClientRect().top - 12,
-          behavior: "smooth",
-        });
-      } else {
-        window.scrollTo({
-          top: card.getBoundingClientRect().top + window.scrollY - 90,
-          behavior: "smooth",
-        });
-      }
-    });
-  }, [selectedTripId]);
 
   const { year, mon } = parseMonth(month);
 
@@ -1129,7 +1131,6 @@ export function BookingCalendar({
     setTrips(data);
     setMonth(m);
     setSelectedDay(null);
-    setSelectedTripId(null);
     setLoading(false);
   }
   function prevMonth() {
@@ -1144,80 +1145,84 @@ export function BookingCalendar({
   function getQty(tripId: string, ticketType: string) {
     return cart.get(`${tripId}:${ticketType}`) ?? 0;
   }
-  function totalQtyForTrip(tripId: string) {
-    return Array.from(cart.entries())
-      .filter(([k]) => k.startsWith(`${tripId}:`))
-      .reduce((sum, [, v]) => sum + v, 0);
-  }
 
-  // §4: Delta-based functional state update — prevents stale-closure seat drops on rapid taps.
-  // Both setCart and setCartItems derive new quantities from their own prev, never from the render
-  // closure. Flag: no other setState(absoluteValue) patterns remain in the stepper path.
-  const adjustQty = useCallback((tripId: string, ticketType: string, delta: 1 | -1) => {
-    const trip = trips.find((t) => t.id === tripId);
-    if (!trip) return;
+  const adjustQty = useCallback(
+    (tripId: string, ticketType: string, delta: 1 | -1) => {
+      const trip = trips.find((t) => t.id === tripId);
+      if (!trip) return;
 
-    const k = `${tripId}:${ticketType}`;
-    const price = trip.product.prices.find((p) => p.ticketType === ticketType);
+      const k = `${tripId}:${ticketType}`;
+      const price = trip.product.prices.find((p) => p.ticketType === ticketType);
 
-    if (price) {
-      setCartPrices((prev) => new Map(prev).set(k, price.priceCents));
-    }
-
-    setCart((prev) => {
-      const next = new Map(prev);
-      const otherQty = trip.product.prices
-        .filter((p) => p.ticketType !== ticketType)
-        .reduce((sum, p) => sum + (next.get(`${tripId}:${p.ticketType}`) ?? 0), 0);
-      const maxForType = trip.seatsRemaining - otherQty;
-      const currentQty = next.get(k) ?? 0;
-      const newQty = Math.max(0, Math.min(maxForType, currentQty + delta));
-      if (newQty === 0) next.delete(k);
-      else next.set(k, newQty);
-      return next;
-    });
-
-    const displayPrices = getDisplayPrices(trip.product.prices);
-    const isCollapsed = displayPrices.length === 1 && displayPrices[0].displayLabel === "seat";
-    const displayLabel = isCollapsed ? "seat" : ticketType;
-
-    setCartItems((prev) => {
-      const existing = prev.find((i) => i.tripId === tripId);
-      const without = prev.filter((i) => i.tripId !== tripId);
-
-      const existingQty = existing?.tickets.find((t) => t.ticketType === ticketType)?.quantity ?? 0;
-      const otherTickets = existing?.tickets.filter((t) => t.ticketType !== ticketType) ?? [];
-      const otherQty = otherTickets.reduce((s, t) => s + t.quantity, 0);
-      const maxForType = trip.seatsRemaining - otherQty;
-      const newQty = Math.max(0, Math.min(maxForType, existingQty + delta));
-
-      const newTickets = otherTickets.filter((t) => t.quantity > 0).map((t) => ({
-        ...t,
-        displayLabel: isCollapsed ? "seat" : t.ticketType,
-      }));
-      if (newQty > 0 && price) {
-        newTickets.push({ ticketType, quantity: newQty, priceCents: price.priceCents, displayLabel });
+      if (price) {
+        setCartPrices((prev) => new Map(prev).set(k, price.priceCents));
       }
 
-      if (newTickets.length === 0) return without;
-      return [
-        ...without,
-        {
-          tripId: trip.id,
-          departureDate: trip.departureDate,
-          startTime: trip.startTime,
-          endTime: trip.endTime,
-          vesselName: trip.vessel.name,
-          vesselColor: trip.vessel.color,
-          category: trip.product.category,
-          productName: trip.product.displayName,
-          seatsRemaining: trip.seatsRemaining,
-          tickets: newTickets,
-        },
-      ];
-    });
+      setCart((prev) => {
+        const next = new Map(prev);
+        const otherQty = trip.product.prices
+          .filter((p) => p.ticketType !== ticketType)
+          .reduce((sum, p) => sum + (next.get(`${tripId}:${p.ticketType}`) ?? 0), 0);
+        const maxForType = trip.seatsRemaining - otherQty;
+        const currentQty = next.get(k) ?? 0;
+        const newQty = Math.max(0, Math.min(maxForType, currentQty + delta));
+        if (newQty === 0) next.delete(k);
+        else next.set(k, newQty);
+        return next;
+      });
 
-  }, [trips]);
+      const displayPrices = getDisplayPrices(trip.product.prices);
+      const isCollapsed =
+        displayPrices.length === 1 && displayPrices[0].displayLabel === "seat";
+      const displayLabel = isCollapsed ? "seat" : ticketType;
+
+      setCartItems((prev) => {
+        const existing = prev.find((i) => i.tripId === tripId);
+        const without = prev.filter((i) => i.tripId !== tripId);
+        const existingQty =
+          existing?.tickets.find((t) => t.ticketType === ticketType)?.quantity ?? 0;
+        const otherTickets =
+          existing?.tickets.filter((t) => t.ticketType !== ticketType) ?? [];
+        const otherQty = otherTickets.reduce((s, t) => s + t.quantity, 0);
+        const maxForType = trip.seatsRemaining - otherQty;
+        const newQty = Math.max(0, Math.min(maxForType, existingQty + delta));
+        const newTickets = otherTickets.filter((t) => t.quantity > 0).map((t) => ({
+          ...t,
+          displayLabel: isCollapsed ? "seat" : t.ticketType,
+        }));
+        if (newQty > 0 && price) {
+          newTickets.push({ ticketType, quantity: newQty, priceCents: price.priceCents, displayLabel });
+        }
+        if (newTickets.length === 0) return without;
+        return [
+          ...without,
+          {
+            tripId: trip.id,
+            departureDate: trip.departureDate,
+            startTime: trip.startTime,
+            endTime: trip.endTime,
+            vesselName: trip.vessel.name,
+            vesselColor: trip.vessel.color,
+            category: trip.product.category,
+            productName: trip.product.displayName,
+            seatsRemaining: trip.seatsRemaining,
+            tickets: newTickets,
+          },
+        ];
+      });
+
+      // Start hold timer on first seat added
+      if (delta === 1 && cartRestoredRef.current && !holdStartedRef.current) {
+        const expiresAt = Date.now() + 10 * 60 * 1000;
+        holdStartedRef.current = true;
+        setHoldExpiresAt(expiresAt);
+        try {
+          localStorage.setItem("openboat_hold_expires", String(expiresAt));
+        } catch { /* ignore */ }
+      }
+    },
+    [trips]
+  );
 
   function removeFromCart(tripId: string) {
     const item = cartItems.find((i) => i.tripId === tripId);
@@ -1230,24 +1235,31 @@ export function BookingCalendar({
       keys.forEach((k) => next.delete(k));
       return next;
     });
-    setCartItems((prev) => prev.filter((i) => i.tripId !== tripId));
-    if (announceRef.current) announceRef.current.textContent = `${item?.productName ?? "Trip"} removed`;
+    const newItems = cartItems.filter((i) => i.tripId !== tripId);
+    setCartItems(newItems);
+    if (announceRef.current) {
+      announceRef.current.textContent = `${item?.productName ?? "Trip"} removed`;
+    }
+    // Clear hold when cart becomes empty
+    if (newItems.length === 0) {
+      setHoldExpiresAt(null);
+      setHoldSecs(null);
+      holdStartedRef.current = false;
+      try { localStorage.removeItem("openboat_hold_expires"); } catch { /* ignore */ }
+    }
   }
 
   const totalCents = Array.from(cart.entries()).reduce(
     (sum, [key, qty]) => sum + qty * (cartPrices.get(key) ?? 0),
-    0,
+    0
   );
   const totalSeats = Array.from(cart.values()).reduce((a, b) => a + b, 0);
 
   function handleDaySelect(date: string) {
     setSelectedDay(date);
-    setSelectedTripId(null);
-  }
-
-  function handleTripSelect(date: string, tripId: string) {
-    setSelectedDay(date);
-    setSelectedTripId(tripId);
+    const dayNum = parseInt(date.slice(-2));
+    const el = document.getElementById(`day-${dayNum}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function goToCheckout() {
@@ -1256,35 +1268,47 @@ export function BookingCalendar({
 
   // Unique vessels from current month's trips
   const vessels = Array.from(
-    trips.reduce((map, t) => {
-      if (!map.has(t.vessel.name)) map.set(t.vessel.name, t.vessel);
-      return map;
-    }, new Map<string, VesselInfo>()).values()
+    trips
+      .reduce((map, t) => {
+        if (!map.has(t.vessel.name)) map.set(t.vessel.name, t.vessel);
+        return map;
+      }, new Map<string, VesselInfo>())
+      .values()
   );
 
-  // Filter trips by vessel
-  const filteredTrips = vesselFilter === "all"
-    ? trips
-    : trips.filter((t) => t.vessel.name === vesselFilter);
+  const filteredTrips =
+    vesselFilter === "all" ? trips : trips.filter((t) => t.vessel.name === vesselFilter);
 
   const byDate = filteredTrips.reduce<Record<string, Trip[]>>((acc, t) => {
     (acc[t.departureDate] ??= []).push(t);
     return acc;
   }, {});
   const dates = Object.keys(byDate).sort();
-  const dayTrips = selectedDay ? (byDate[selectedDay] ?? []) : [];
+  const cartDates = new Set(cartItems.map((i) => i.departureDate));
 
   return (
     <div
       className="bg-deck font-archivo"
-      style={{ maxWidth: 1440, margin: "0 auto", borderLeft: "2px solid #cdd6da", borderRight: "2px solid #cdd6da", minHeight: "100vh" }}
+      style={{
+        maxWidth: 1440,
+        margin: "0 auto",
+        borderLeft: "2px solid #cdd6da",
+        borderRight: "2px solid #cdd6da",
+        minHeight: "100vh",
+      }}
     >
-      {/* aria-live region for announcements */}
       <div
         ref={announceRef}
         aria-live="polite"
         aria-atomic="true"
-        style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" }}
+        style={{
+          position: "absolute",
+          width: 1,
+          height: 1,
+          overflow: "hidden",
+          clip: "rect(0 0 0 0)",
+          whiteSpace: "nowrap",
+        }}
       />
 
       <div ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 50 }}>
@@ -1295,56 +1319,35 @@ export function BookingCalendar({
           step={1}
         />
         <FilterBar
-          month={month}
-          view={viewMode}
           filter={vesselFilter}
           vessels={vessels}
-          onPrevMonth={prevMonth}
-          onNextMonth={nextMonth}
-          onViewChange={setViewMode}
+          filteredTrips={filteredTrips}
           onFilterChange={setVesselFilter}
-          announceRef={announceRef}
         />
       </div>
 
       <div className="booking-shell">
-        {/* Left: trip list / calendar */}
+        {/* Left: trip list */}
         <div
-          className={`transition-opacity ${loading ? "opacity-40 pointer-events-none" : ""}`}
+          className={`booking-list-col transition-opacity ${
+            loading ? "opacity-40 pointer-events-none" : ""
+          }`}
           aria-busy={loading}
           style={{ padding: "8px 24px 120px" }}
         >
-          {viewMode === "list" ? (
-            dates.length === 0 ? (
-              <EmptyState onNextMonth={nextMonth} />
-            ) : (
-              dates.map((date) => (
-                <DayGroup
-                  key={date}
-                  dateStr={date}
-                  trips={byDate[date] ?? []}
-                  getQty={getQty}
-                  onAdjustQty={adjustQty}
-                />
-              ))
-            )
+          {dates.length === 0 ? (
+            <EmptyState onNextMonth={nextMonth} />
           ) : (
-            <div style={{ paddingTop: 22 }}>
-              {dates.length === 0 ? (
-                <EmptyState onNextMonth={nextMonth} />
-              ) : (
-                <MonthGrid
-                  month={month}
-                  byDate={byDate}
-                  selectedDay={selectedDay}
-                  selectedTripId={selectedTripId}
-                  onDaySelect={handleDaySelect}
-                  onTripSelect={handleTripSelect}
-                  totalQtyForTrip={totalQtyForTrip}
-                  announceRef={announceRef}
-                />
-              )}
-            </div>
+            dates.map((date) => (
+              <DayGroup
+                key={date}
+                dateStr={date}
+                trips={byDate[date] ?? []}
+                getQty={getQty}
+                onAdjustQty={adjustQty}
+                headerH={headerH}
+              />
+            ))
           )}
         </div>
 
@@ -1353,18 +1356,17 @@ export function BookingCalendar({
           cartItems={cartItems}
           totalCents={totalCents}
           totalSeats={totalSeats}
+          holdSecs={holdSecs}
+          month={month}
+          byDate={byDate}
           selectedDay={selectedDay}
-          selectedTripId={selectedTripId}
-          dayTrips={dayTrips}
-          getQty={getQty}
-          onAdjustQty={adjustQty}
+          cartDates={cartDates}
+          headerH={headerH}
           onRemove={removeFromCart}
           onCheckout={goToCheckout}
-          tripCardRefs={tripCardRefs}
-          scrollRef={railScrollRef}
-          footerRef={footerRef}
-          headerH={headerH}
-          announceRef={announceRef}
+          onDaySelect={handleDaySelect}
+          onPrevMonth={prevMonth}
+          onNextMonth={nextMonth}
         />
       </div>
 
@@ -1376,12 +1378,21 @@ export function BookingCalendar({
 
       {/* Footer */}
       <div
-        ref={footerRef}
         className="hull bg-hull font-plex-mono text-[13px] tracking-[.04em]"
-        style={{ padding: "16px 24px", color: "#c9d2d8", borderTop: "2px solid #201e1d", display: "flex", flexWrap: "wrap", gap: "8px 28px", justifyContent: "space-between", position: "sticky", bottom: 0, zIndex: 10 }}
+        style={{
+          padding: "16px 24px",
+          color: "#c9d2d8",
+          borderTop: "2px solid #201e1d",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "8px 28px",
+          justifyContent: "space-between",
+        }}
       >
         <span>FREE CANCELLATION TO 24H · RODS &amp; BAIT ABOARD · WEATHER REFUNDS AUTOMATIC</span>
-        <a href="/" style={{ color: "#ffffff", textDecoration: "none" }}>← BACK TO HOME</a>
+        <a href="/" style={{ color: "#ffffff", textDecoration: "none" }}>
+          ← BACK TO HOME
+        </a>
       </div>
     </div>
   );
