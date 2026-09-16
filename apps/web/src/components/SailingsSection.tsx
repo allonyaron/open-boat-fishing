@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { BoatGlyph } from "@/components/icons/BoatGlyph";
 
 export type FormattedSailing = {
   tripId: string;
@@ -113,16 +114,12 @@ export function SailingsSection({
         </div>
       </div>
 
-      {/* ── Week belt (mobile: sticky 7-col grid; desktop: flex chips) ── */}
+      {/* ── Week belt — 7-column grid at all widths ── */}
       <div
         className="sticky bg-deck border-b border-rule"
         style={{ top: 54, zIndex: 10, padding: "10px 16px 10px", marginTop: 10 }}
       >
-        {/* Mobile 7-column grid */}
-        <div
-          className="lg:hidden"
-          style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
           {weekDates.map((dateStr) => {
             const dt = new Date(dateStr + "T12:00:00Z");
             const dow = dt.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).slice(0, 2).toUpperCase();
@@ -130,7 +127,6 @@ export function SailingsSection({
             const hasTrips = datesWithTrips.has(dateStr);
             const count = tripCountByDate.get(dateStr) ?? 0;
             const isSelected = !showAllWeek && selectedDate === dateStr;
-            const countLabel = hasTrips ? (count === 1 ? "1 TRIP" : `${count} TRIPS`) : "—";
 
             return (
               <button
@@ -157,125 +153,42 @@ export function SailingsSection({
               >
                 <span
                   className="font-plex-mono"
-                  style={{
-                    fontSize: 9,
-                    fontWeight: 500,
-                    letterSpacing: ".06em",
-                    color: isSelected ? "#ffe3d6" : "#5b6f79",
-                  }}
+                  style={{ fontSize: 9, fontWeight: 500, letterSpacing: ".06em", color: isSelected ? "#ffe3d6" : "#5b6f79" }}
                 >
                   {dow}
                 </span>
                 <span
                   className="font-archivo font-bold"
-                  style={{
-                    fontSize: 19,
-                    lineHeight: 1,
-                    color: isSelected ? "#fff" : hasTrips ? "#16354a" : "#5b6f79",
-                  }}
+                  style={{ fontSize: 19, lineHeight: 1, color: isSelected ? "#fff" : hasTrips ? "#16354a" : "#5b6f79" }}
                 >
                   {day}
                 </span>
+                {/* Mobile: count + glyph */}
                 <span
-                  className="font-plex-mono font-semibold"
-                  style={{
-                    fontSize: 9,
-                    letterSpacing: ".06em",
-                    color: isSelected ? "#ffe3d6" : "#5b6f79",
-                  }}
+                  className="flex lg:hidden"
+                  style={{ alignItems: "center", justifyContent: "center", gap: 3, height: 11 }}
                 >
-                  {countLabel}
+                  {hasTrips ? (
+                    <>
+                      <span className="font-plex-mono font-semibold" style={{ fontSize: 10, color: isSelected ? "#ffe3d6" : "#5b6f79" }}>
+                        {count}
+                      </span>
+                      <BoatGlyph color={isSelected ? "#ffe3d6" : "#5b6f79"} />
+                    </>
+                  ) : null}
                 </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Desktop flex chips */}
-        <div className="hidden lg:flex flex-wrap gap-2 items-center">
-          <button
-            type="button"
-            onClick={() => setShowAllWeek(true)}
-            className="font-plex-mono font-bold"
-            style={{
-              background: showAllWeek ? "#c94510" : "#fff",
-              color: showAllWeek ? "#fff" : "#16354a",
-              boxShadow: showAllWeek ? "none" : "inset 0 0 0 1px #cdd6da",
-              border: "none",
-              minHeight: 52,
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "0 18px",
-              fontSize: 13,
-              letterSpacing: ".1em",
-              cursor: "pointer",
-            }}
-          >
-            All week
-          </button>
-          {weekDates.map((dateStr) => {
-            const dt = new Date(dateStr + "T12:00:00Z");
-            const dow = dt.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).toUpperCase();
-            const day = dt.getUTCDate();
-            const hasTrips = datesWithTrips.has(dateStr);
-            const isSelected = !showAllWeek && selectedDate === dateStr;
-
-            if (!hasTrips) {
-              return (
+                {/* Desktop: count + glyph + word on one line */}
                 <span
-                  key={dateStr}
-                  style={{
-                    background: "#f1f4f5",
-                    boxShadow: "inset 0 0 0 1px #dde4e6",
-                    color: "#5b6f79",
-                    minWidth: 52,
-                    minHeight: 52,
-                    display: "inline-flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 3,
-                    cursor: "default",
-                    padding: "0 10px",
-                  }}
+                  className="hidden lg:flex"
+                  style={{ alignItems: "center", justifyContent: "center", gap: 3, height: 11 }}
                 >
-                  <span className="font-plex-mono font-bold" style={{ fontSize: 10, letterSpacing: ".12em" }}>{dow}</span>
-                  <span className="font-plex-mono font-bold" style={{ fontSize: 22, lineHeight: 1 }}>{day}</span>
-                </span>
-              );
-            }
-
-            return (
-              <button
-                key={dateStr}
-                type="button"
-                onClick={() => { setShowAllWeek(false); setSelectedDate(isSelected ? null : dateStr); }}
-                style={{
-                  background: isSelected ? "#c94510" : "#fff",
-                  boxShadow: isSelected ? "none" : "inset 0 0 0 1px #cdd6da",
-                  border: "none",
-                  minWidth: 52,
-                  minHeight: 52,
-                  display: "inline-flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 3,
-                  cursor: "pointer",
-                  padding: "0 10px",
-                }}
-              >
-                <span
-                  className="font-plex-mono font-bold"
-                  style={{ fontSize: 10, letterSpacing: ".12em", color: isSelected ? "rgba(255,255,255,.75)" : "#41565f" }}
-                >
-                  {dow}
-                </span>
-                <span
-                  className="font-plex-mono font-bold"
-                  style={{ fontSize: 22, lineHeight: 1, color: isSelected ? "#fff" : "#16354a" }}
-                >
-                  {day}
+                  {hasTrips ? (
+                    <>
+                      <span className="font-plex-mono font-semibold" style={{ fontSize: 9, letterSpacing: ".06em", color: isSelected ? "#ffe3d6" : "#5b6f79" }}>
+                        {count === 1 ? "1 TRIP" : `${count} TRIPS`}
+                      </span>
+                    </>
+                  ) : null}
                 </span>
               </button>
             );
