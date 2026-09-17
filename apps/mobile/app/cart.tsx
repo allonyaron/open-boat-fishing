@@ -72,7 +72,7 @@ export default function CartScreen() {
                 {tickets.map((t) => (
                   <View key={t.price.ticketType} style={s.ticketRow}>
                     <Text style={s.ticketLabel}>
-                      {t.qty} × {t.price.ticketType}
+                      {t.qty} × {t.price.ticketType.charAt(0).toUpperCase() + t.price.ticketType.slice(1)}
                     </Text>
                     <Text style={s.ticketPrice}>{dollars(t.qty * t.price.priceCents)}</Text>
                   </View>

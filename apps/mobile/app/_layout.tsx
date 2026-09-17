@@ -27,7 +27,10 @@ function AppStack() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(mate)" options={{ headerShown: false }} />
-        <Stack.Screen name="reports-list" options={{ title: "Fishing Reports" }} />
+        <Stack.Screen
+          name="reports-list"
+          options={{ title: "Fishing Reports", headerBackButtonDisplayMode: "minimal" }}
+        />
         <Stack.Screen name="cart" options={{ headerShown: false, presentation: "fullScreenModal" }} />
         <Stack.Screen name="checkout" options={{ headerShown: false }} />
         <Stack.Screen
