@@ -281,7 +281,7 @@ function UpcomingCard({ g, onPress }: { g: Grouped; onPress: () => void }) {
   const { trip } = g.item;
   return (
     <TouchableOpacity style={u.card} onPress={onPress} activeOpacity={0.85}>
-      <View style={[u.bar, { backgroundColor: tripTypeColor(trip.product.category, trip.vessel.color) }]} />
+      <View style={[u.bar, { backgroundColor: tripTypeColor(trip.product.category) }]} />
       <View style={u.body}>
         <Text style={u.date}>{fmtDate(trip.departureDate)} · {fmtTime(trip.startTime)}</Text>
         <Text style={u.name}>{trip.product.displayName}</Text>

@@ -45,15 +45,27 @@ export function getDisplayPrices(prices: Price[]): (Price & { displayLabel: stri
   return active.map((p) => ({ ...p, displayLabel: p.ticketType }));
 }
 
-/** Trip-type color bar: category first, vessel color as fallback for unmapped categories. */
-export function tripTypeColor(category: string, vesselColor: string): string {
-  const key = category.toLowerCase() as keyof typeof tripType;
-  return tripType[key]?.color ?? vesselColor;
+/**
+ * Trip-type (bay/offshore/overnight) from the product category string.
+ * Mirrors tripTypeFromCategory in apps/web/src/app/(public)/page.tsx exactly —
+ * `product.category` holds a species/product label (e.g. "Fluke", "Sea Bass"),
+ * not a trip-type key, so this is substring matching, not a lookup.
+ */
+function tripTypeFromCategory(category: string): { color: string; label: string } {
+  const lower = category.toLowerCase();
+  if (lower.includes("overnight") || lower.includes("night")) return tripType.overnight;
+  if (lower.includes("offshore") || lower.includes("deep") || lower.includes("sea bass") || lower.includes("canyon")) {
+    return tripType.offshore;
+  }
+  return tripType.bay;
+}
+
+export function tripTypeColor(category: string): string {
+  return tripTypeFromCategory(category).color;
 }
 
 export function tripTypeLabel(category: string): string {
-  const key = category.toLowerCase() as keyof typeof tripType;
-  return tripType[key]?.label ?? category.toUpperCase();
+  return tripTypeFromCategory(category).label;
 }
 
 export function cartQtyForTrip(cart: Cart, trip: Trip): number {

@@ -252,7 +252,7 @@ export default function CheckoutScreen() {
           <View style={s.card}>
             {linesByTrip.map(({ trip, lines }, idx) => (
               <View key={trip.id} style={[s.tripGroup, idx < linesByTrip.length - 1 && s.tripGroupBorder]}>
-                <View style={[s.tripColorBar, { backgroundColor: tripTypeColor(trip.product.category, trip.vessel.color) }]} />
+                <View style={[s.tripColorBar, { backgroundColor: tripTypeColor(trip.product.category) }]} />
                 <View style={s.tripGroupBody}>
                   <Text style={s.tripVessel}>{trip.vessel.name}</Text>
                   <Text style={s.tripMeta}>{trip.product.displayName}</Text>

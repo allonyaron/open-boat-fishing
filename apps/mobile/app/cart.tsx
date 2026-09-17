@@ -62,7 +62,7 @@ export default function CartScreen() {
         ) : (
           lines.map(({ trip, tickets, subtotal }) => (
             <View key={trip.id} style={s.tripCard}>
-              <View style={[s.tripBar, { backgroundColor: tripTypeColor(trip.product.category, trip.vessel.color) }]} />
+              <View style={[s.tripBar, { backgroundColor: tripTypeColor(trip.product.category) }]} />
               <View style={s.tripBody}>
                 <Text style={s.tripKicker}>{tripTypeLabel(trip.product.category)}</Text>
                 <Text style={s.tripName}>{trip.product.displayName}</Text>
