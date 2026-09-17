@@ -18,15 +18,13 @@ import { useFocusEffect } from "expo-router";
 import { API_URL } from "@/lib/api";
 import { fmtTime } from "@openboat/utils";
 import * as SecureStore from "expo-secure-store";
-import { Colors } from "@/constants/Colors";
+import { color, font, ls, space, tracking } from "@/constants/nativeTokens";
 import { useCustomerAuth } from "@/lib/customer-auth-context";
 import { saveCustomerToken } from "@/lib/customer-auth";
 import { registerForPushNotifications, type NotificationPrefs } from "@/lib/push-notifications";
 
 const PUSH_TOKEN_KEY = "expo_push_token";
 const PREFS_KEY = "notification_prefs";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 type BookingItem = {
   id: string;
@@ -51,55 +49,35 @@ type Booking = {
   items: BookingItem[];
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function fmt$(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso + "T12:00:00").toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-// fmtTime imported from @openboat/utils
-
-function statusColor(s: string) {
-  if (s === "cancelled") return Colors.error;
-  if (s === "sailed" || s === "confirmed") return Colors.success;
-  return Colors.inkSubtle;
+function statusColor(st: string) {
+  if (st === "cancelled") return color.orangeInk;
+  if (st === "sailed" || st === "confirmed") return color.greenOpen;
+  return color.ink3;
 }
-
-// ─── BookingCard ──────────────────────────────────────────────────────────────
 
 function BookingCard({ booking }: { booking: Booking }) {
   return (
     <View style={b.card}>
       <View style={b.cardHeader}>
-        <Text style={b.code}>#{booking.confirmationCode}</Text>
-        <Text style={[b.status, { color: statusColor(booking.status) }]}>
-          {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-        </Text>
+        <Text style={b.code}>{booking.confirmationCode}</Text>
+        <Text style={[b.status, { color: statusColor(booking.status) }]}>{booking.status.toUpperCase()}</Text>
       </View>
       {booking.items.map((item) => (
         <View key={item.id} style={b.item}>
-          <View style={[b.colorDot, { backgroundColor: item.vesselColor || Colors.teal }]} />
+          <View style={[b.colorDot, { backgroundColor: item.vesselColor || color.hull }]} />
           <View style={b.itemBody}>
             <Text style={b.itemVessel}>{item.vesselName}</Text>
             <Text style={b.itemProduct}>{item.productName}</Text>
             <Text style={b.itemDate}>
-              {fmtDate(item.tripDepartureDate)} · {fmtTime(item.tripStartTime)}–
-              {fmtTime(item.tripEndTime)}
-            </Text>
-            <Text style={b.itemTickets}>
-              {item.tickets
-                .filter((t) => !t.voided)
-                .map((t) => t.ticketType)
-                .join(", ")}
+              {fmtDate(item.tripDepartureDate)} · {fmtTime(item.tripStartTime)}–{fmtTime(item.tripEndTime)}
             </Text>
           </View>
         </View>
@@ -110,8 +88,6 @@ function BookingCard({ booking }: { booking: Booking }) {
     </View>
   );
 }
-
-// ─── SignInForm ───────────────────────────────────────────────────────────────
 
 function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
   const [step, setStep] = useState<"email" | "otp">("email");
@@ -135,11 +111,8 @@ function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
         body: JSON.stringify({ email: clean }),
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "Failed to send code.");
-      } else {
-        setStep("otp");
-      }
+      if (!res.ok) setError(data.error ?? "Failed to send code.");
+      else setStep("otp");
     } catch {
       setError("Could not connect. Check your network.");
     } finally {
@@ -162,11 +135,8 @@ function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
         body: JSON.stringify({ email: email.trim().toLowerCase(), otp: clean }),
       });
       const data = (await res.json()) as { token?: string; error?: string };
-      if (!res.ok || !data.token) {
-        setError(data.error ?? "Incorrect code. Try again.");
-      } else {
-        onSignedIn(data.token);
-      }
+      if (!res.ok || !data.token) setError(data.error ?? "Incorrect code. Try again.");
+      else onSignedIn(data.token);
     } catch {
       setError("Could not connect. Check your network.");
     } finally {
@@ -177,20 +147,14 @@ function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={f.wrap}>
-        <Text style={f.heading}>Sign In</Text>
-        <Text style={f.sub}>
-          {step === "email"
-            ? "Enter your email to receive a one-time code."
-            : `We sent a 6-digit code to ${email}. Enter it below.`}
-        </Text>
-
+        <Text style={f.label}>{step === "email" ? "EMAIL" : "6-DIGIT CODE"}</Text>
         {step === "email" ? (
           <TextInput
             style={f.input}
             value={email}
             onChangeText={setEmail}
             placeholder="you@example.com"
-            placeholderTextColor={Colors.inkSubtle}
+            placeholderTextColor={color.disabledBorder}
             autoCapitalize="none"
             keyboardType="email-address"
             autoCorrect={false}
@@ -204,7 +168,7 @@ function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
             value={otp}
             onChangeText={setOtp}
             placeholder="000000"
-            placeholderTextColor={Colors.inkSubtle}
+            placeholderTextColor={color.disabledBorder}
             keyboardType="number-pad"
             maxLength={6}
             returnKeyType="done"
@@ -216,28 +180,13 @@ function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
 
         {error ? <Text style={f.error}>{error}</Text> : null}
 
-        <TouchableOpacity
-          style={[f.btn, loading && f.btnLoading]}
-          onPress={step === "email" ? requestOtp : verifyOtp}
-          disabled={loading}
-          activeOpacity={0.85}
-        >
-          {loading ? (
-            <ActivityIndicator color={Colors.white} />
-          ) : (
-            <Text style={f.btnText}>{step === "email" ? "Send Code" : "Verify Code"}</Text>
-          )}
+        <TouchableOpacity style={[f.btn, loading && f.btnLoading]} onPress={step === "email" ? requestOtp : verifyOtp} disabled={loading} activeOpacity={0.85}>
+          {loading ? <ActivityIndicator color={color.white} /> : <Text style={f.btnText}>{step === "email" ? "SEND CODE" : "VERIFY CODE"}</Text>}
         </TouchableOpacity>
 
         {step === "otp" && (
-          <TouchableOpacity
-            onPress={() => {
-              setStep("email");
-              setOtp("");
-              setError(null);
-            }}
-          >
-            <Text style={f.back}>← Use a different email</Text>
+          <TouchableOpacity onPress={() => { setStep("email"); setOtp(""); setError(null); }}>
+            <Text style={f.back}>‹ USE A DIFFERENT EMAIL</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -245,22 +194,9 @@ function SignInForm({ onSignedIn }: { onSignedIn: (token: string) => void }) {
   );
 }
 
-// ─── NotificationSettings ─────────────────────────────────────────────────────
-
-function NotificationSettings({
-  pushToken,
-  token,
-}: {
-  pushToken: string | null;
-  token: string | null;
-}) {
-  const defaultPrefs: NotificationPrefs = {
-    notifyReminders: true,
-    notifyCancellations: true,
-    notifyConfirmations: true,
-  };
+function NotificationSettings({ pushToken, token }: { pushToken: string | null; token: string | null }) {
+  const defaultPrefs: NotificationPrefs = { notifyReminders: true, notifyCancellations: true, notifyConfirmations: true };
   const [prefs, setPrefs] = useState<NotificationPrefs>(defaultPrefs);
-  const [saving, setSaving] = useState(false);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -281,7 +217,6 @@ function NotificationSettings({
     setPrefs(next);
     await SecureStore.setItemAsync(PREFS_KEY, JSON.stringify(next));
     if (!pushToken || !token) return;
-    setSaving(true);
     try {
       await fetch(`${API_URL}/api/push/register`, {
         method: "POST",
@@ -289,58 +224,44 @@ function NotificationSettings({
         body: JSON.stringify({ expoToken: pushToken, ...next }),
       });
     } catch {}
-    setSaving(false);
   };
 
-  if (!pushToken) {
-    return (
-      <View style={n.wrap}>
-        <Text style={n.title}>Notifications</Text>
-        <Text style={n.noToken}>Notifications are not available in this environment.</Text>
-      </View>
-    );
-  }
+  const onCount = Object.values(prefs).filter(Boolean).length;
 
   return (
-    <View style={n.wrap}>
-      <Text style={n.title}>Notifications {saving ? "(saving…)" : ""}</Text>
-      {(
-        [
-          {
-            key: "notifyCancellations",
-            label: "Trip cancellations",
-            desc: "Get notified immediately if your trip is cancelled.",
-          },
-          {
-            key: "notifyReminders",
-            label: "Trip reminders",
-            desc: "Reminder 24 hours before your trip departs.",
-          },
-          {
-            key: "notifyConfirmations",
-            label: "Booking confirmations",
-            desc: "Confirmation push when a booking is processed.",
-          },
-        ] as { key: keyof NotificationPrefs; label: string; desc: string }[]
-      ).map((item) => (
-        <View key={item.key} style={n.row}>
-          <View style={n.rowText}>
-            <Text style={n.rowLabel}>{item.label}</Text>
-            <Text style={n.rowDesc}>{item.desc}</Text>
+    <View>
+      <Text style={g.groupLabel}>ON THIS PHONE</Text>
+      <View style={g.group}>
+        <ListRow label="Notifications" value={pushToken ? `${onCount} ON ›` : "UNAVAILABLE"} disabled={!pushToken} />
+        {pushToken && (
+          <View style={g.subRows}>
+            <SwitchRow label="Trip cancellations" value={prefs.notifyCancellations} onChange={(v) => updatePref("notifyCancellations", v)} />
+            <SwitchRow label="Trip reminders" value={prefs.notifyReminders} onChange={(v) => updatePref("notifyReminders", v)} />
+            <SwitchRow label="Booking confirmations" value={prefs.notifyConfirmations} onChange={(v) => updatePref("notifyConfirmations", v)} last />
           </View>
-          <Switch
-            value={prefs[item.key]}
-            onValueChange={(v) => updatePref(item.key, v)}
-            trackColor={{ true: Colors.teal, false: Colors.border }}
-            thumbColor={Colors.white}
-          />
-        </View>
-      ))}
+        )}
+      </View>
     </View>
   );
 }
 
-// ─── AccountScreen ────────────────────────────────────────────────────────────
+function ListRow({ label, value, disabled }: { label: string; value: string; disabled?: boolean }) {
+  return (
+    <View style={g.row}>
+      <Text style={[g.rowLabel, disabled && g.rowLabelDisabled]}>{label}</Text>
+      <Text style={g.rowValue}>{value}</Text>
+    </View>
+  );
+}
+
+function SwitchRow({ label, value, onChange, last }: { label: string; value: boolean; onChange: (v: boolean) => void; last?: boolean }) {
+  return (
+    <View style={[g.subRow, !last && g.subRowRule]}>
+      <Text style={g.subRowLabel}>{label}</Text>
+      <Switch value={value} onValueChange={onChange} trackColor={{ false: color.disabledFill, true: color.orange }} thumbColor={color.white} />
+    </View>
+  );
+}
 
 export default function AccountScreen() {
   const { token, customer, loading: authLoading, setAuth, logout } = useCustomerAuth();
@@ -349,7 +270,6 @@ export default function AccountScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [pushToken, setPushToken] = useState<string | null>(null);
 
-  // Acquire push token on mount; registration with the server happens on sign-in
   useEffect(() => {
     registerForPushNotifications().then(async (expoPushToken) => {
       if (!expoPushToken) return;
@@ -362,22 +282,13 @@ export default function AccountScreen() {
     if (!token) return;
     setBookingsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/account/bookings`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = (await res.json()) as Booking[];
-        setBookings(data);
-      }
+      const res = await fetch(`${API_URL}/api/account/bookings`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setBookings((await res.json()) as Booking[]);
     } catch {}
     setBookingsLoading(false);
   }, [token]);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchBookings();
-    }, [fetchBookings]),
-  );
+  useFocusEffect(useCallback(() => { fetchBookings(); }, [fetchBookings]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -408,7 +319,7 @@ export default function AccountScreen() {
     return (
       <SafeAreaView style={s.safe}>
         <View style={s.centered}>
-          <ActivityIndicator color={Colors.teal} />
+          <ActivityIndicator color={color.hull} />
         </View>
       </SafeAreaView>
     );
@@ -417,11 +328,16 @@ export default function AccountScreen() {
   if (!token) {
     return (
       <SafeAreaView style={s.safe}>
-        <ScrollView contentContainerStyle={s.scrollContent}>
-          <View style={s.header}>
-            <Text style={s.headerTitle}>Account</Text>
+        <ScrollView contentContainerStyle={s.scrollContent} keyboardShouldPersistTaps="handled">
+          <View style={s.appBar}>
+            <Text style={s.appBarTitle}>ACCOUNT</Text>
+          </View>
+          <View style={s.guestBanner}>
+            <Text style={s.guestKicker}>BOOKING AS A GUEST</Text>
+            <Text style={s.guestBody}>Keep your tickets on any phone.</Text>
           </View>
           <SignInForm onSignedIn={handleSignedIn} />
+          <Text style={s.neverNeed}>YOU NEVER NEED AN ACCOUNT TO BOOK A SEAT.</Text>
           <NotificationSettings pushToken={pushToken} token={token} />
         </ScrollView>
       </SafeAreaView>
@@ -430,35 +346,22 @@ export default function AccountScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
-      <ScrollView
-        contentContainerStyle={s.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.teal} />
-        }
-      >
-        <View style={s.header}>
-          <View>
-            <Text style={s.headerTitle}>Account</Text>
-            <Text style={s.headerEmail}>{customer?.email}</Text>
-          </View>
-          <TouchableOpacity
-            onPress={handleLogout}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={s.signOut}>Sign Out</Text>
+      <ScrollView contentContainerStyle={s.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.hull} />}>
+        <View style={s.appBar}>
+          <Text style={s.appBarTitle}>ACCOUNT</Text>
+        </View>
+        <View style={s.identityBanner}>
+          <Text style={s.identityEmail}>{customer?.email}</Text>
+          <TouchableOpacity onPress={handleLogout} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={s.signOut}>SIGN OUT</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={s.sectionLabel}>Booking History</Text>
-
+        <Text style={g.groupLabel}>BOOKING HISTORY</Text>
         {bookingsLoading ? (
-          <ActivityIndicator color={Colors.teal} style={{ marginTop: 32 }} />
+          <ActivityIndicator color={color.hull} style={{ marginTop: 24 }} />
         ) : bookings.length === 0 ? (
-          <View style={s.empty}>
-            <Text style={s.emptyIcon}>🎣</Text>
-            <Text style={s.emptyTitle}>No bookings yet</Text>
-            <Text style={s.emptyBody}>Book a trip and it'll appear here.</Text>
-          </View>
+          <Text style={s.emptyText}>Book a trip and it&rsquo;ll appear here.</Text>
         ) : (
           bookings.map((booking) => <BookingCard key={booking.id} booking={booking} />)
         )}
@@ -469,132 +372,88 @@ export default function AccountScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.surfaceAlt },
+  safe: { flex: 1, backgroundColor: color.deck },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   scrollContent: { paddingBottom: 40 },
-  header: {
+  appBar: {
+    height: 44,
+    justifyContent: "center",
+    backgroundColor: color.hull,
+    paddingHorizontal: space.gutter,
+    borderBottomWidth: 3,
+    borderBottomColor: color.orange,
+  },
+  appBarTitle: { fontFamily: font.monoSemibold, fontSize: 13, letterSpacing: ls(13, tracking.kicker), color: color.white },
+  guestBanner: { backgroundColor: color.hull2, padding: space.lg },
+  guestKicker: { fontFamily: font.monoSemibold, fontSize: 11, letterSpacing: ls(11, tracking.kicker), color: color.orangeLight },
+  guestBody: { fontFamily: font.sansSemibold, fontSize: 16, color: color.white, marginTop: 4 },
+  neverNeed: {
+    fontFamily: font.monoSemibold,
+    fontSize: 11,
+    letterSpacing: ls(11, tracking.label),
+    color: color.ink3,
+    textAlign: "center",
+    paddingHorizontal: space.gutter,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  identityBanner: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Colors.navy,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    alignItems: "center",
+    backgroundColor: color.hull2,
+    padding: space.lg,
   },
-  headerTitle: { fontSize: 22, fontWeight: "800", color: Colors.white },
-  headerEmail: { fontSize: 13, color: Colors.whiteA75, marginTop: 2 },
-  signOut: { fontSize: 14, color: Colors.whiteA85, fontWeight: "600" },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.inkSubtle,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 10,
-  },
-  empty: { alignItems: "center", paddingVertical: 48, paddingHorizontal: 32, gap: 10 },
-  emptyIcon: { fontSize: 40 },
-  emptyTitle: { fontSize: 18, fontWeight: "700", color: Colors.ink },
-  emptyBody: { fontSize: 14, color: Colors.inkMuted, textAlign: "center" },
+  identityEmail: { fontFamily: font.sansSemibold, fontSize: 15, color: color.white },
+  signOut: { fontFamily: font.monoSemibold, fontSize: 12, letterSpacing: ls(12, tracking.data), color: color.orangeLight },
+  emptyText: { fontFamily: font.sans, fontSize: 14, color: color.ink3, paddingHorizontal: space.gutter, paddingVertical: 8 },
 });
 
 const b = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    overflow: "hidden",
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  code: { fontSize: 14, fontWeight: "700", color: Colors.ink },
-  status: { fontSize: 12, fontWeight: "700" },
+  card: { backgroundColor: color.white, borderWidth: 1, borderColor: color.rule, marginHorizontal: space.gutter, marginBottom: 10 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: color.ruleSoft },
+  code: { fontFamily: font.monoSemibold, fontSize: 13, color: color.hull },
+  status: { fontFamily: font.monoSemibold, fontSize: 11, letterSpacing: ls(11, tracking.data) },
   item: { flexDirection: "row", padding: 12, gap: 10 },
-  colorDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
+  colorDot: { width: 8, height: 8, marginTop: 4 },
   itemBody: { flex: 1 },
-  itemVessel: { fontSize: 14, fontWeight: "700", color: Colors.ink },
-  itemProduct: { fontSize: 13, color: Colors.inkMuted, fontWeight: "500" },
-  itemDate: { fontSize: 12, color: Colors.inkSubtle, marginTop: 2 },
-  itemTickets: { fontSize: 12, color: Colors.inkSubtle, marginTop: 2, textTransform: "capitalize" },
-  cardFooter: {
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    alignItems: "flex-end",
-  },
-  total: { fontSize: 14, fontWeight: "700", color: Colors.ink },
+  itemVessel: { fontFamily: font.sansBold, fontSize: 14, color: color.hull },
+  itemProduct: { fontFamily: font.sans, fontSize: 13, color: color.ink2 },
+  itemDate: { fontFamily: font.mono, fontSize: 11, color: color.ink3, marginTop: 2 },
+  cardFooter: { borderTopWidth: 1, borderTopColor: color.ruleSoft, paddingHorizontal: 14, paddingVertical: 8, alignItems: "flex-end" },
+  total: { fontFamily: font.monoSemibold, fontSize: 13, color: color.hull },
 });
 
 const f = StyleSheet.create({
-  wrap: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    margin: 16,
-    padding: 20,
-    gap: 12,
-  },
-  heading: { fontSize: 20, fontWeight: "800", color: Colors.ink },
-  sub: { fontSize: 14, color: Colors.inkMuted, lineHeight: 20 },
-  input: {
-    height: 50,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    color: Colors.ink,
-    backgroundColor: Colors.surfaceAlt,
-  },
-  otpInput: { fontSize: 28, fontWeight: "700", letterSpacing: 8, textAlign: "center" },
-  error: { fontSize: 13, color: Colors.error },
-  btn: {
-    height: 50,
-    backgroundColor: Colors.gold,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  btnLoading: { opacity: 0.7 },
-  btnText: { color: Colors.navy, fontSize: 16, fontWeight: "700" },
-  back: { fontSize: 13, color: Colors.teal, textAlign: "center" },
+  wrap: { paddingHorizontal: space.gutter, paddingTop: space.lg, gap: 10 },
+  label: { fontFamily: font.monoSemibold, fontSize: 11, letterSpacing: ls(11, tracking.label), color: color.ink3 },
+  input: { borderWidth: 1, borderColor: color.disabledBorder, paddingHorizontal: 14, paddingVertical: 12, fontFamily: font.sans, fontSize: 16, color: color.hull },
+  otpInput: { fontFamily: font.monoBold, fontSize: 24, letterSpacing: 6, textAlign: "center" },
+  error: { fontFamily: font.sansSemibold, fontSize: 13, color: color.orangeInk },
+  btn: { backgroundColor: color.orange, paddingVertical: 15, alignItems: "center" },
+  btnLoading: { opacity: 0.8 },
+  btnText: { fontFamily: font.sansBold, fontSize: 14, letterSpacing: ls(14, tracking.data), color: color.white },
+  back: { fontFamily: font.monoSemibold, fontSize: 11, letterSpacing: ls(11, tracking.data), color: color.ink2, textAlign: "center" },
 });
 
-const n = StyleSheet.create({
-  wrap: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    margin: 16,
-    marginTop: 8,
-    padding: 20,
-    gap: 4,
+const g = StyleSheet.create({
+  groupLabel: {
+    fontFamily: font.monoSemibold,
+    fontSize: 11,
+    letterSpacing: ls(11, tracking.kicker),
+    color: color.ink2,
+    paddingHorizontal: space.gutter,
+    paddingTop: space.xl,
+    paddingBottom: 8,
   },
-  title: { fontSize: 16, fontWeight: "700", color: Colors.ink, marginBottom: 12 },
-  noToken: { fontSize: 14, color: Colors.inkMuted },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    gap: 12,
-  },
-  rowText: { flex: 1 },
-  rowLabel: { fontSize: 14, fontWeight: "600", color: Colors.ink },
-  rowDesc: { fontSize: 12, color: Colors.inkMuted, marginTop: 2, lineHeight: 16 },
+  group: { backgroundColor: color.white, borderTopWidth: 1, borderBottomWidth: 1, borderColor: color.rule },
+  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: space.gutter, paddingVertical: 17 },
+  rowLabel: { fontFamily: font.sansSemibold, fontSize: 15, color: color.hull },
+  rowLabelDisabled: { color: color.disabledBorder },
+  rowValue: { fontFamily: font.mono, fontSize: 12, color: color.ink3 },
+  subRows: { borderTopWidth: 1, borderTopColor: color.ruleSoft, paddingHorizontal: space.gutter },
+  subRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12 },
+  subRowRule: { borderBottomWidth: 1, borderBottomColor: color.ruleSoft },
+  subRowLabel: { fontFamily: font.sans, fontSize: 14, color: color.ink2, flex: 1, marginRight: 12 },
 });

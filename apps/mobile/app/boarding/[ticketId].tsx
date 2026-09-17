@@ -1,29 +1,20 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Linking, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useLocalSearchParams, useNavigation } from "expo-router";
+import { Linking, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import * as Brightness from "expo-brightness";
 import QRCode from "react-native-qrcode-svg";
 import { fmtTime } from "@openboat/utils";
-import { Colors } from "@/constants/Colors";
-import {
-  type WalletBooking,
-  type WalletBookingItem,
-  type WalletTicket,
-  getTicketById,
-} from "@/lib/wallet";
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+import { color, font, ls, space, tracking } from "@/constants/nativeTokens";
+import { type WalletBooking, type WalletBookingItem, type WalletTicket, getTicketById } from "@/lib/wallet";
 
 function fmtDateLong(dateStr: string): string {
   return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
-    year: "numeric",
   });
 }
 
-// Postgres `time` columns come back as "HH:MM:SS" strings.
 function fmtTimeStr(timeStr: string): string {
   const [h, m] = timeStr.split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
@@ -35,30 +26,27 @@ function ticketLabel(type: string): string {
   return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
-// ─── DetailRow ────────────────────────────────────────────────────────────────
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={s.detailRow}>
-      <Text style={s.detailLabel}>{label}</Text>
-      <Text style={s.detailValue}>{value}</Text>
-    </View>
-  );
+/** Minutes from now until an ISO timestamp — negative once past. */
+function minutesUntil(iso: string): number {
+  return Math.round((new Date(iso).getTime() - Date.now()) / 60000);
 }
 
-// ─── BoardingPassScreen ───────────────────────────────────────────────────────
+function boardingBannerText(minsUntilBoard: number | null): string {
+  if (minsUntilBoard == null) return "";
+  if (minsUntilBoard > 60 * 6) return "BOARDS TODAY";
+  if (minsUntilBoard > 0) return `BOARDS IN ${minsUntilBoard} MINUTE${minsUntilBoard === 1 ? "" : "S"}`;
+  return "BOARDING NOW";
+}
 
 export default function BoardingPassScreen() {
   const { ticketId } = useLocalSearchParams<{ ticketId: string }>();
   const navigation = useNavigation();
+  const router = useRouter();
   const prevBrightnessRef = useRef<number | null>(null);
 
-  const [data, setData] = useState<{
-    booking: WalletBooking;
-    item: WalletBookingItem;
-    ticket: WalletTicket;
-  } | null>(null);
+  const [data, setData] = useState<{ booking: WalletBooking; item: WalletBookingItem; ticket: WalletTicket } | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (!ticketId) return;
@@ -68,7 +56,11 @@ export default function BoardingPassScreen() {
     });
   }, [ticketId]);
 
-  // Boost screen brightness to max on mount, restore on unmount.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     Brightness.requestPermissionsAsync().then(({ granted }) => {
       if (!granted) return;
@@ -85,7 +77,6 @@ export default function BoardingPassScreen() {
     };
   }, []);
 
-  // Also restore on blur so swipe-to-dismiss on iOS doesn't leave brightness stuck.
   useEffect(() => {
     return navigation.addListener("blur", () => {
       if (prevBrightnessRef.current !== null) {
@@ -98,34 +89,35 @@ export default function BoardingPassScreen() {
   if (notFound) {
     return (
       <SafeAreaView style={s.centered}>
-        <Text style={s.errorTitle}>Ticket Not Found</Text>
-        <Text style={s.errorBody}>
-          This ticket isn't in your wallet. Add the booking from the Tickets tab.
-        </Text>
+        <Text style={s.errorTitle}>TICKET NOT FOUND</Text>
+        <Text style={s.errorBody}>This ticket isn&rsquo;t in your wallet. Add the booking from the Tickets tab.</Text>
       </SafeAreaView>
     );
   }
 
   if (!data) {
-    return (
-      <SafeAreaView style={s.centered}>
-        <ActivityIndicator color={Colors.teal} size="large" />
-      </SafeAreaView>
-    );
+    return <SafeAreaView style={s.centered} />;
   }
+
+  void now; // re-render trigger for the boarding countdown
 
   const { booking, item, ticket } = data;
   const { trip } = item;
   const isCancelled = trip.status === "cancelled" || ticket.voided;
-
-  const whatToBring = trip.product.whatToBring ?? [];
   const { operator } = booking;
 
-  const arriveNote = operator?.arriveMinutesBefore != null
-    ? operator.arriveMinutesBefore >= 60
-      ? `Arrive ${operator.arriveMinutesBefore / 60} hour${operator.arriveMinutesBefore === 60 ? "" : "s"} early`
-      : `Arrive ${operator.arriveMinutesBefore} minutes early`
-    : null;
+  // Boarding time is a "HH:MM:SS" Postgres time column; fall back to departure minus 30 min.
+  let minsUntilBoard: number | null = null;
+  if (!isCancelled) {
+    if (trip.boardingTime) {
+      const [bh, bm] = trip.boardingTime.split(":").map(Number);
+      const boardIso = new Date(trip.startTime);
+      boardIso.setHours(bh, bm, 0, 0);
+      minsUntilBoard = minutesUntil(boardIso.toISOString());
+    } else {
+      minsUntilBoard = minutesUntil(trip.startTime) - 30;
+    }
+  }
 
   function openDirections() {
     const url = operator?.dockMapsUrl ?? (operator?.dockAddress
@@ -135,294 +127,214 @@ export default function BoardingPassScreen() {
   }
 
   return (
-    <ScrollView
-      style={s.scroll}
-      contentContainerStyle={s.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Vessel color header */}
-      <View style={[s.header, { backgroundColor: trip.vessel.color }]}>
-        <Text style={s.headerVessel}>{trip.vessel.name}</Text>
-        <Text style={s.headerProduct}>{trip.product.displayName}</Text>
+    <SafeAreaView style={s.safe}>
+      <View style={s.appBar}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Text style={s.closeLink}>✕</Text>
+        </TouchableOpacity>
+        <Text style={s.appBarTitle}>SAVED ON THIS PHONE ✓</Text>
+        <View style={{ width: 20 }} />
       </View>
 
-      {/* Cancelled banner */}
-      {isCancelled && (
-        <View style={s.cancelBanner}>
-          <Text style={s.cancelBannerText}>
-            {ticket.voided ? "TICKET CANCELLED" : "TRIP CANCELLED"}
-          </Text>
-        </View>
-      )}
-
-      {/* QR code */}
-      <View style={[s.qrContainer, isCancelled && s.qrContainerCancelled]}>
-        {isCancelled ? (
-          <View style={s.qrVoid}>
-            <Text style={s.qrVoidText}>✕</Text>
+      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+        {!isCancelled ? (
+          <View style={s.banner}>
+            <Text style={s.bannerText}>{boardingBannerText(minsUntilBoard)}</Text>
           </View>
         ) : (
-          <QRCode value={ticket.qrPayload} size={220} color="#000000" backgroundColor="#FFFFFF" />
+          <View style={s.cancelBanner}>
+            <Text style={s.cancelBannerText}>{ticket.voided ? "TICKET CANCELLED" : "TRIP CANCELLED"}</Text>
+          </View>
         )}
-      </View>
 
-      {/* Ticket type badge */}
-      <View style={s.typeBadge}>
-        <Text style={s.typeBadgeText}>
-          BOARDING PASS · {ticketLabel(ticket.ticketType).toUpperCase()}
-        </Text>
-      </View>
-
-      {/* Trip details */}
-      <View style={s.detailsCard}>
-        <DetailRow label="Date" value={fmtDateLong(trip.departureDate)} />
-        <DetailRow label="Departs" value={fmtTime(trip.startTime)} />
-        <DetailRow label="Returns" value={fmtTime(trip.endTime)} />
-        {trip.boardingTime ? (
-          <DetailRow label="Boarding" value={fmtTimeStr(trip.boardingTime)} />
-        ) : null}
-        <DetailRow label="Vessel" value={trip.vessel.name} />
-        <DetailRow label="Purchased By" value={booking.customerName} />
-        <DetailRow label="Confirmation" value={booking.confirmationCode} />
-      </View>
-
-      {/* Getting there */}
-      {(operator?.dockAddress || operator?.dockMapsUrl || arriveNote) && (
-        <View style={s.infoCard}>
-          <Text style={s.infoTitle}>GETTING THERE</Text>
-          {operator?.dockAddress ? (
-            <Text style={s.infoBody}>{operator.dockAddress}</Text>
-          ) : null}
-          {arriveNote ? (
-            <Text style={s.arriveNote}>{arriveNote}</Text>
-          ) : null}
-          {(operator?.dockMapsUrl || operator?.dockAddress) ? (
-            <TouchableOpacity style={s.directionsBtn} onPress={openDirections} activeOpacity={0.8}>
-              <Text style={s.directionsBtnText}>Get Directions →</Text>
-            </TouchableOpacity>
-          ) : null}
+        <View style={s.tripNameBlock}>
+          <Text style={s.tripName}>{trip.product.displayName}</Text>
+          <Text style={s.vesselName}>{trip.vessel.name}</Text>
         </View>
-      )}
 
-      {/* What to bring */}
-      {whatToBring.length > 0 && (
-        <View style={s.infoCard}>
-          <Text style={s.infoTitle}>WHAT TO BRING</Text>
-          {whatToBring.map((item, i) => (
-            <View key={i} style={s.bringRow}>
-              <Text style={s.bringCheck}>✓</Text>
-              <Text style={s.bringItem}>{item}</Text>
+        {/* Stub notch — deck-colored punches at each end of a dashed rule. */}
+        <View style={s.notchRow}>
+          <View style={[s.notchSquare, { backgroundColor: trip.vessel.color }]} />
+          <View style={s.notchRule} />
+          <View style={[s.notchSquare, { backgroundColor: trip.vessel.color }]} />
+        </View>
+
+        <View style={s.detailBlock}>
+          <View style={s.qrWrap}>
+            {isCancelled ? (
+              <View style={s.qrVoid}>
+                <Text style={s.qrVoidText}>✕</Text>
+              </View>
+            ) : (
+              <QRCode value={ticket.qrPayload} size={124} color={color.hull} backgroundColor={color.white} />
+            )}
+          </View>
+          <View style={s.detailCols}>
+            <View>
+              <Text style={s.detailLabel}>CONFIRMATION</Text>
+              <Text style={s.detailValue}>{booking.confirmationCode}</Text>
             </View>
-          ))}
+            <View style={{ marginTop: space.md }}>
+              <Text style={s.detailLabel}>BE AT DOCK BY</Text>
+              <Text style={s.detailValue}>
+                {trip.boardingTime ? fmtTimeStr(trip.boardingTime) : fmtTime(trip.startTime)}
+              </Text>
+            </View>
+          </View>
         </View>
-      )}
 
-      {/* Ticket ID — scan fallback */}
-      <Text style={s.ticketId} numberOfLines={1} ellipsizeMode="middle">
-        {ticket.id}
-      </Text>
-    </ScrollView>
+        <View style={s.paidBlock}>
+          <Row label="DATE" value={fmtDateLong(trip.departureDate)} />
+          <Row label="DEPARTS" value={fmtTime(trip.startTime)} />
+          <Row label="RETURNS" value={fmtTime(trip.endTime)} />
+          <Row label="TICKET" value={`${ticketLabel(ticket.ticketType)} · ${trip.vessel.name}`} />
+          <Row label="PASSENGER" value={booking.customerName} last />
+        </View>
+
+        {(operator?.dockAddress || operator?.dockMapsUrl) && (
+          <TouchableOpacity style={s.actionRow} onPress={openDirections} activeOpacity={0.8}>
+            <Text style={s.actionText}>DIRECTIONS TO THE DOCK →</Text>
+          </TouchableOpacity>
+        )}
+
+        {trip.product.whatToBring && trip.product.whatToBring.length > 0 && (
+          <View style={s.beforeYouGo}>
+            <Text style={s.beforeYouGoTitle}>BEFORE YOU GO</Text>
+            {trip.product.whatToBring.map((item, i) => (
+              <Text key={i} style={s.beforeYouGoItem}>• {item}</Text>
+            ))}
+          </View>
+        )}
+
+        <Text style={s.ticketId} numberOfLines={1} ellipsizeMode="middle">{ticket.id}</Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+function Row({ label, value, last }: { label: string; value: string; last?: boolean }) {
+  return (
+    <View style={[r.row, !last && r.rowRule]}>
+      <Text style={r.label}>{label}</Text>
+      <Text style={r.value}>{value}</Text>
+    </View>
+  );
+}
+
+const r = StyleSheet.create({
+  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 10 },
+  rowRule: { borderBottomWidth: 1, borderBottomColor: color.ruleSoft },
+  label: { fontFamily: font.monoSemibold, fontSize: 11, letterSpacing: ls(11, tracking.label), color: color.ink3 },
+  value: { fontFamily: font.sansSemibold, fontSize: 14, color: color.hull, textAlign: "right", flexShrink: 1, marginLeft: 12 },
+});
 
 const s = StyleSheet.create({
-  scroll: {
-    flex: 1,
-    backgroundColor: Colors.surfaceAlt,
-  },
-  content: {
-    paddingBottom: 40,
-  },
-  centered: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-    backgroundColor: Colors.surfaceAlt,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: Colors.ink,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  errorBody: {
-    fontSize: 15,
-    color: Colors.inkMuted,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  header: {
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    alignItems: "center",
-  },
-  headerVessel: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: Colors.white,
-    marginBottom: 4,
-  },
-  headerProduct: {
-    fontSize: 15,
-    color: Colors.whiteA85,
-    fontWeight: "500",
-  },
-  cancelBanner: {
-    backgroundColor: Colors.error,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  cancelBannerText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 1,
-  },
-  qrContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.surface,
-    marginHorizontal: 20,
-    marginTop: 24,
-    marginBottom: 4,
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  qrContainerCancelled: {
-    opacity: 0.4,
-  },
-  qrVoid: {
-    width: 220,
-    height: 220,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.surfaceAlt,
-    borderRadius: 8,
-  },
-  qrVoidText: {
-    fontSize: 80,
-    color: Colors.error,
-    fontWeight: "200",
-  },
-  typeBadge: {
-    alignItems: "center",
-    marginTop: 16,
-    marginBottom: 4,
-  },
-  typeBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.inkSubtle,
-    letterSpacing: 1.2,
-  },
-  detailsCard: {
-    backgroundColor: Colors.surface,
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: "hidden",
-  },
-  detailRow: {
+  safe: { flex: 1, backgroundColor: color.deck },
+  appBar: {
+    height: 44,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingHorizontal: space.gutter,
+    backgroundColor: color.white,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: color.rule,
   },
-  detailLabel: {
-    fontSize: 14,
-    color: Colors.inkMuted,
-    fontWeight: "500",
-  },
-  detailValue: {
-    fontSize: 14,
-    color: Colors.ink,
-    fontWeight: "600",
-    textAlign: "right",
-    flexShrink: 1,
-    marginLeft: 16,
-  },
-  ticketId: {
+  closeLink: { fontSize: 16, color: color.hull, width: 20 },
+  appBarTitle: {
+    fontFamily: font.monoSemibold,
     fontSize: 11,
-    color: Colors.inkSubtle,
-    fontVariant: ["tabular-nums"],
-    textAlign: "center",
-    marginTop: 20,
-    marginHorizontal: 20,
-    letterSpacing: 0.3,
+    letterSpacing: ls(11, tracking.label),
+    color: color.greenOpen,
   },
-  infoCard: {
-    backgroundColor: Colors.surface,
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
-  },
-  infoTitle: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.inkSubtle,
-    letterSpacing: 1,
-    marginBottom: 10,
-  },
-  infoBody: {
-    fontSize: 14,
-    color: Colors.ink,
-    marginBottom: 6,
-    lineHeight: 20,
-  },
-  arriveNote: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.gold,
-    marginBottom: 10,
-  },
-  directionsBtn: {
-    marginTop: 4,
-    backgroundColor: Colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xxl, backgroundColor: color.deck },
+  errorTitle: { fontFamily: font.sansBold, fontSize: 18, color: color.hull, marginBottom: 8, textAlign: "center" },
+  errorBody: { fontFamily: font.sans, fontSize: 14, color: color.ink2, textAlign: "center", lineHeight: 20 },
+  content: { paddingBottom: 40 },
+  banner: {
+    backgroundColor: color.hull,
     paddingVertical: 10,
-    paddingHorizontal: 14,
-    alignSelf: "flex-start",
-  },
-  directionsBtnText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.ink,
-  },
-  bringRow: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+  },
+  bannerText: {
+    fontFamily: font.monoSemibold,
+    fontSize: 11,
+    letterSpacing: ls(11, tracking.kickerWide),
+    color: color.orangeLight,
+  },
+  cancelBanner: { backgroundColor: color.orangePress, paddingVertical: 10, alignItems: "center" },
+  cancelBannerText: {
+    fontFamily: font.monoSemibold,
+    fontSize: 11,
+    letterSpacing: ls(11, tracking.kickerWide),
+    color: color.white,
+  },
+  tripNameBlock: { backgroundColor: color.hull, paddingHorizontal: space.gutter, paddingBottom: space.lg, paddingTop: 4 },
+  tripName: { fontFamily: font.sansBold, fontSize: 26, color: color.white },
+  vesselName: { fontFamily: font.mono, fontSize: 13, color: color.inkOnDark3, marginTop: 2 },
+  notchRow: { flexDirection: "row", alignItems: "center", height: 12, backgroundColor: color.hull },
+  notchSquare: { width: 12, height: 12 },
+  notchRule: {
+    flex: 1,
+    height: 0,
+    borderTopWidth: 1,
+    borderTopColor: color.hullLine,
+    borderStyle: "dashed",
+    marginHorizontal: 4,
+  },
+  detailBlock: {
+    flexDirection: "row",
+    backgroundColor: color.white,
+    padding: space.gutter,
+    gap: space.lg,
+  },
+  qrWrap: {
+    width: 124,
+    height: 124,
+    backgroundColor: color.white,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: color.rule,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qrVoid: { width: 108, height: 108, alignItems: "center", justifyContent: "center" },
+  qrVoidText: { fontSize: 64, color: color.orangePress, fontWeight: "200" },
+  detailCols: { flex: 1, justifyContent: "center" },
+  detailLabel: {
+    fontFamily: font.monoSemibold,
+    fontSize: 10,
+    letterSpacing: ls(10, tracking.label),
+    color: color.ink3,
+  },
+  detailValue: { fontFamily: font.monoSemibold, fontSize: 20, color: color.hull, marginTop: 2 },
+  paidBlock: { backgroundColor: color.white, paddingHorizontal: space.gutter, marginTop: 1 },
+  actionRow: {
+    backgroundColor: color.white,
+    marginTop: 1,
+    paddingHorizontal: space.gutter,
+    paddingVertical: 14,
+  },
+  actionText: {
+    fontFamily: font.monoSemibold,
+    fontSize: 12,
+    letterSpacing: ls(12, tracking.data),
+    color: color.orangeInk,
+  },
+  beforeYouGo: { backgroundColor: color.orangeOnOrange, marginTop: space.lg, marginHorizontal: space.gutter, padding: space.md },
+  beforeYouGoTitle: {
+    fontFamily: font.monoSemibold,
+    fontSize: 11,
+    letterSpacing: ls(11, tracking.kicker),
+    color: color.orangeInk,
     marginBottom: 6,
   },
-  bringCheck: {
-    fontSize: 13,
-    color: Colors.gold,
-    fontWeight: "700",
-    width: 16,
-  },
-  bringItem: {
-    fontSize: 14,
-    color: Colors.ink,
+  beforeYouGoItem: { fontFamily: font.sans, fontSize: 13, color: color.orangeInk, lineHeight: 19 },
+  ticketId: {
+    fontFamily: font.mono,
+    fontSize: 10,
+    color: color.disabledBorder,
+    textAlign: "center",
+    marginTop: 16,
   },
 });

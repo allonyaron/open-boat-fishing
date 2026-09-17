@@ -1,11 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -16,60 +11,46 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
+import QRCode from "react-native-qrcode-svg";
 import { API_URL } from "@/lib/api";
 import { fmtTime } from "@openboat/utils";
-import { Colors } from "@/constants/Colors";
+import { Sheet } from "@/components/Sheet";
+import { color, font, ls, space, tracking } from "@/constants/nativeTokens";
+import { tripTypeColor } from "@/lib/trip-helpers";
 import {
   type WalletBooking,
   type WalletBookingItem,
-  type WalletTicket,
   getAllBookings,
   upsertBooking,
 } from "@/lib/wallet";
 
 function fmtDate(dateStr: string): string {
   return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
+    weekday: "short",
+    month: "short",
     day: "numeric",
   });
 }
 
-function ticketLabel(type: string): string {
-  return type.charAt(0).toUpperCase() + type.slice(1);
+function fmtCountdown(startIso: string): string {
+  const diffMs = new Date(startIso).getTime() - Date.now();
+  const hrs = Math.round(diffMs / 3_600_000);
+  const today = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const tripDate = startIso.slice(0, 10);
+  const dayWord = tripDate === today ? "TODAY" : tripDate === tomorrow ? "TOMORROW" : fmtDate(tripDate).toUpperCase();
+  if (hrs <= 0) return `${dayWord} · BOARDING NOW`;
+  if (hrs < 48) return `${dayWord} · IN ${hrs} HOUR${hrs === 1 ? "" : "S"}`;
+  return dayWord;
 }
 
 // ─── AddBookingSheet ──────────────────────────────────────────────────────────
 
-function AddBookingSheet({
-  onClose,
-  onAdded,
-}: {
-  onClose: () => void;
-  onAdded: (booking: WalletBooking) => void;
-}) {
+function AddBookingSheet({ visible, onClose, onAdded }: { visible: boolean; onClose: () => void; onAdded: (b: WalletBooking) => void }) {
   const [code, setCode] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const translateY = useRef(new Animated.Value(500)).current;
-
-  useEffect(() => {
-    Animated.spring(translateY, {
-      toValue: 0,
-      useNativeDriver: true,
-      tension: 70,
-      friction: 11,
-    }).start();
-  }, []);
-
-  const dismiss = useCallback(() => {
-    Animated.timing(translateY, {
-      toValue: 500,
-      duration: 220,
-      useNativeDriver: true,
-    }).start(onClose);
-  }, [onClose]);
 
   const handleFind = useCallback(async () => {
     const cleanCode = code.trim().toUpperCase();
@@ -81,144 +62,68 @@ function AddBookingSheet({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `${API_URL}/api/bookings?code=${encodeURIComponent(cleanCode)}&email=${encodeURIComponent(cleanEmail)}`,
-      );
+      const res = await fetch(`${API_URL}/api/bookings?code=${encodeURIComponent(cleanCode)}&email=${encodeURIComponent(cleanEmail)}`);
       const data = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
-        setError(
-          (data.error as string | undefined) ?? "Booking not found. Check your code and email.",
-        );
+        setError((data.error as string | undefined) ?? "Booking not found. Check your code and email.");
         return;
       }
       const booking = await upsertBooking(data as Omit<WalletBooking, "syncedAt">);
       onAdded(booking);
-      dismiss();
+      onClose();
     } catch {
       setError("Could not connect to server. Try again when you have signal.");
     } finally {
       setLoading(false);
     }
-  }, [code, email, onAdded, dismiss]);
+  }, [code, email, onAdded, onClose]);
 
   return (
-    <Modal transparent animationType="none" onRequestClose={dismiss}>
-      <Pressable style={add.backdrop} onPress={dismiss} />
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={add.kav}>
-        <Animated.View style={[add.sheet, { transform: [{ translateY }] }]}>
-          <View style={add.handle} />
-          <Text style={add.title}>Add Booking</Text>
-          <Text style={add.subtitle}>
-            Your confirmation code and email are in your booking email.
-          </Text>
+    <Sheet visible={visible} detent={0.5} onClose={onClose}>
+      <View style={add.body}>
+        <Text style={add.title}>ADD A BOOKING</Text>
+        <Text style={add.subtitle}>Your confirmation code and email are in your booking receipt.</Text>
 
-          <View style={add.fieldGroup}>
-            <Text style={add.label}>Confirmation Code</Text>
-            <TextInput
-              style={add.input}
-              value={code}
-              onChangeText={(t) => setCode(t.toUpperCase())}
-              placeholder="e.g. A1B2C3"
-              placeholderTextColor={Colors.inkSubtle}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              maxLength={6}
-              returnKeyType="next"
-            />
-          </View>
+        <Text style={add.label}>CONFIRMATION CODE</Text>
+        <TextInput
+          style={add.input}
+          value={code}
+          onChangeText={(t) => setCode(t.toUpperCase())}
+          placeholder="A1B2C3"
+          placeholderTextColor={color.disabledBorder}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={6}
+          returnKeyType="next"
+        />
 
-          <View style={add.fieldGroup}>
-            <Text style={add.label}>Email Used at Purchase</Text>
-            <TextInput
-              style={add.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              placeholderTextColor={Colors.inkSubtle}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              returnKeyType="done"
-              onSubmitEditing={handleFind}
-            />
-          </View>
+        <Text style={add.label}>EMAIL USED AT PURCHASE</Text>
+        <TextInput
+          style={add.input}
+          value={email}
+          onChangeText={setEmail}
+          placeholder="you@example.com"
+          placeholderTextColor={color.disabledBorder}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          returnKeyType="done"
+          onSubmitEditing={handleFind}
+        />
 
-          {error ? <Text style={add.error}>{error}</Text> : null}
+        {error ? <Text style={add.error}>{error}</Text> : null}
 
-          <TouchableOpacity
-            style={[add.btn, loading && add.btnLoading]}
-            onPress={handleFind}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator color={Colors.white} />
-            ) : (
-              <Text style={add.btnText}>Find My Tickets</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={{ height: 24 }} />
-        </Animated.View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-// ─── TicketRow ────────────────────────────────────────────────────────────────
-
-function TicketRow({ ticket, onPress }: { ticket: WalletTicket; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={tr.row} onPress={onPress} activeOpacity={0.7}>
-      <View style={tr.left}>
-        <Text style={[tr.type, ticket.voided && tr.typeVoided]}>
-          {ticketLabel(ticket.ticketType)}
-        </Text>
-        {ticket.voided && <Text style={tr.cancelled}>CANCELLED</Text>}
+        <TouchableOpacity style={[add.btn, loading && add.btnLoading]} onPress={handleFind} disabled={loading} activeOpacity={0.85}>
+          {loading ? <ActivityIndicator color={color.white} /> : <Text style={add.btnText}>FIND MY TICKETS</Text>}
+        </TouchableOpacity>
       </View>
-      <Text style={tr.chevron}>›</Text>
-    </TouchableOpacity>
-  );
-}
-
-// ─── BookingItemCard ──────────────────────────────────────────────────────────
-
-function BookingItemCard({
-  item,
-  onTicketPress,
-}: {
-  item: WalletBookingItem;
-  onTicketPress: (ticketId: string) => void;
-}) {
-  const { trip } = item;
-  const isTripCancelled = trip.status === "cancelled";
-
-  return (
-    <View style={[bic.card, isTripCancelled && bic.cardCancelled]}>
-      <View style={[bic.colorBar, { backgroundColor: trip.vessel.color }]} />
-      <View style={bic.body}>
-        <View style={bic.topRow}>
-          <Text style={bic.vesselName}>{trip.vessel.name}</Text>
-          {isTripCancelled && (
-            <View style={bic.cancelBadge}>
-              <Text style={bic.cancelBadgeText}>CANCELLED</Text>
-            </View>
-          )}
-        </View>
-        <Text style={bic.productName}>{trip.product.displayName}</Text>
-        <Text style={bic.time}>
-          {fmtTime(trip.startTime)} – {fmtTime(trip.endTime)}
-        </Text>
-        <View style={bic.divider} />
-        {item.tickets.map((t) => (
-          <TicketRow key={t.id} ticket={t} onPress={() => onTicketPress(t.id)} />
-        ))}
-      </View>
-    </View>
+    </Sheet>
   );
 }
 
 // ─── TicketsScreen ────────────────────────────────────────────────────────────
+
+type Grouped = { item: WalletBookingItem; booking: WalletBooking };
 
 export default function TicketsScreen() {
   const router = useRouter();
@@ -226,18 +131,16 @@ export default function TicketsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
 
   const loadFromCache = useCallback(async () => {
-    const stored = await getAllBookings();
-    setBookings(stored);
+    setBookings(await getAllBookings());
   }, []);
 
   useEffect(() => {
     loadFromCache().finally(() => setLoading(false));
   }, [loadFromCache]);
 
-  // Reload from SQLite whenever the tab gains focus — covers the case where
-  // the background wallet sync in checkout.tsx completed after the initial mount.
   useFocusEffect(
     useCallback(() => {
       loadFromCache();
@@ -250,385 +153,236 @@ export default function TicketsScreen() {
       const stored = await getAllBookings();
       const results = await Promise.allSettled(
         stored.map((b) =>
-          fetch(
-            `${API_URL}/api/bookings?code=${b.confirmationCode}&email=${encodeURIComponent(b.customerEmail)}`,
-          )
+          fetch(`${API_URL}/api/bookings?code=${b.confirmationCode}&email=${encodeURIComponent(b.customerEmail)}`)
             .then((r) => r.json() as Promise<Omit<WalletBooking, "syncedAt">>)
             .then((data) => upsertBooking(data)),
         ),
       );
       setBookings(results.map((r, i) => (r.status === "fulfilled" ? r.value : stored[i])));
     } catch {
-      // keep showing cached data
+      /* keep showing cached data */
     } finally {
       setRefreshing(false);
     }
   }, []);
 
-  // Group items by departure date
-  const byDate = new Map<string, { item: WalletBookingItem; booking: WalletBooking }[]>();
+  const all: Grouped[] = [];
   for (const booking of bookings) {
-    for (const item of booking.items) {
-      const d = item.trip.departureDate;
-      if (!byDate.has(d)) byDate.set(d, []);
-      byDate.get(d)!.push({ item, booking });
-    }
+    for (const item of booking.items) all.push({ item, booking });
   }
-  const sortedDates = [...byDate.keys()].sort();
-  const hasTickets = sortedDates.length > 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = all
+    .filter((g) => g.item.trip.departureDate >= today && g.item.trip.status !== "cancelled")
+    .sort((a, b) => a.item.trip.startTime.localeCompare(b.item.trip.startTime));
+  const past = all
+    .filter((g) => g.item.trip.departureDate < today || g.item.trip.status === "cancelled")
+    .sort((a, b) => b.item.trip.startTime.localeCompare(a.item.trip.startTime));
+
+  const [next, ...restUpcoming] = upcoming;
 
   return (
     <SafeAreaView style={s.safe}>
-      <View style={s.header}>
-        <Text style={s.heading}>My Tickets</Text>
-        <TouchableOpacity
-          style={s.addBtn}
-          onPress={() => setShowAdd(true)}
-          activeOpacity={0.8}
-          hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
-        >
-          <Text style={s.addBtnText}>+ Add</Text>
+      <View style={s.appBar}>
+        <Text style={s.appBarTitle}>TICKETS</Text>
+        <TouchableOpacity onPress={() => setShowAdd(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={s.addLink}>+ ADD</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={s.segmented}>
+        <TouchableOpacity style={[s.segment, tab === "upcoming" && s.segmentActive]} onPress={() => setTab("upcoming")}>
+          <Text style={[s.segmentText, tab === "upcoming" && s.segmentTextActive]}>UPCOMING · {upcoming.length}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.segment, tab === "past" && s.segmentActive]} onPress={() => setTab("past")}>
+          <Text style={[s.segmentText, tab === "past" && s.segmentTextActive]}>PAST · {past.length}</Text>
         </TouchableOpacity>
       </View>
 
       {loading ? (
         <View style={s.centered}>
-          <ActivityIndicator color={Colors.teal} size="large" />
-        </View>
-      ) : !hasTickets ? (
-        <View style={s.empty}>
-          <Text style={s.emptyIcon}>🎫</Text>
-          <Text style={s.emptyTitle}>No tickets yet</Text>
-          <Text style={s.emptyBody}>
-            After booking, tap Add to save your boarding passes here. They'll work offline at the
-            dock.
-          </Text>
-          <TouchableOpacity
-            style={s.emptyBtn}
-            onPress={() => setShowAdd(true)}
-            activeOpacity={0.85}
-          >
-            <Text style={s.emptyBtnText}>Add Booking</Text>
-          </TouchableOpacity>
+          <ActivityIndicator color={color.hull} size="large" />
         </View>
       ) : (
         <ScrollView
-          style={s.scroll}
-          contentContainerStyle={s.scrollContent}
+          contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.teal} />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.hull} />}
         >
-          {sortedDates.map((date) => (
-            <View key={date}>
-              <Text style={s.dateHeader}>{fmtDate(date)}</Text>
-              {byDate.get(date)!.map(({ item }) => (
-                <BookingItemCard
-                  key={item.id}
-                  item={item}
-                  onTicketPress={(ticketId) =>
-                    router.push({ pathname: "/boarding/[ticketId]", params: { ticketId } })
-                  }
-                />
-              ))}
-            </View>
-          ))}
+          {tab === "upcoming" ? (
+            upcoming.length === 0 ? (
+              <EmptyState onAdd={() => setShowAdd(true)} />
+            ) : (
+              <>
+                {next && <NextTripCard key={next.item.id} g={next} onPress={() => router.push({ pathname: "/boarding/[ticketId]", params: { ticketId: next.item.tickets[0]?.id ?? "" } })} />}
+                {restUpcoming.map((g) => (
+                  <UpcomingCard key={g.item.id} g={g} onPress={() => router.push({ pathname: "/boarding/[ticketId]", params: { ticketId: g.item.tickets[0]?.id ?? "" } })} />
+                ))}
+              </>
+            )
+          ) : past.length === 0 ? (
+            <Text style={s.emptyText}>No past trips yet.</Text>
+          ) : (
+            past.map((g) => <PastRow key={g.item.id} g={g} />)
+          )}
           <View style={{ height: 24 }} />
         </ScrollView>
       )}
 
-      {showAdd && (
-        <AddBookingSheet
-          onClose={() => setShowAdd(false)}
-          onAdded={(booking) => {
-            setBookings((prev) => {
-              const idx = prev.findIndex((b) => b.id === booking.id);
-              if (idx >= 0) {
-                const next = [...prev];
-                next[idx] = booking;
-                return next;
-              }
-              return [...prev, booking];
-            });
-          }}
-        />
-      )}
+      <AddBookingSheet
+        visible={showAdd}
+        onClose={() => setShowAdd(false)}
+        onAdded={(booking) => {
+          setBookings((prev) => {
+            const idx = prev.findIndex((b) => b.id === booking.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = booking;
+              return next;
+            }
+            return [...prev, booking];
+          });
+        }}
+      />
     </SafeAreaView>
+  );
+}
+
+function EmptyState({ onAdd }: { onAdd: () => void }) {
+  return (
+    <View style={e.wrap}>
+      <Text style={e.title}>NO TICKETS YET</Text>
+      <Text style={e.body}>After booking, add your confirmation to save boarding passes here. They work offline at the dock.</Text>
+      <TouchableOpacity style={e.btn} onPress={onAdd} activeOpacity={0.85}>
+        <Text style={e.btnText}>ADD A BOOKING</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function NextTripCard({ g, onPress }: { g: Grouped; onPress: () => void }) {
+  const { trip } = g.item;
+  const ticket = g.item.tickets[0];
+  return (
+    <TouchableOpacity style={n.card} onPress={onPress} activeOpacity={0.85}>
+      <Text style={n.countdown}>{fmtCountdown(trip.startTime)}</Text>
+      <Text style={n.name}>{trip.product.displayName}</Text>
+      <View style={n.metaRow}>
+        <Text style={n.meta}>{g.booking.confirmationCode} · {trip.vessel.name}</Text>
+      </View>
+      <View style={n.bottomRow}>
+        {ticket && <QRCode value={ticket.qrPayload} size={34} color={color.hull} backgroundColor={color.white} />}
+        <Text style={n.showLink}>SHOW BOARDING PASS →</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function UpcomingCard({ g, onPress }: { g: Grouped; onPress: () => void }) {
+  const { trip } = g.item;
+  return (
+    <TouchableOpacity style={u.card} onPress={onPress} activeOpacity={0.85}>
+      <View style={[u.bar, { backgroundColor: tripTypeColor(trip.product.category, trip.vessel.color) }]} />
+      <View style={u.body}>
+        <Text style={u.date}>{fmtDate(trip.departureDate)} · {fmtTime(trip.startTime)}</Text>
+        <Text style={u.name}>{trip.product.displayName}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function PastRow({ g }: { g: Grouped }) {
+  const { trip } = g.item;
+  const cancelled = trip.status === "cancelled";
+  return (
+    <View style={p.row}>
+      <View style={{ flex: 1 }}>
+        <Text style={[p.name, cancelled && p.nameStruck]}>{trip.product.displayName}</Text>
+        <Text style={p.date}>{fmtDate(trip.departureDate)}</Text>
+      </View>
+      <TouchableOpacity>
+        <Text style={p.bookAgain}>BOOK AGAIN</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: Colors.surfaceAlt,
-  },
-  header: {
+  safe: { flex: 1, backgroundColor: color.deck },
+  appBar: {
+    height: 44,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    backgroundColor: color.hull,
+    paddingHorizontal: space.gutter,
+    borderBottomWidth: 3,
+    borderBottomColor: color.orange,
   },
-  heading: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: Colors.ink,
-  },
-  addBtn: {
-    backgroundColor: Colors.gold,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 8,
-  },
-  addBtnText: {
-    color: Colors.navy,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  centered: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  empty: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-    gap: 12,
-  },
-  emptyIcon: {
-    fontSize: 48,
-  },
-  emptyTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: Colors.ink,
-    textAlign: "center",
-  },
-  emptyBody: {
-    fontSize: 15,
-    color: Colors.inkMuted,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  emptyBtn: {
-    marginTop: 8,
-    backgroundColor: Colors.gold,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  emptyBtnText: {
-    color: Colors.navy,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  dateHeader: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.inkSubtle,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-    marginBottom: 8,
-    marginTop: 4,
-  },
+  appBarTitle: { fontFamily: font.monoSemibold, fontSize: 13, letterSpacing: ls(13, tracking.kicker), color: color.white },
+  addLink: { fontFamily: font.monoSemibold, fontSize: 12, letterSpacing: ls(12, tracking.data), color: color.orangeLight },
+  segmented: { flexDirection: "row", padding: space.gutter, gap: 1, backgroundColor: color.rule },
+  segment: { flex: 1, backgroundColor: color.white, paddingVertical: 10, alignItems: "center" },
+  segmentActive: { backgroundColor: color.hull },
+  segmentText: { fontFamily: font.monoSemibold, fontSize: 11, letterSpacing: ls(11, tracking.data), color: color.hull },
+  segmentTextActive: { color: color.white },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center" },
+  scroll: { paddingHorizontal: space.gutter, gap: 10 },
+  emptyText: { fontFamily: font.sans, fontSize: 15, color: color.ink3, textAlign: "center", paddingTop: 40 },
 });
 
-const bic = StyleSheet.create({
-  card: {
-    flexDirection: "row",
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: "hidden",
-    marginBottom: 12,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  cardCancelled: {
-    opacity: 0.55,
-  },
-  colorBar: {
-    width: 5,
-  },
-  body: {
-    flex: 1,
-    padding: 12,
-  },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 2,
-  },
-  vesselName: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: Colors.ink,
-  },
-  cancelBadge: {
-    backgroundColor: Colors.error,
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  cancelBadgeText: {
-    color: Colors.white,
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-  },
-  productName: {
-    fontSize: 13,
-    color: Colors.inkMuted,
-    fontWeight: "500",
-    marginBottom: 1,
-  },
-  time: {
-    fontSize: 13,
-    color: Colors.inkSubtle,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: 10,
-  },
+const e = StyleSheet.create({
+  wrap: { alignItems: "center", paddingTop: 60, gap: 12, paddingHorizontal: 16 },
+  title: { fontFamily: font.sansBold, fontSize: 18, color: color.hull },
+  body: { fontFamily: font.sans, fontSize: 14, color: color.ink2, textAlign: "center", lineHeight: 20 },
+  btn: { marginTop: 8, backgroundColor: color.orange, paddingHorizontal: 24, paddingVertical: 14 },
+  btnText: { fontFamily: font.sansBold, fontSize: 13, letterSpacing: ls(13, tracking.data), color: color.white },
 });
 
-const tr = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  left: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  type: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Colors.ink,
-  },
-  typeVoided: {
-    color: Colors.inkSubtle,
-    textDecorationLine: "line-through",
-  },
-  cancelled: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.error,
-    letterSpacing: 0.3,
-  },
-  chevron: {
-    fontSize: 20,
-    color: Colors.inkSubtle,
-    lineHeight: 24,
-  },
+const n = StyleSheet.create({
+  card: { backgroundColor: color.hull, padding: space.lg, gap: 6 },
+  countdown: { fontFamily: font.monoSemibold, fontSize: 11, letterSpacing: ls(11, tracking.kickerWide), color: color.orangeLight },
+  name: { fontFamily: font.sansBold, fontSize: 20, color: color.white },
+  metaRow: {},
+  meta: { fontFamily: font.mono, fontSize: 12, color: color.inkOnDark3 },
+  bottomRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: color.hullLine },
+  showLink: { fontFamily: font.monoSemibold, fontSize: 12, letterSpacing: ls(12, tracking.data), color: color.white },
+});
+
+const u = StyleSheet.create({
+  card: { flexDirection: "row", backgroundColor: color.white, borderWidth: 1, borderColor: color.rule },
+  bar: { width: 8 },
+  body: { flex: 1, padding: 14, gap: 2 },
+  date: { fontFamily: font.mono, fontSize: 12, color: color.ink3 },
+  name: { fontFamily: font.sansSemibold, fontSize: 15, color: color.hull },
+});
+
+const p = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: color.ruleSoft },
+  name: { fontFamily: font.sansSemibold, fontSize: 14, color: color.hull },
+  nameStruck: { textDecorationLine: "line-through", color: color.ink3 },
+  date: { fontFamily: font.mono, fontSize: 11, color: color.ink3, marginTop: 2 },
+  bookAgain: { fontFamily: font.monoSemibold, fontSize: 11, letterSpacing: ls(11, tracking.data), color: color.orangeInk },
 });
 
 const add = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.backdrop,
-  },
-  kav: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  sheet: {
-    backgroundColor: Colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.border,
-    alignSelf: "center",
-    marginTop: 10,
-    marginBottom: 18,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: Colors.ink,
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Colors.inkMuted,
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  fieldGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.inkMuted,
-    marginBottom: 6,
-    letterSpacing: 0.2,
-  },
+  body: { paddingHorizontal: space.gutter, gap: 8 },
+  title: { fontFamily: font.sansBold, fontSize: 18, color: color.hull },
+  subtitle: { fontFamily: font.sans, fontSize: 13, color: color.ink2, marginBottom: 8, lineHeight: 18 },
+  label: { fontFamily: font.monoSemibold, fontSize: 11, letterSpacing: ls(11, tracking.label), color: color.ink3, marginTop: 8 },
   input: {
-    height: 48,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: color.disabledBorder,
     paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontFamily: font.sans,
     fontSize: 16,
-    color: Colors.ink,
-    backgroundColor: Colors.surfaceAlt,
+    color: color.hull,
+    marginTop: 6,
   },
-  error: {
-    fontSize: 13,
-    color: Colors.error,
-    marginBottom: 12,
-    lineHeight: 18,
-  },
-  btn: {
-    height: 50,
-    backgroundColor: Colors.gold,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 4,
-  },
-  btnLoading: {
-    opacity: 0.75,
-  },
-  btnText: {
-    color: Colors.navy,
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  error: { fontFamily: font.sansSemibold, fontSize: 13, color: color.orangeInk, marginTop: 10 },
+  btn: { marginTop: 16, backgroundColor: color.orange, paddingVertical: 16, alignItems: "center" },
+  btnLoading: { opacity: 0.8 },
+  btnText: { fontFamily: font.sansBold, fontSize: 14, letterSpacing: ls(14, tracking.data), color: color.white },
 });
