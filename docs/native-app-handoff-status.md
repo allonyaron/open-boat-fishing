@@ -36,14 +36,19 @@ actual completed Stripe charge (stopped at the native PaymentSheet boundary).
 
 ---
 
+## Done since this doc was created
+
+- **Stale native-project identity — fixed.** The generated `ios/`/`android/` projects were still
+  `com.captree.fishing` / "Captree Fishing" from before the app was renamed to OpenBoat Fishing,
+  even though `app.json` already said the new name. Fixed via `npx expo prebuild --clean`, which
+  fully regenerated both (they're gitignored/disposable — CNG-managed, nothing tracked was lost).
+  `.env.local`'s `EXPO_PUBLIC_URL_SCHEME`/`EXPO_PUBLIC_MERCHANT_NAME` updated to match. Verified
+  with a fresh `expo run:ios` build under the new `com.openboat.fishing` identity — both the mate
+  and consumer variants launch and render correctly.
+
 ## Next up
 
-1. **Fix stale native-project identity** (in progress as of this doc). The generated `ios/`/
-   `android/` projects were still `com.captree.fishing` / "Captree Fishing" from before the app
-   was renamed to OpenBoat Fishing, even though `app.json` already said the new name. Fixed via
-   `npx expo prebuild --clean`. Not a blocker for simulator dev testing, but was a real blocker
-   for TestFlight/App Store distribution under the wrong identity.
-2. **Phone testing.** No paid Apple Developer account, so: plug the phone into a Mac with Xcode
+1. **Phone testing.** No paid Apple Developer account, so: plug the phone into a Mac with Xcode
    and run `npx expo run:ios --device` (free personal-team signing; install expires after 7 days,
    re-run to refresh). EAS development-profile builds (`eas.json`'s `development` profile exists
    already) are the alternative once/if a paid account exists — no cable needed, no 7-day expiry.
