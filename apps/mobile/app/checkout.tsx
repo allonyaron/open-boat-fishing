@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -15,41 +14,19 @@ import { useRouter } from "expo-router";
 import { useStripe } from "@stripe/stripe-react-native";
 import { MMKV } from "react-native-mmkv";
 import { API_URL } from "@/lib/api";
-import { fmtTime } from "@openboat/utils";
-import { Colors } from "@/constants/Colors";
-import { FontSize, LineHeight } from "@/constants/Typography";
-import { Padding, Radius, Shadow, Spacing } from "@/constants/Spacing";
+import { color, font, ls, space, tracking } from "@/constants/nativeTokens";
+import {
+  type Cart,
+  type Trip,
+  dollars,
+  fmtTimeRange,
+  tripTypeColor,
+} from "@/lib/trip-helpers";
 import { upsertBooking } from "@/lib/wallet";
-
-// ─── Types (mirrors trips.tsx) ────────────────────────────────────────────────
-
-type Price = { id: string; ticketType: string; priceCents: number };
-type Trip = {
-  id: string;
-  departureDate: string;
-  startTime: string;
-  endTime: string;
-  capacity: number;
-  seatsRemaining: number;
-  vessel: { id: string; name: string; color: string };
-  product: { id: string; category: string; displayName: string; prices: Price[] };
-};
-type CartKey = string; // "tripId:ticketType"
-
-type PendingCheckout = {
-  cart: Record<CartKey, number>;
-  cartTrips: Trip[];
-};
-
-// ─── Storage ──────────────────────────────────────────────────────────────────
 
 const checkoutStorage = new MMKV();
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmtCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+type PendingCheckout = { cart: Cart; cartTrips: Trip[] };
 
 function ticketLabel(type: string): string {
   return type.charAt(0).toUpperCase() + type.slice(1);
@@ -57,33 +34,21 @@ function ticketLabel(type: string): string {
 
 // ─── ConfirmedView ────────────────────────────────────────────────────────────
 
-function ConfirmedView({
-  code,
-  email,
-  onDone,
-}: {
-  code: string;
-  email: string;
-  onDone: () => void;
-}) {
+function ConfirmedView({ code, onDone }: { code: string; onDone: () => void }) {
   return (
     <SafeAreaView style={cv.safe}>
+      <View style={cv.appBar}>
+        <Text style={cv.appBarTitle}>CONFIRMED</Text>
+      </View>
       <View style={cv.inner}>
-        <View style={cv.iconCircle}>
-          <Text style={cv.checkmark}>✓</Text>
-        </View>
-        <Text style={cv.title}>You're booked!</Text>
-        <Text style={cv.subtitle}>Confirmation email sent to {email}</Text>
+        <Text style={cv.title}>You&rsquo;re booked.</Text>
+        <Text style={cv.subtitle}>Your boarding pass is saved on this phone.</Text>
         <View style={cv.codeBox}>
-          <Text style={cv.codeLabel}>CONFIRMATION CODE</Text>
+          <Text style={cv.codeLabel}>CONFIRMATION</Text>
           <Text style={cv.code}>{code}</Text>
         </View>
-        <Text style={cv.hint}>
-          Your boarding passes will appear in My Tickets shortly. You can also add them manually
-          using your code and email.
-        </Text>
         <TouchableOpacity style={cv.btn} onPress={onDone} activeOpacity={0.85}>
-          <Text style={cv.btnText}>View My Tickets</Text>
+          <Text style={cv.btnText}>VIEW MY TICKETS</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -92,13 +57,7 @@ function ConfirmedView({
 
 // ─── CheckoutScreen ───────────────────────────────────────────────────────────
 
-type CartLine = {
-  trip: Trip;
-  ticketType: string;
-  qty: number;
-  priceCents: number;
-  lineTotal: number;
-};
+type CartLine = { trip: Trip; ticketType: string; qty: number; priceCents: number; lineTotal: number };
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -108,7 +67,6 @@ export default function CheckoutScreen() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [notes, setNotes] = useState("");
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState<{ code: string; email: string } | null>(null);
@@ -134,13 +92,7 @@ export default function CheckoutScreen() {
       if (!trip) continue;
       const price = trip.product.prices.find((p) => p.ticketType === ticketType);
       if (!price) continue;
-      lines.push({
-        trip,
-        ticketType,
-        qty,
-        priceCents: price.priceCents,
-        lineTotal: price.priceCents * qty,
-      });
+      lines.push({ trip, ticketType, qty, priceCents: price.priceCents, lineTotal: price.priceCents * qty });
     }
     return lines;
   }, [pending]);
@@ -174,16 +126,12 @@ export default function CheckoutScreen() {
     setPaying(true);
 
     try {
-      // Build cart payload grouped by tripId
       const cartByTrip = new Map<string, { ticketType: string; quantity: number }[]>();
       for (const line of cartLines) {
         if (!cartByTrip.has(line.trip.id)) cartByTrip.set(line.trip.id, []);
         cartByTrip.get(line.trip.id)!.push({ ticketType: line.ticketType, quantity: line.qty });
       }
-      const cartPayload = [...cartByTrip.entries()].map(([tripId, tickets]) => ({
-        tripId,
-        tickets,
-      }));
+      const cartPayload = [...cartByTrip.entries()].map(([tripId, tickets]) => ({ tripId, tickets }));
 
       const res = await fetch(`${API_URL}/api/bookings`, {
         method: "POST",
@@ -193,7 +141,7 @@ export default function CheckoutScreen() {
           customerName: cleanName,
           customerEmail: cleanEmail,
           customerPhone: cleanPhone,
-          notes: notes.trim() || null,
+          notes: null,
         }),
       });
 
@@ -228,22 +176,16 @@ export default function CheckoutScreen() {
       const { error: presentError } = await presentPaymentSheet();
 
       if (presentError) {
-        // 'Canceled' means the user dismissed the sheet — not an error to surface
         if (presentError.code !== "Canceled") {
           setError(presentError.message ?? "Payment failed. Please try again.");
         }
         return;
       }
 
-      // Payment succeeded — clear the pending cart
       checkoutStorage.set("cart_paid", true);
       checkoutStorage.delete("pending_checkout");
-
       setConfirmed({ code: confirmationCode, email: cleanEmail });
 
-      // Background: retry fetching the confirmed booking and add to wallet.
-      // The webhook that confirms the booking is async, so the first attempt
-      // may arrive before it fires.
       void (async () => {
         for (let i = 0; i < 5; i++) {
           await new Promise<void>((r) => setTimeout(r, 1500));
@@ -269,18 +211,19 @@ export default function CheckoutScreen() {
   }, [name, email, phone, cartLines, initPaymentSheet, presentPaymentSheet]);
 
   if (confirmed) {
-    return (
-      <ConfirmedView
-        code={confirmed.code}
-        email={confirmed.email}
-        onDone={() => router.replace("/(tabs)/tickets")}
-      />
-    );
+    return <ConfirmedView code={confirmed.code} onDone={() => router.replace("/(tabs)/tickets")} />;
   }
 
   if (!pending || cartLines.length === 0) {
     return (
       <SafeAreaView style={s.safe}>
+        <View style={s.appBar}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={s.backLink}>‹ BACK</Text>
+          </TouchableOpacity>
+          <Text style={s.appBarTitle}>PAY BY CARD</Text>
+          <View style={{ width: 60 }} />
+        </View>
         <View style={s.centered}>
           <Text style={s.emptyText}>No items in cart.</Text>
         </View>
@@ -290,130 +233,108 @@ export default function CheckoutScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+      <View style={s.appBar}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={s.backLink}>‹ BACK</Text>
+        </TouchableOpacity>
+        <Text style={s.appBarTitle}>PAY BY CARD</Text>
+        <View style={{ width: 60 }} />
+      </View>
+
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
           style={s.scroll}
           contentContainerStyle={s.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Order summary */}
           <Text style={s.sectionLabel}>ORDER SUMMARY</Text>
           <View style={s.card}>
             {linesByTrip.map(({ trip, lines }, idx) => (
-              <View
-                key={trip.id}
-                style={[s.tripGroup, idx < linesByTrip.length - 1 && s.tripGroupBorder]}
-              >
-                <View style={[s.tripColorBar, { backgroundColor: trip.vessel.color }]} />
+              <View key={trip.id} style={[s.tripGroup, idx < linesByTrip.length - 1 && s.tripGroupBorder]}>
+                <View style={[s.tripColorBar, { backgroundColor: tripTypeColor(trip.product.category, trip.vessel.color) }]} />
                 <View style={s.tripGroupBody}>
                   <Text style={s.tripVessel}>{trip.vessel.name}</Text>
                   <Text style={s.tripMeta}>{trip.product.displayName}</Text>
-                  <Text style={s.tripTime}>
-                    {fmtTime(trip.startTime)} – {fmtTime(trip.endTime)}
-                  </Text>
+                  <Text style={s.tripTime}>{fmtTimeRange(trip.startTime, trip.endTime)}</Text>
                   {lines.map((line) => (
                     <View key={line.ticketType} style={s.lineRow}>
-                      <Text style={s.lineLabel}>
-                        {ticketLabel(line.ticketType)} × {line.qty}
-                      </Text>
-                      <Text style={s.linePrice}>{fmtCents(line.lineTotal)}</Text>
+                      <Text style={s.lineLabel}>{ticketLabel(line.ticketType)} × {line.qty}</Text>
+                      <Text style={s.linePrice}>{dollars(line.lineTotal)}</Text>
                     </View>
                   ))}
                 </View>
               </View>
             ))}
             <View style={s.totalRow}>
-              <Text style={s.totalLabel}>Total</Text>
-              <Text style={s.totalAmount}>{fmtCents(totalCents)}</Text>
+              <Text style={s.totalLabel}>TOTAL</Text>
+              <Text style={s.totalAmount}>{dollars(totalCents)}</Text>
             </View>
           </View>
 
-          {/* Contact info */}
           <Text style={s.sectionLabel}>YOUR INFORMATION</Text>
           <View style={s.card}>
             <View style={s.fieldGroup}>
-              <Text style={s.fieldLabel}>Full Name</Text>
+              <Text style={s.fieldLabel}>NAME</Text>
               <TextInput
                 style={s.input}
                 value={name}
                 onChangeText={setName}
                 placeholder="Jane Smith"
-                placeholderTextColor={Colors.inkSubtle}
+                placeholderTextColor={color.disabledBorder}
                 autoCapitalize="words"
                 autoCorrect={false}
                 returnKeyType="next"
               />
             </View>
             <View style={s.fieldGroup}>
-              <Text style={s.fieldLabel}>Email</Text>
+              <Text style={s.fieldLabel}>EMAIL <Text style={s.optional}>(for your receipt)</Text></Text>
               <TextInput
                 style={s.input}
                 value={email}
                 onChangeText={setEmail}
                 placeholder="you@example.com"
-                placeholderTextColor={Colors.inkSubtle}
+                placeholderTextColor={color.disabledBorder}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="email-address"
                 returnKeyType="next"
               />
             </View>
-            <View style={s.fieldGroup}>
-              <Text style={s.fieldLabel}>
-                Mobile Number <Text style={s.optional}>(for ticket delivery)</Text>
-              </Text>
+            <View style={[s.fieldGroup, { borderBottomWidth: 0 }]}>
+              <Text style={s.fieldLabel}>MOBILE <Text style={s.optional}>(optional)</Text></Text>
               <TextInput
                 style={s.input}
                 value={phone}
                 onChangeText={setPhone}
                 placeholder="(631) 555-0100"
-                placeholderTextColor={Colors.inkSubtle}
+                placeholderTextColor={color.disabledBorder}
                 keyboardType="phone-pad"
                 returnKeyType="done"
               />
             </View>
-            <View style={[s.fieldGroup, { marginBottom: 0 }]}>
-              <Text style={s.fieldLabel}>
-                Special Requests <Text style={s.optional}>(optional)</Text>
-              </Text>
-              <TextInput
-                style={[s.input, s.notesInput]}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Accessibility needs, dietary requirements…"
-                placeholderTextColor={Colors.inkSubtle}
-                multiline
-                maxLength={500}
-                returnKeyType="done"
-                blurOnSubmit
-              />
-            </View>
           </View>
 
-          {error ? <Text style={s.error}>{error}</Text> : null}
-
-          <Text style={s.terms}>
-            By completing your purchase you accept the terms and conditions.
-          </Text>
+          <View style={s.errorSlot}>{error ? <Text style={s.error}>{error}</Text> : null}</View>
 
           <TouchableOpacity
-            style={[s.payBtn, paying && s.payBtnDisabled]}
+            style={[s.payBtn, paying && s.payBtnCharging]}
             onPress={handlePay}
             disabled={paying}
             activeOpacity={0.85}
           >
             {paying ? (
-              <ActivityIndicator color={Colors.white} />
+              <>
+                <View style={s.spinnerSlot} />
+                <Text style={s.payBtnText}>Charging {dollars(totalCents)}…</Text>
+              </>
             ) : (
-              <Text style={s.payBtnText}>Pay {fmtCents(totalCents)}</Text>
+              <Text style={s.payBtnText}>PAY {dollars(totalCents)}</Text>
             )}
           </TouchableOpacity>
+          {paying && <Text style={s.chargingNote}>DON&rsquo;T LEAVE THE APP · THIS TAKES A FEW SECONDS</Text>}
 
-          <View style={{ height: Spacing.xxxl }} />
+          <View style={{ height: 32 }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -423,258 +344,165 @@ export default function CheckoutScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: Colors.surfaceAlt,
-  },
-  centered: {
-    flex: 1,
+  safe: { flex: 1, backgroundColor: color.deck },
+  appBar: {
+    height: 54,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    padding: Spacing.xxl,
-  },
-  emptyText: {
-    fontSize: FontSize.xl,
-    color: Colors.inkMuted,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: Spacing.xl,
-  },
-  sectionLabel: {
-    fontSize: FontSize.xs,
-    fontWeight: "700",
-    color: Colors.inkSubtle,
-    letterSpacing: 0.8,
-    marginBottom: Spacing.md,
-    marginTop: Spacing.xl,
-    paddingHorizontal: Spacing.xs,
-  },
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: "hidden",
-    shadowColor: Colors.shadow,
-    ...Shadow.card,
-  },
-  tripGroup: {
-    flexDirection: "row",
-    paddingVertical: Padding.btnVertical,
-    paddingRight: Spacing.xl,
-  },
-  tripGroupBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  tripColorBar: {
-    width: Spacing.xs,
-    borderRadius: Radius.xs,
-    marginHorizontal: Spacing.lg,
-    alignSelf: "stretch",
-  },
-  tripGroupBody: {
-    flex: 1,
-    gap: Spacing.xxs,
-  },
-  tripVessel: {
-    fontSize: FontSize.lg,
-    fontWeight: "700",
-    color: Colors.ink,
-  },
-  tripMeta: {
-    fontSize: FontSize.base,
-    color: Colors.inkMuted,
-    fontWeight: "500",
-  },
-  tripTime: {
-    fontSize: FontSize.base,
-    color: Colors.inkSubtle,
-    marginBottom: Spacing.md,
-  },
-  lineRow: {
-    flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: Spacing.xxs,
+    backgroundColor: color.hull,
+    paddingHorizontal: space.gutter,
+    borderBottomWidth: 3,
+    borderBottomColor: color.orange,
   },
-  lineLabel: {
-    fontSize: FontSize.md,
-    color: Colors.ink,
+  backLink: {
+    fontFamily: font.monoSemibold,
+    fontSize: 12,
+    letterSpacing: ls(12, tracking.label),
+    color: color.inkOnDark3,
+    width: 60,
   },
-  linePrice: {
-    fontSize: FontSize.md,
-    fontWeight: "600",
-    color: Colors.ink,
+  appBarTitle: {
+    fontFamily: font.monoSemibold,
+    fontSize: 13,
+    letterSpacing: ls(13, tracking.kicker),
+    color: color.white,
   },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xxl },
+  emptyText: { fontFamily: font.sans, fontSize: 16, color: color.ink2 },
+  scroll: { flex: 1 },
+  scrollContent: { padding: space.gutter },
+  sectionLabel: {
+    fontFamily: font.monoSemibold,
+    fontSize: 11,
+    letterSpacing: ls(11, tracking.kicker),
+    color: color.ink2,
+    marginTop: space.xl,
+    marginBottom: space.sm,
+  },
+  card: { backgroundColor: color.white, borderWidth: 1, borderColor: color.rule },
+  tripGroup: { flexDirection: "row", paddingVertical: 14, paddingRight: space.lg },
+  tripGroupBorder: { borderBottomWidth: 1, borderBottomColor: color.ruleSoft },
+  tripColorBar: { width: 4, marginHorizontal: space.lg, alignSelf: "stretch" },
+  tripGroupBody: { flex: 1, gap: 2 },
+  tripVessel: { fontFamily: font.sansBold, fontSize: 16, color: color.hull },
+  tripMeta: { fontFamily: font.sans, fontSize: 13, color: color.ink2 },
+  tripTime: { fontFamily: font.mono, fontSize: 12, color: color.ink3, marginBottom: 6 },
+  lineRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 2 },
+  lineLabel: { fontFamily: font.sans, fontSize: 14, color: color.hull },
+  linePrice: { fontFamily: font.monoSemibold, fontSize: 13, color: color.hull },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: Spacing.xl,
+    padding: space.lg,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    backgroundColor: Colors.surfaceAlt,
+    borderTopColor: color.rule,
+    backgroundColor: color.deck3,
   },
   totalLabel: {
-    fontSize: FontSize.lg,
-    fontWeight: "700",
-    color: Colors.ink,
+    fontFamily: font.monoSemibold,
+    fontSize: 12,
+    letterSpacing: ls(12, tracking.data),
+    color: color.hull,
   },
-  totalAmount: {
-    fontSize: FontSize.h3,
-    fontWeight: "800",
-    color: Colors.ink,
-  },
+  totalAmount: { fontFamily: font.monoBold, fontSize: 22, color: color.hull },
   fieldGroup: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Padding.btnVertical,
-    paddingBottom: Spacing.xs,
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    marginBottom: 0,
+    borderBottomColor: color.ruleSoft,
   },
   fieldLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: "600",
-    color: Colors.inkSubtle,
-    letterSpacing: 0.3,
-    marginBottom: Spacing.xs,
+    fontFamily: font.monoSemibold,
+    fontSize: 11,
+    letterSpacing: ls(11, tracking.label),
+    color: color.ink3,
+    marginBottom: 4,
   },
-  optional: {
-    fontWeight: "400",
-    color: Colors.inkSubtle,
-  },
-  notesInput: {
-    minHeight: 72,
-    textAlignVertical: "top",
-    paddingTop: 8,
-  },
+  optional: { fontFamily: font.mono, color: color.disabledBorder },
   input: {
-    fontSize: FontSize.xl,
-    color: Colors.ink,
-    paddingVertical: Spacing.md,
+    fontFamily: font.sans,
+    fontSize: 17,
+    color: color.hull,
+    paddingVertical: space.sm,
   },
-  error: {
-    fontSize: FontSize.md,
-    color: Colors.error,
-    marginTop: Spacing.lg,
-    paddingHorizontal: Spacing.xs,
-    lineHeight: LineHeight.base,
-  },
-  terms: {
-    fontSize: FontSize.base,
-    color: Colors.inkSubtle,
-    textAlign: "center",
-    marginTop: Spacing.xl,
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-    lineHeight: LineHeight.tight,
-  },
+  errorSlot: { minHeight: 20, marginTop: space.md },
+  error: { fontFamily: font.sansSemibold, fontSize: 13, color: color.orangeInk },
   payBtn: {
-    backgroundColor: Colors.gold,
-    paddingVertical: Spacing.xl,
-    borderRadius: Radius.lg,
+    minHeight: 66,
+    backgroundColor: color.orange,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: Spacing.xs,
-    shadowColor: Colors.gold,
-    ...Shadow.modal,
+    flexDirection: "row",
+    gap: 10,
+    marginTop: space.sm,
   },
-  payBtnDisabled: {
-    opacity: 0.7,
-  },
+  payBtnCharging: { backgroundColor: color.orangePress },
   payBtnText: {
-    color: Colors.navy,
-    fontSize: FontSize.xxl,
-    fontWeight: "800",
-    letterSpacing: 0.3,
+    fontFamily: font.sansBold,
+    fontSize: 16,
+    letterSpacing: ls(16, tracking.data),
+    color: color.white,
+  },
+  spinnerSlot: { width: 14, height: 14, backgroundColor: color.orangeOnOrange },
+  chargingNote: {
+    fontFamily: font.monoSemibold,
+    fontSize: 10,
+    letterSpacing: ls(10, tracking.label),
+    color: color.ink3,
+    textAlign: "center",
+    marginTop: 8,
   },
 });
 
 const cv = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: Colors.surface,
-  },
-  inner: {
-    flex: 1,
-    alignItems: "center",
+  safe: { flex: 1, backgroundColor: color.deck },
+  appBar: {
+    height: 54,
     justifyContent: "center",
-    paddingHorizontal: Spacing.xxxl,
-    gap: Spacing.xl,
+    paddingHorizontal: space.gutter,
+    backgroundColor: color.hull,
+    borderBottomWidth: 3,
+    borderBottomColor: color.orange,
   },
-  iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Colors.gold,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.xs,
+  appBarTitle: {
+    fontFamily: font.monoSemibold,
+    fontSize: 13,
+    letterSpacing: ls(13, tracking.kicker),
+    color: color.white,
   },
-  checkmark: {
-    color: Colors.navy,
-    fontSize: FontSize.display,
-    fontWeight: "700",
-    lineHeight: LineHeight.loose,
-  },
-  title: {
-    fontSize: FontSize.h2,
-    fontWeight: "800",
-    color: Colors.ink,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: FontSize.md,
-    color: Colors.inkMuted,
-    textAlign: "center",
-    lineHeight: LineHeight.base,
-  },
+  inner: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: space.xxl, gap: space.lg },
+  title: { fontFamily: font.sansBold, fontSize: 26, color: color.hull, textAlign: "center" },
+  subtitle: { fontFamily: font.sans, fontSize: 15, color: color.ink2, textAlign: "center" },
   codeBox: {
-    backgroundColor: Colors.surfaceAlt,
-    borderRadius: Radius.md,
+    backgroundColor: color.white,
     borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Padding.cardHorizontal,
-    paddingVertical: Spacing.xl,
+    borderColor: color.rule,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.lg,
     alignItems: "center",
     width: "100%",
   },
   codeLabel: {
-    fontSize: FontSize.xs,
-    fontWeight: "700",
-    color: Colors.inkSubtle,
-    letterSpacing: 1,
-    marginBottom: Spacing.sm,
+    fontFamily: font.monoSemibold,
+    fontSize: 11,
+    letterSpacing: ls(11, tracking.kicker),
+    color: color.ink3,
+    marginBottom: 6,
   },
-  code: {
-    fontSize: FontSize.h1,
-    fontWeight: "800",
-    color: Colors.ink,
-    letterSpacing: 4,
-  },
-  hint: {
-    fontSize: FontSize.base,
-    color: Colors.inkSubtle,
-    textAlign: "center",
-    lineHeight: LineHeight.base,
-  },
+  code: { fontFamily: font.monoBold, fontSize: 28, color: color.hull, letterSpacing: 2 },
   btn: {
-    backgroundColor: Colors.gold,
-    paddingHorizontal: Spacing.xxxxl,
-    paddingVertical: Spacing.xl,
-    borderRadius: Radius.lg,
-    marginTop: Spacing.md,
+    backgroundColor: color.orange,
+    paddingVertical: space.lg,
     width: "100%",
     alignItems: "center",
   },
   btnText: {
-    color: Colors.navy,
-    fontSize: FontSize.xl,
-    fontWeight: "700",
+    fontFamily: font.sansBold,
+    fontSize: 14,
+    letterSpacing: ls(14, tracking.data),
+    color: color.white,
   },
 });
