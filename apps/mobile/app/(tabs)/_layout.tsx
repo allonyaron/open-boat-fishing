@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types -- prop shapes are enforced by TypeScript below */
-import { Tabs } from "expo-router";
+import { Tabs, usePathname } from "expo-router";
 import { Pressable, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
 import Svg, { Circle, Rect, Line } from "react-native-svg";
 import { BoatGlyph } from "@/components/BoatGlyph";
@@ -47,14 +47,21 @@ function TabMark({ name, focused }: { name: "book" | "tickets" | "conditions" | 
 function TabButton({
   label,
   mark,
-  focused,
+  routeName,
   onPress,
 }: {
   label: string;
   mark: "book" | "tickets" | "conditions" | "account";
-  focused: boolean;
+  routeName: string;
   onPress: (e: GestureResponderEvent) => void;
 }) {
+  // expo-router's Tabs strips the `(tabs)` group segment from the pathname, so
+  // the active route resolves to e.g. "/trips". tabBarButton's own
+  // `accessibilityState.selected` prop is not reliably populated here, so
+  // this reads the route directly instead of trusting that prop.
+  const pathname = usePathname();
+  const focused = pathname === `/${routeName}` || (routeName === "trips" && pathname === "/");
+
   return (
     <Pressable style={tb.item} onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: focused }}>
       <View style={[tb.topRule, focused && tb.topRuleActive]} />
@@ -78,12 +85,7 @@ export default function TabLayout() {
         name="trips"
         options={{
           tabBarButton: (props) => (
-            <TabButton
-              label="BOOK"
-              mark="book"
-              focused={!!props.accessibilityState?.selected}
-              onPress={(e) => props.onPress?.(e)}
-            />
+            <TabButton label="BOOK" mark="book" routeName="trips" onPress={(e) => props.onPress?.(e)} />
           ),
         }}
       />
@@ -91,12 +93,7 @@ export default function TabLayout() {
         name="tickets"
         options={{
           tabBarButton: (props) => (
-            <TabButton
-              label="TICKETS"
-              mark="tickets"
-              focused={!!props.accessibilityState?.selected}
-              onPress={(e) => props.onPress?.(e)}
-            />
+            <TabButton label="TICKETS" mark="tickets" routeName="tickets" onPress={(e) => props.onPress?.(e)} />
           ),
         }}
       />
@@ -104,12 +101,7 @@ export default function TabLayout() {
         name="reports"
         options={{
           tabBarButton: (props) => (
-            <TabButton
-              label="CONDITIONS"
-              mark="conditions"
-              focused={!!props.accessibilityState?.selected}
-              onPress={(e) => props.onPress?.(e)}
-            />
+            <TabButton label="CONDITIONS" mark="conditions" routeName="reports" onPress={(e) => props.onPress?.(e)} />
           ),
         }}
       />
@@ -117,12 +109,7 @@ export default function TabLayout() {
         name="account"
         options={{
           tabBarButton: (props) => (
-            <TabButton
-              label="ACCOUNT"
-              mark="account"
-              focused={!!props.accessibilityState?.selected}
-              onPress={(e) => props.onPress?.(e)}
-            />
+            <TabButton label="ACCOUNT" mark="account" routeName="account" onPress={(e) => props.onPress?.(e)} />
           ),
         }}
       />

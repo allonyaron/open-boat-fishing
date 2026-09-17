@@ -217,7 +217,7 @@ export default function TripsScreen() {
                   <View
                     style={[
                       s.cardBar,
-                      { backgroundColor: soldOut ? color.disabledBorder : tripTypeColor(trip.product.category, trip.vessel.color) },
+                      { backgroundColor: soldOut ? color.disabledBorder : tripTypeColor(trip.product.category) },
                     ]}
                   />
                   <View style={s.cardBody}>
