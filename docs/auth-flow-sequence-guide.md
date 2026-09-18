@@ -36,18 +36,18 @@ This is the first half of the login. The customer provides their email and the s
 
 2. **`UI->>API: POST /api/auth/request { email }`** — The browser sends the email to the server. No OTP has been generated yet.
 
-3. **`API->>DB: checkRateLimit("otp-ip:<ip>", 20, 1hr)`** — Before doing any work, the API checks whether this IP address has made too many OTP requests. Limit is 20 per hour. The rate limit record lives in Postgres.
+3. **`API->>DB: checkRateLimit("otp-request:ip:<ip>", 20, 1hr)`** — Before doing any work, the API checks whether this IP address has made too many OTP requests. Limit is 20 per hour. The rate limit record lives in Postgres.
 
-4. **`API->>DB: checkRateLimit("otp-email:<email>", 5, 1hr)`** — A second rate limit check, this time keyed on the email address itself rather than the IP. Limit is 5 per hour. This prevents someone from hammering one user's inbox.
+4. **`API->>DB: checkRateLimit("otp-request:email:<email>", 5, 1hr)`** — A second rate limit check, this time keyed on the email address itself rather than the IP. Limit is 5 per hour. This prevents someone from hammering one user's inbox.
    - The Note says: if either limit is exceeded, the API returns `429` with a `Retry-After` header immediately. Nothing else runs.
 
-5. **`API->>DB: SELECT operators LIMIT 1`** — The API fetches the operator record. Since this is single-tenant, there is always exactly one row. The operator name is used in the email body.
+5. **`API->>API: getOperatorContext(req)`** — The API reads the `x-operator-id` header set by Edge middleware (`apps/web/src/middleware.ts`) and looks up that operator's row. In single-deploy mode the middleware short-circuits on the `OPERATOR_ID` env var; in centralized mode it resolves the hostname against the `domains` table. There is no per-request `SELECT operators LIMIT 1` — operator resolution already happened before this route ran. The operator name is used in the email body.
 
-6. **`DB-->>API: operator row`** — Postgres returns the row. *(dotted — reply)*
+6. **`API->>API: generate 6-digit OTP`** — Self-arrow. The API generates a cryptographically random 6-digit number internally. No database or network involved.
 
-7. **`API->>API: generate 6-digit OTP`** — Self-arrow. The API generates a cryptographically random 6-digit number internally. No database or network involved.
+7. **`API->>API: bcrypt hash OTP (cost=10)`** — Self-arrow. The plaintext OTP is immediately hashed using bcrypt at cost 10. The raw number is never stored anywhere — only the hash goes into the database. This means even if the database is compromised, an attacker can't recover OTP values.
 
-8. **`API->>API: bcrypt hash OTP (cost=10)`** — Self-arrow. The plaintext OTP is immediately hashed using bcrypt at cost 10. The raw number is never stored anywhere — only the hash goes into the database. This means even if the database is compromised, an attacker can't recover OTP values.
+8. **`API->>DB: UPDATE magic_link_otps SET used=true WHERE operatorId + email + used=false`** — Before inserting the new code, the API hard-invalidates every still-unused prior OTP for this email. This closes a small window where an intercepted old code would otherwise remain valid after the user requests a fresh one.
 
 9. **`API->>DB: INSERT magic_link_otps (hash, expiresAt=+15min, used=false)`** — The hashed OTP is stored with a 15-minute expiry window and a `used=false` flag.
 
@@ -71,51 +71,53 @@ This is the second half. The customer types in the code they received and, if it
 
 2. **`UI->>API: POST /api/auth/verify { email, otp }`** — The browser sends both the email address and the code to the server.
 
-3. **`API->>DB: checkRateLimit("otp-verify:<email>", 10, 15min)`** — Rate limit on verification attempts, keyed by email. 10 attempts per 15 minutes. This prevents brute-forcing the 6-digit code (1,000,000 possibilities) by limiting guesses.
+3. **`API->>DB: checkRateLimit("otp-verify:ip:<ip>", 20, 15min)` + `checkRateLimit("otp-verify:<email>", 10, 15min)`** — Two rate limits, same shape as the request step: a coarse IP bucket (20/15min, stops one host from parallelizing guesses across many emails) plus a tight email bucket (10/15min) that caps brute-force attempts against a single code. Either tripping returns `429`.
    - The Note says: returns `429` if exceeded.
 
-4. **`API->>DB: SELECT magic_link_otps WHERE email + used=false + expiresAt > NOW() ORDER BY createdAt DESC LIMIT 1`** — The API fetches the most recent valid OTP for this email. The query filters to:
+4. **`API->>API: getOperatorId(req)`** — Same header-based resolution as the request step; no DB round trip.
+
+5. **`API->>DB: SELECT magic_link_otps WHERE operatorId + email + used=false + expiresAt > NOW() ORDER BY createdAt DESC LIMIT 1`** — The API fetches the most recent valid OTP for this email. The query filters to:
    - `used=false` — OTP hasn't been consumed yet
    - `expiresAt > NOW()` — the 15-minute window hasn't passed
    - `ORDER BY createdAt DESC LIMIT 1` — if the user requested multiple codes, only the newest one matters
 
-5. **`DB-->>API: most recent pending OTP row`** — Postgres returns the record. *(dotted — reply)*
+6. **`DB-->>API: most recent pending OTP row`** — Postgres returns the record. *(dotted — reply)*
    - The Note says: returns `401` if no row is found (wrong email, expired, already used).
 
-6. **`API->>API: bcrypt.compare(submitted, hash)`** — Self-arrow. The submitted code is compared against the stored hash using bcrypt's constant-time comparison function. "Constant-time" means the comparison always takes the same amount of time regardless of how many characters match — this prevents timing attacks.
+7. **`API->>API: bcrypt.compare(submitted, hash)`** — Self-arrow. The submitted code is compared against the stored hash using bcrypt's constant-time comparison function. "Constant-time" means the comparison always takes the same amount of time regardless of how many characters match — this prevents timing attacks.
    - The Note says: returns `401` if the code is incorrect.
 
-7. **`API->>DB: UPDATE magic_link_otps SET used=true WHERE id`** — The OTP is immediately marked as used. Even if someone captures the code, replaying it will fail because `used=false` is now false.
+8. **`API->>DB: UPDATE magic_link_otps SET used=true WHERE id`** — The OTP is immediately marked as used. Even if someone captures the code, replaying it will fail because `used=false` is now false.
 
-8. **`API->>DB: SELECT customers WHERE operatorId + email`** — The API checks whether this email address already has a customer record.
+9. **`API->>DB: SELECT customers WHERE operatorId + email`** — The API checks whether this email address already has a customer record.
 
-9. **`DB-->>API: existing customer row or null`** — Postgres returns the row or nothing. *(dotted — reply)*
-   - The Note says: if nothing comes back, this is the customer's first login — a new row is created next.
+10. **`DB-->>API: existing customer row or null`** — Postgres returns the row or nothing. *(dotted — reply)*
+    - The Note says: if nothing comes back, this is the customer's first login — a new row is created next.
 
-10. **`API->>DB: INSERT customers (operatorId, email) if not exists`** — Upsert-safe: if the customer already exists, this is a no-op. If they don't, a new record is created. There's no unique-constraint race here because the prior SELECT already determined which path to take.
+11. **`API->>DB: INSERT customers (operatorId, email) if not exists`** — Upsert-safe: if the customer already exists, this is a no-op. If they don't, a new record is created. There's no unique-constraint race here because the prior SELECT already determined which path to take.
 
-11. **`API->>API: signCustomerToken({ customerId, operatorId, email, name, aud:"customer", exp:+90d })`** — Self-arrow. The API generates a JWT (JSON Web Token) signed with `SESSION_SECRET`. Key fields:
+12. **`API->>API: signCustomerToken({ customerId, operatorId, email, name, aud:"customer", exp:+90d })`** — Self-arrow. The API generates a JWT (JSON Web Token) signed with `SESSION_SECRET`. Key fields:
     - `aud:"customer"` — the audience claim that prevents mate tokens from being accepted here and vice versa
     - `exp:+90d` — the token is valid for 90 days; no refresh needed
 
-12. **`API-->>UI: { token, email, name }`** — The token is sent back to the browser. *(dotted — reply)*
+13. **`API-->>UI: { token, email, name }`** — The token is sent back to the browser. *(dotted — reply)*
 
-13. **`UI->>UI: store token in memory (not localStorage)`** — Self-arrow on the UI side. The token is stored in React state or a context variable, never in `localStorage` or `sessionStorage`. This means it's wiped on page close, reducing the exposure window for a stolen token.
+14. **`UI->>UI: store token in memory (not localStorage)`** — Self-arrow on the UI side. The token is stored in React state or a context variable, never in `localStorage` or `sessionStorage`. This means it's wiped on page close, reducing the exposure window for a stolen token.
 
-14. **`UI-->>C: Signed in — account screen unlocked`** — The browser unlocks the account tab. *(dotted — UI update)*
+15. **`UI-->>C: Signed in — account screen unlocked`** — The browser unlocks the account tab. *(dotted — UI update)*
 
 ---
 
 ## Key things to notice
 
-**Why two rate limits on request, one on verify?**
-The request limits protect the email service from spam and protect a user's inbox from being flooded. The verify limit protects against brute-forcing the code itself. They target different attack surfaces.
+**Why IP + email rate limits on both request and verify?**
+Both steps face the same two attack shapes: one host hammering many emails (stopped by the IP bucket) and one attacker guessing against a single email (stopped by the tight email bucket). Request uses 20/hr IP + 5/hr email; verify uses 20/15min IP + 10/15min email — verify's window is shorter because a 6-digit code is a live brute-force target, not a spam-cost problem.
 
 **Why bcrypt for a 6-digit OTP?**
 A 6-digit number is small enough that if stored in plaintext a database breach immediately exposes every active code. Bcrypt makes each hash unique (via salting) and computationally expensive to reverse. The 15-minute expiry also limits the useful window.
 
-**Why does `ORDER BY createdAt DESC LIMIT 1` matter?**
-If a customer clicks "resend" or accidentally submits twice, multiple OTP rows exist. Only the most recent is valid — older ones are effectively invalidated by the newer row taking precedence. This is a soft invalidation rather than a hard delete.
+**Why does the request step hard-invalidate old codes instead of relying on `ORDER BY ... LIMIT 1`?**
+If a customer clicks "resend," the newest code is what they'll actually use — but until recently the older code stayed valid too (just outranked by `ORDER BY createdAt DESC`). The request route now sets `used=true` on every prior unused code for that email before inserting the new one, so an intercepted old code can't be replayed after a resend. `ORDER BY createdAt DESC LIMIT 1` in the verify query is now a defense-in-depth detail, not the actual invalidation mechanism.
 
 **Why is the token stored in memory, not localStorage?**
 `localStorage` persists across browser closes and is accessible to any JavaScript on the page (including third-party scripts). In-memory storage clears on page close and is invisible to `localStorage`-based attacks.

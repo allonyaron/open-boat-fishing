@@ -36,6 +36,7 @@ sequenceDiagram
     S-->>C: Redirect to /booking/delivery?redirect_status=succeeded
 
     S->>W: POST /api/webhooks/stripe  (payment_intent.succeeded)
+    Note over W: Centralized mode: event.account (if present) is validated against a known operator's stripeAccountId before dispatch — unknown accounts get 400
     W->>DB: UPDATE booking SET status=confirmed
     W->>DB: INSERT payments (with applicationFeeId + stripeTransferId from charge)
     Note over W: Sends confirmation email via Resend (ticket list + boarding pass link)
@@ -147,3 +148,5 @@ stateDiagram-v2
 | `charge.dispute.created`        | ✅             | Void tickets to block boarding while dispute is open; booking stays confirmed pending outcome       |
 | `payment_intent.payment_failed` | ❌ not handled | Customer can retry — no action needed                                                               |
 | `application_fee.refunded`      | ❌ not handled | fee_status → reversed handled in-process by cancellation + refund routes; no webhook needed        |
+
+In centralized mode, every event carrying an `event.account` field (Stripe Connect events) is validated against a known operator's `stripeAccountId` before any handler runs; unknown accounts get a `400`. Single-deploy webhooks are registered directly on the connected account and don't carry `event.account`, so they skip this check.

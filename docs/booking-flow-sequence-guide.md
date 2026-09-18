@@ -124,7 +124,7 @@ Triggered when the payment window expires or the customer leaves without paying.
 3. `UPDATE trips SET seatsRemaining += ticketCount` — Seats are **restored**, so the next customer can book them.
 4. `UPDATE booking SET status=cancelled` — Booking is marked cancelled.
 5. `API-->>N` — A push notification is sent to the customer: "Booking Cancelled — payment wasn't completed."
-6. The Note at the bottom says: the cron job `expire-pending-bookings` runs every 10 minutes and does **the same logic** — so whether Stripe fires the webhook or the cron runs first, the result is identical. Both are idempotent.
+6. The Note at the bottom says: the cron job `expire-pending-bookings` does **the same logic** — so whether Stripe fires the webhook or the cron runs first, the result is identical. Both are idempotent. (The cron is designed to run every 10 minutes but is currently scheduled daily on the Vercel Hobby plan — see `cron-flows-sequence.md`'s cadence note.)
 
 ---
 

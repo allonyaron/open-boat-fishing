@@ -20,8 +20,12 @@ There is no Customer or UI column. Cron jobs are fully automated — no human tr
 Vercel has a built-in scheduler that calls an HTTP endpoint on your app at a configured interval. The `V` column represents Vercel's infrastructure making that HTTP call. From the API's perspective, it looks like any other incoming HTTP request — except the caller is Vercel, not a browser.
 
 This diagram covers two cron jobs:
-1. **Expire Pending Bookings** — runs every 10 minutes. Cancels bookings whose payment window has elapsed.
-2. **Trip Reminders** — runs every hour. Sends push notifications to passengers whose trip departs within 23–24 hours.
+1. **Expire Pending Bookings** — designed to run every 10 minutes; currently scheduled **daily** (`0 2 * * *` in `apps/web/vercel.json`) because the project is on the Vercel Hobby plan, which caps a project at 2 crons and once/day scheduling. Cancels bookings whose payment window has elapsed.
+2. **Trip Reminders** — designed to run hourly; currently scheduled **daily** (`0 9 * * *`), same Hobby-plan constraint. Sends push notifications to passengers whose trip departs within 23–24 hours.
+
+A third route, `GET /api/cron/reset-demo-data`, exists for the `openboatfishing.com` demo deployment (nightly wipe of booking activity, guarded by `CRON_SECRET` + `DEMO_MODE=true`) but isn't registered in `vercel.json` at all — the Hobby plan's 2-cron slot is already spent on the two jobs above. It isn't covered by this diagram.
+
+Both crons' internal logic (locking, idempotency, the `[+23h,+24h)` window) is written as if it runs at the tighter cadence and doesn't change based on how often Vercel actually calls it — see the "Cadence note" in `cron-flows-sequence.md` for what the daily downgrade means in practice.
 
 ---
 
@@ -39,7 +43,7 @@ This diagram covers two cron jobs:
 
 ---
 
-## Section 1 — Expire Pending Bookings (every 10 minutes)
+## Section 1 — Expire Pending Bookings (designed for every 10 minutes, currently runs daily)
 
 When a customer starts checkout, their seats are locked and a `holdExpiresAt` timestamp is set. If they don't pay within that window, the booking stays `pending` forever and the seats are never freed. This cron job finds and cleans up those stale bookings.
 
@@ -114,7 +118,7 @@ end
 
 ---
 
-## Section 2 — Trip Reminders (every hour)
+## Section 2 — Trip Reminders (designed for hourly, currently runs daily)
 
 This cron sends a "trip tomorrow" push notification to every confirmed passenger whose trip departs in the next 23–24 hours.
 

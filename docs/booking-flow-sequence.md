@@ -52,7 +52,8 @@ sequenceDiagram
 
     Note over C,N: PAYMENT CONFIRMATION - async webhook
     S->>API: POST /api/webhooks/stripe (payment_intent.succeeded)
-    API->>S: constructEvent - verify signature
+    API->>S: constructEvent - verify signature (raw body, before any JSON parsing)
+    Note over API: Centralized mode: if event.account is present, validate it against a known operator's stripeAccountId — reject unknown accounts with 400. Single-deploy webhooks carry no event.account and skip this check.
     API->>S: Retrieve charge for applicationFeeId + transferId
     API->>DB: BEGIN TRANSACTION
     API->>DB: SELECT booking FOR UPDATE
@@ -76,7 +77,7 @@ sequenceDiagram
     API->>DB: COMMIT
     API-->>N: sendPushToEmails "Booking Cancelled — payment wasn't completed" (waitUntil)
     N-->>C: push notification delivered
-    Note over API: Cron expire-pending-bookings runs every 10 min with same logic + same push
+    Note over API: Cron expire-pending-bookings runs with same logic + same push (currently daily — see cron-flows-sequence.md cadence note)
 
     Note over C,N: EXTERNAL REFUND - charge.refunded webhook (full refund only)
     S->>API: POST /api/webhooks/stripe (charge.refunded)
@@ -109,3 +110,4 @@ sequenceDiagram
 | Ghost holds don't accumulate            | Seats restored on PI creation failure and on `payment_intent.canceled` |
 | Platform fee captured atomically        | `application_fee_amount` set at PI creation, not separately            |
 | Background tasks don't block Stripe ACK | `waitUntil` keeps function alive after `200 OK` returns                |
+| Seat-restore logic is shared, not duplicated | `cancelPendingBooking()` / `cancelConfirmedBooking()` in `src/lib/bookings/cancel.ts` back the PI-failure path, the cron, and the `payment_intent.canceled`/`charge.refunded` webhook handlers — one implementation, not four |

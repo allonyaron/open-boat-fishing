@@ -46,22 +46,23 @@ The mate authenticates with email and PIN. A short-lived token is returned that 
 
 2. **`App->>API: POST /api/mate/auth { email, pin }`** — The app sends credentials to the server. This requires a network connection — login cannot happen offline.
 
-3. **`API->>DB: checkRateLimit("mate-auth:<email>", 5, 15min)`** — Note: even though `DB` is labeled as SQLite in this diagram's legend, the rate limit is stored server-side in Postgres. Think of this arrow as "the API checks the server database for rate limit state." The labeling here is a diagram shorthand; the rate limit record is not on the device. Limit: 5 attempts per 15 minutes per email address.
-   - The Note says: returns `429` with `Retry-After` if exceeded.
+3. **`API->>API: getOperatorId(req)`** — Reads the `x-operator-id` header set by Edge middleware. No DB round trip; this runs before the rate limit checks so both limit keys below can be scoped per operator.
 
-4. **`API->>PG: SELECT staff WHERE email = ? AND operatorId = ? AND active = true`** — The API looks up the staff record. The `active = true` filter means deactivated accounts are rejected before the PIN is even checked.
+4. **`API->>DB: checkRateLimit("mate-auth:<operatorId>:ip:<ip>", 20, 15min)` + `checkRateLimit("mate-auth:<operatorId>:<email>", 5, 15min)`** — Note: even though `DB` is labeled as SQLite in this diagram's legend, the rate limit is stored server-side in Postgres. Think of this arrow as "the API checks the server database for rate limit state." The labeling here is a diagram shorthand; the rate limit record is not on the device. Two limits: a coarse IP bucket (20/15min, stops one device from parallelizing guesses across many staff emails) plus a tight email bucket (5/15min — a 4-digit PIN is only 10,000 combinations, so this is the meaningful cap). Both keys are scoped by `operatorId` so one operator's staff can't lock out another's in centralized mode.
+   - The Note says: returns `429` with `Retry-After` if either is exceeded.
 
-5. **`PG-->>API: staff row (includes pinHash)`** — Postgres returns the record including the bcrypt hash of the PIN. *(dotted — reply)*
-   - The Note says: returns `401` if the staff row isn't found or the role isn't allowed.
+5. **`API->>PG: SELECT staff WHERE email = ? AND operatorId = ?`** — The API looks up the staff record. There is no `active` filter in this query — that check happens after the PIN comparison (see below), so a disabled account still gets a real bcrypt compare and a distinct `403` rather than folding into the generic `401`.
 
-6. **`API->>API: bcrypt.compare(pin, pinHash) — constant-time`** — Self-arrow. The submitted PIN is compared against the stored hash using bcrypt's constant-time comparison function.
-   - The Note says: returns `401` if the PIN is incorrect.
+6. **`PG-->>API: staff row (includes pinHash)`** — Postgres returns the record including the bcrypt hash of the PIN, or nothing if the email doesn't exist. *(dotted — reply)*
 
-7. **`API->>API: signMateToken({ staffId, operatorId, role, name, aud:"mate", exp:+24h })`** — Self-arrow. A JWT is created with:
+7. **`API->>API: bcrypt.compare(pin, pinHash ?? dummyHash) — constant-time`** — Self-arrow. The submitted PIN is compared against the stored hash. If no staff row was found, a hardcoded dummy bcrypt hash is compared instead — so a nonexistent email takes the same amount of time as a wrong PIN, and the response can't be used to enumerate valid staff emails.
+   - The Note says: returns `401` if the staff row wasn't found or the PIN is incorrect; returns `403` if `active = false`; returns `403` if `role` isn't `"mate"` or `"admin"`.
+
+8. **`API->>API: signMateToken({ staffId, operatorId, role, name, aud:"mate", exp:+24h })`** — Self-arrow. A JWT is created with:
    - `aud:"mate"` — the audience claim that prevents customer tokens from being used here
    - `exp:+24h` — the token expires after 24 hours (a shift's length)
 
-8. **`API-->>App: { token, name, role }`** — The token is returned to the app. *(dotted — reply)* The app stores this in memory and includes it as a `Bearer` header on every subsequent API request.
+9. **`API-->>App: { token, name, role }`** — The token is returned to the app. *(dotted — reply)* The app stores this in memory and includes it as a `Bearer` header on every subsequent API request.
 
 ---
 
