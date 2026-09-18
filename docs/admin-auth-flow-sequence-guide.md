@@ -38,38 +38,36 @@ This is the credential exchange. The admin provides email and password; if corre
 
 2. **`UI->>API: POST /api/admin/auth/login { email, password }`** — Browser sends the credentials to the server over HTTPS.
 
-3. **`API->>DB: checkRateLimit("admin-login:<ip>", 10, 15min)`** — Before anything else, the API checks whether this IP has made too many login attempts. Limit is 10 per 15 minutes.
+3. **`API->>API: getOperatorId(req)`** — Reads the `x-operator-id` header set by Edge middleware (single-deploy: `OPERATOR_ID` env var short-circuit; centralized: `domains` table lookup at the edge). No DB round trip here — this runs before the rate limit check so the limit key below can be scoped per operator.
+
+4. **`API->>DB: checkRateLimit("admin-login:<operatorId>:<ip>", 10, 15min)`** — The API checks whether this IP has made too many login attempts against this specific operator. Limit is 10 per 15 minutes. Scoping the key by `operatorId` matters in centralized mode: without it, a login storm against one operator's admin panel would also rate-limit every other operator's admins sharing the same deployment.
    - The Note says: returns `429` with `Retry-After` if exceeded. No further processing.
 
-4. **`API->>DB: SELECT operators LIMIT 1`** — Fetches the single operator row to scope all subsequent queries.
+5. **`API->>DB: SELECT staff WHERE email = ? AND operatorId = ?`** — Looks up the staff record using both email and `operatorId`. This scoping means an admin account from one deployment can never authenticate against another.
 
-5. **`DB-->>API: operator row`** — Postgres returns the row. *(dotted — reply)*
-
-6. **`API->>DB: SELECT staff WHERE email = ? AND operatorId = ?`** — Looks up the staff record using both email and `operatorId`. This scoping means an admin account from one deployment can never authenticate against another.
-
-7. **`DB-->>API: staff row`** — Postgres returns the record. *(dotted — reply)*
+6. **`DB-->>API: staff row`** — Postgres returns the record. *(dotted — reply)*
    - Three Notes fire here in sequence:
      - Returns `401` if the staff row doesn't exist or has no `passwordHash` set.
      - Returns `403` if the `role` is not `"admin"`. A mate account cannot log into the admin dashboard even with the correct password.
      - Returns `403` if `active = false`. Deactivated accounts are rejected before the password is even checked.
 
-8. **`API->>API: bcrypt.compare(password, passwordHash) — constant-time`** — Self-arrow. The submitted password is compared against the stored bcrypt hash. Constant-time comparison means the function doesn't short-circuit on early mismatches, preventing timing attacks.
+7. **`API->>API: bcrypt.compare(password, passwordHash) — constant-time`** — Self-arrow. The submitted password is compared against the stored bcrypt hash. Constant-time comparison means the function doesn't short-circuit on early mismatches, preventing timing attacks. A dummy hash is compared even when no staff row exists, so the response timing doesn't leak whether an email is registered.
    - The Note says: returns `401` if the password is incorrect.
 
-9. **`API->>S: getIronSession(cookies, { password: SESSION_SECRET })`** — The API opens an iron-session instance, keyed by `SESSION_SECRET`. This is the step that prepares the encrypted cookie.
+8. **`API->>S: getIronSession(cookies, { password: SESSION_SECRET })`** — The API opens an iron-session instance, keyed by `SESSION_SECRET`. This is the step that prepares the encrypted cookie.
 
-10. **`API->>S: session.staffId = id, operatorId, role="admin", name`** — Session data is written into the iron-session object. This data will be AES-256 encrypted before it leaves the server.
+9. **`API->>S: session.staffId = id, operatorId, role="admin", name`** — Session data is written into the iron-session object. This data will be AES-256 encrypted before it leaves the server.
 
-11. **`API->>S: session.save() — AES-256 encrypts + signs cookie`** — The session is persisted to the cookie. `iron-session` encrypts the payload with AES-256 and signs it with an HMAC, so the cookie cannot be read or forged by anyone without `SESSION_SECRET`.
+10. **`API->>S: session.save() — AES-256 encrypts + signs cookie`** — The session is persisted to the cookie. `iron-session` encrypts the payload with AES-256 and signs it with an HMAC, so the cookie cannot be read or forged by anyone without `SESSION_SECRET`.
 
-12. **`S-->>A: Set-Cookie: openboat_admin (HttpOnly, SameSite=Lax, 8h)`** — The encrypted cookie is sent to the browser. *(dotted — the browser receives a `Set-Cookie` header)*
+11. **`S-->>A: Set-Cookie: openboat_admin (HttpOnly, SameSite=Lax, 8h)`** — The encrypted cookie is sent to the browser. *(dotted — the browser receives a `Set-Cookie` header)*
     - `HttpOnly` — JavaScript on the page cannot read this cookie. XSS attacks can't steal it.
     - `SameSite=Lax` — The cookie is not sent on cross-site requests, blocking CSRF attacks.
     - `8h` — The cookie expires after 8 hours.
 
-13. **`API-->>UI: { name, role }`** — The API returns the admin's name and role to the browser for display purposes. *(dotted — reply)*
+12. **`API-->>UI: { name, role }`** — The API returns the admin's name and role to the browser for display purposes. *(dotted — reply)*
 
-14. **`UI-->>A: Admin dashboard`** — The browser navigates to the dashboard. *(dotted — UI render)*
+13. **`UI-->>A: Admin dashboard`** — The browser navigates to the dashboard. *(dotted — UI render)*
 
 ---
 

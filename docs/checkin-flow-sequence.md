@@ -11,13 +11,16 @@ sequenceDiagram
     Note over M,PG: LOGIN
     M->>App: Enter email + PIN
     App->>API: POST /api/mate/auth { email, pin }
-    API->>DB: checkRateLimit("mate-auth:<email>", 5, 15min)
-    Note over API: Returns 429 with Retry-After if limit exceeded
-    API->>PG: SELECT staff WHERE email = ? AND operatorId = ? AND active = true
+    API->>API: getOperatorId(req) — reads x-operator-id header set by Edge middleware
+    API->>DB: checkRateLimit("mate-auth:<operatorId>:ip:<ip>", 20, 15min)
+    API->>DB: checkRateLimit("mate-auth:<operatorId>:<email>", 5, 15min)
+    Note over API: Both keys scoped by operatorId. Returns 429 with Retry-After if either limit exceeded
+    API->>PG: SELECT staff WHERE email = ? AND operatorId = ?
     PG-->>API: staff row (includes pinHash)
-    Note over API: Returns 401 if not found or role not allowed
-    API->>API: bcrypt.compare(pin, pinHash) — constant-time
-    Note over API: Returns 401 if PIN incorrect
+    API->>API: bcrypt.compare(pin, pinHash ?? dummyHash) — constant-time
+    Note over API: Returns 401 if not found or PIN incorrect (dummy-hash compare avoids a timing tell)
+    Note over API: Returns 403 if active = false
+    Note over API: Returns 403 if role is not "mate" or "admin"
     API->>API: signMateToken({ staffId, operatorId, role, name, aud:"mate", exp:+24h })
     API-->>App: { token, name, role }
 
@@ -99,4 +102,5 @@ sequenceDiagram
 | Capacity cannot exceed certificate | API enforces ceiling; optimistic update reverts on rejection       |
 | Auth is stateless                  | HMAC-signed token verified on every request — no server session    |
 | Token audience separation          | `aud:"mate"` embedded and verified — customer tokens rejected      |
-| PIN brute-force protected          | 5 attempts/15min per email; returns 429 with Retry-After           |
+| Operator resolved from Edge middleware | `getOperatorId(req)` reads `x-operator-id` header — never a DB `LIMIT 1` lookup |
+| PIN brute-force protected          | 20 attempts/15min per IP + 5 attempts/15min per email, both scoped by operatorId; returns 429 with Retry-After |

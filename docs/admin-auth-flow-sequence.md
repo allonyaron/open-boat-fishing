@@ -11,10 +11,10 @@ sequenceDiagram
     Note over A,S: LOGIN
     A->>UI: Enter email + password
     UI->>API: POST /api/admin/auth/login { email, password }
-    API->>DB: checkRateLimit("admin-login:<ip>", 10, 15min)
+    API->>API: getOperatorId(req) — reads x-operator-id header set by Edge middleware
+    API->>DB: checkRateLimit("admin-login:<operatorId>:<ip>", 10, 15min)
+    Note over API: Scoped by operatorId — one operator's traffic can't lock out another's admin in centralized mode
     Note over API: Returns 429 with Retry-After if limit exceeded
-    API->>DB: SELECT operators LIMIT 1
-    DB-->>API: operator row (single-tenant)
     API->>DB: SELECT staff WHERE email = ? AND operatorId = ?
     DB-->>API: staff row
     Note over API: Returns 401 if not found or no passwordHash set
@@ -66,4 +66,5 @@ sequenceDiagram
 | Session tamper-proof                    | iron-session AES-256 encrypts + signs with `SESSION_SECRET`      |
 | All admin queries are operator-scoped   | `requireAdmin` returns `session.operatorId`; every query uses it |
 | Role checked at login, not just session | `role !== "admin"` check before session is written               |
-| Brute-force protected                   | 10 login attempts/15min per IP; returns 429 with Retry-After     |
+| Operator resolved from Edge middleware  | `getOperatorId(req)` reads `x-operator-id` header — never a DB `LIMIT 1` lookup |
+| Brute-force protected                   | 10 login attempts/15min per IP, scoped per operatorId; returns 429 with Retry-After |
