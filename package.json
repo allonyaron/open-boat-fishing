@@ -9,7 +9,7 @@
     "format:check": "prettier --check .",
     "test": "turbo test",
     "test:coverage": "turbo test:coverage",
-    "typecheck": "turbo typecheck",
+    "typecheck": "turbo typecheck && tsc -p e2e/tsconfig.json --noEmit",
     "db:migrate": "pnpm --filter @openboat/db migrate",
     "db:studio": "pnpm --filter @openboat/db studio"
   },
@@ -17,6 +17,7 @@
     "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
+    "@types/node": "^22.15.29",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react": "^6.0.5",

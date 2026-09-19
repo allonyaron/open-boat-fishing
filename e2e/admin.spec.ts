@@ -1,4 +1,4 @@
-import { test, expect, type TestInfo } from "@playwright/test";
+import { test, expect, type TestInfo, type Page } from "@playwright/test";
 import path from "path";
 import fs from "fs";
 
@@ -12,7 +12,7 @@ function screenshotter(testInfo: TestInfo) {
   return (name: string) => path.join(dir, `${name}.png`);
 }
 
-async function adminLogin(page: Parameters<Parameters<typeof test>[1]>[0]) {
+async function adminLogin(page: Page) {
   await page.goto("/admin/login");
 
   // AdminLayout fetches /api/admin/auth/me before rendering children, so the
