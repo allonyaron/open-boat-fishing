@@ -359,6 +359,10 @@ function Alerts({
   onDismiss: (key: string) => void;
   onOpenReport: (tripId: string) => void;
 }) {
+  // Design spec also has a weather alert (fires when a trip departs >=17:00,
+  // fixed "small craft advisory" copy). Dropped for now — no real weather
+  // data source exists, and firing that copy off departure time alone would
+  // show captains false safety information on days with normal weather.
   const items: { key: string; accent: string; title: string; body: string; cta?: () => void; ctaLabel?: string }[] = [];
 
   if (alerts.seasonEnd && !dismissed.has("season-end")) {
