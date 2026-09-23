@@ -3,38 +3,15 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { schedules, trips, products, vessels } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
-
-type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
-const DOW_TO_JS: Record<DayOfWeek, number> = {
-  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
-};
-
-function datesInRange(start: string, end: string, days: DayOfWeek[]): string[] {
-  const dayNums = days.map((d) => DOW_TO_JS[d]);
-  const result: string[] = [];
-  const cur = new Date(start + "T12:00:00Z");
-  const endDate = new Date(end + "T12:00:00Z");
-  while (cur <= endDate) {
-    if (dayNums.includes(cur.getUTCDay())) {
-      result.push(cur.toISOString().slice(0, 10));
-    }
-    cur.setUTCDate(cur.getUTCDate() + 1);
-  }
-  return result;
-}
-
-function parseTime(t: string): { hours: number; minutes: number } | null {
-  const m = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(t);
-  if (!m) return null;
-  const h = Number(m[1]);
-  const min = Number(m[2]);
-  if (h > 23 || min > 59) return null;
-  return { hours: h, minutes: min };
-}
-
-function toTimeString(h: number, m: number) {
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
-}
+import {
+  type DayOfWeek,
+  VALID_DAYS,
+  datesInRange,
+  parseTime,
+  toTimeString,
+  isOvernight,
+  tripEndDate,
+} from "@/lib/trip-materialization";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
@@ -93,8 +70,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "endDate must be on or after startDate" }, { status: 400 });
 
   const daysOfWeek = body.daysOfWeek as DayOfWeek[] | undefined;
-  const validDays: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-  if (!Array.isArray(daysOfWeek) || daysOfWeek.length === 0 || !daysOfWeek.every((d) => validDays.includes(d)))
+  if (!Array.isArray(daysOfWeek) || daysOfWeek.length === 0 || !daysOfWeek.every((d) => VALID_DAYS.includes(d)))
     return NextResponse.json({ error: "daysOfWeek must be a non-empty array of day abbreviations" }, { status: 400 });
 
   const depParsed = parseTime(String(body.departureTime ?? ""));
@@ -133,12 +109,10 @@ export async function POST(req: NextRequest) {
 
   // Materialize trips — identical logic to seed-trips-dev.ts
   const dates = datesInRange(startDate, endDate, daysOfWeek);
-  const isOvernight = retParsed.hours < depParsed.hours || (retParsed.hours === depParsed.hours && retParsed.minutes < depParsed.minutes);
+  const overnight = isOvernight(depParsed, retParsed);
 
   const tripRows = dates.map((date) => {
-    const retDate = isOvernight
-      ? new Date(new Date(date + "T00:00:00Z").getTime() + 86_400_000).toISOString().slice(0, 10)
-      : date;
+    const retDate = tripEndDate(date, returnTime, overnight);
     return {
       operatorId: session.operatorId,
       scheduleId: schedule.id,

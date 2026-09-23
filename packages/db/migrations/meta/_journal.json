@@ -92,6 +92,13 @@
       "when": 1789344000000,
       "tag": "0012_vessel_code",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790133600128,
+      "tag": "0013_unknown_magneto",
+      "breakpoints": true
     }
   ]
 }
