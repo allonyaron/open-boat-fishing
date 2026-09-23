@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
@@ -30,6 +30,14 @@ export function CardHeader({
   );
 }
 
-export function CardRow({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`border-t border-merchant-hairline px-4 py-3.5 ${className}`}>{children}</div>;
+export function CardRow({
+  children,
+  className = "",
+  ...rest
+}: { children: ReactNode; className?: string } & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={`border-t border-merchant-hairline px-4 py-3.5 ${className}`} {...rest}>
+      {children}
+    </div>
+  );
 }

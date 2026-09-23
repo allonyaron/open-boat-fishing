@@ -5,6 +5,7 @@ import { TextButton } from "./Button";
 
 export type TripRowData = {
   id: string;
+  departureDate: string;
   startTime: string;
   endTime: string;
   capacity: number;
@@ -56,14 +57,19 @@ function TripRowDock({ trip, actions }: { trip: TripRowData; actions: TripRowAct
       : "bg-merchant-blue";
 
   return (
-    <div className={`flex items-stretch gap-3 border-t border-merchant-hairline px-4 py-3.5 first:border-t-0 ${cancelled ? "bg-merchant-fill" : ""}`}>
-      <div
-        className="w-1 min-h-11 rounded-full flex-shrink-0"
-        style={{ backgroundColor: cancelled ? "#b5b5b5" : trip.vessel.color }}
-      />
-      <div className="flex-shrink-0 w-[92px]">
-        <div className="text-15 font-bold text-merchant-ink">{fmtTimeET(trip.startTime)}</div>
-        <div className="text-12 text-merchant-faint">back {fmtTimeET(trip.endTime)}</div>
+    <div className={`flex flex-col sm:flex-row sm:items-stretch gap-3 border-t border-merchant-hairline px-4 py-3.5 first:border-t-0 ${cancelled ? "bg-merchant-fill" : ""}`}>
+      <div className="flex gap-3 min-w-0">
+        <div
+          className="w-1 rounded-full flex-shrink-0 self-stretch min-h-11"
+          style={{ backgroundColor: cancelled ? "#b5b5b5" : trip.vessel.color }}
+        />
+        <div className="flex-shrink-0 w-[76px] sm:w-[92px]">
+          <div className="text-15 font-bold text-merchant-ink">{fmtTimeET(trip.startTime)}</div>
+          <div className="text-12 text-merchant-faint">back {fmtTimeET(trip.endTime)}</div>
+        </div>
+        <div className="flex-1 min-w-0 sm:hidden flex justify-end">
+          <StatusPill status={pillStatus} />
+        </div>
       </div>
       <div className="flex-1 min-w-0">
         <div className={`text-14 font-semibold ${cancelled ? "text-merchant-disabled" : "text-merchant-ink"}`}>
@@ -81,8 +87,10 @@ function TripRowDock({ trip, actions }: { trip: TripRowData; actions: TripRowAct
           )}
         </div>
       </div>
-      <div className="flex flex-col items-end justify-between flex-shrink-0 gap-2">
-        <StatusPill status={pillStatus} />
+      <div className="flex sm:flex-col items-center sm:items-end justify-between flex-shrink-0 gap-2">
+        <div className="hidden sm:block">
+          <StatusPill status={pillStatus} />
+        </div>
         {!cancelled && (
           <div className="flex gap-3">
             <TextButton onClick={() => actions.onWhosComing(trip.id)}>Who&rsquo;s coming</TextButton>
