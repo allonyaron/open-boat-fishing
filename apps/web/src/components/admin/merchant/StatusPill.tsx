@@ -44,3 +44,33 @@ export function StatusPill({ status }: { status: TripPillStatus }) {
     </span>
   );
 }
+
+export type TicketPillStatus = "not-here" | "aboard" | "refunded";
+
+const TICKET_PILL_CLASSES: Record<TicketPillStatus, string> = {
+  "not-here": "bg-merchant-fill-3 text-merchant-muted",
+  aboard: "bg-merchant-green-tint text-merchant-green",
+  refunded: "bg-merchant-red-tint text-merchant-red",
+};
+
+const TICKET_PILL_LABELS: Record<TicketPillStatus, string> = {
+  "not-here": "Not here yet",
+  aboard: "Aboard",
+  refunded: "Refunded",
+};
+
+export function ticketPillStatus(ticket: { voided: boolean; checkedIn: boolean }): TicketPillStatus {
+  if (ticket.voided) return "refunded";
+  if (ticket.checkedIn) return "aboard";
+  return "not-here";
+}
+
+export function TicketStatusPill({ status }: { status: TicketPillStatus }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-12 font-semibold ${TICKET_PILL_CLASSES[status]}`}
+    >
+      {TICKET_PILL_LABELS[status]}
+    </span>
+  );
+}

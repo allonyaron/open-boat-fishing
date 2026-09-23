@@ -51,7 +51,7 @@ describe("GET /api/admin/today", () => {
     expect(res.status).toBe(401);
   });
 
-  it("includes today's seeded trip and reports null alerts by default", async () => {
+  it("includes today's seeded trip and reports no season-end alert by default", async () => {
     const { GET } = await import("@/app/api/admin/today/route");
     const res = await GET(getReq());
     expect(res.status).toBe(200);
@@ -59,9 +59,12 @@ describe("GET /api/admin/today", () => {
     expect(body.today).toBe(todayET());
     const found = body.trips.find((t: { id: string }) => t.id === ctx.tripId);
     expect(found).toBeDefined();
-    expect(found.status).toBe("scheduled");
+    // ctx's default trip departs at a fixed 7am ET — settleTrips() legitimately
+    // flips it scheduled -> pending_settlement once the suite runs past that
+    // hour, so only assert it's still an active (non-cancelled) trip, and
+    // leave reportsOwed to the dedicated test below that accounts for this.
+    expect(["scheduled", "pending_settlement"]).toContain(found.status);
     expect(body.alerts.seasonEnd).toBeNull();
-    expect(body.alerts.reportsOwed).toBeNull();
   });
 
   it("stats reflect booked tickets on today's trip", async () => {
@@ -157,7 +160,14 @@ describe("GET /api/admin/today", () => {
       const { GET } = await import("@/app/api/admin/today/route");
       const res1 = await GET(getReq());
       const body1 = await res1.json();
-      expect(body1.alerts.reportsOwed).toEqual({ count: 1, oldestTripId: sailedTrip.id });
+      // ctx's own default trip can independently qualify too, depending on
+      // what time of day the suite runs (see the test above) — assert this
+      // seeded trip is present and sorts first (it departed yesterday, so it
+      // is always the oldest), not an exact total count.
+      expect(body1.alerts.reportsOwed).not.toBeNull();
+      expect(body1.alerts.reportsOwed.count).toBeGreaterThanOrEqual(1);
+      expect(body1.alerts.reportsOwed.oldestTripId).toBe(sailedTrip.id);
+      const countBefore = body1.alerts.reportsOwed.count;
 
       await testDb.insert(fishingReports).values({
         operatorId: ctx.operatorId,
@@ -168,7 +178,8 @@ describe("GET /api/admin/today", () => {
 
       const res2 = await GET(getReq());
       const body2 = await res2.json();
-      expect(body2.alerts.reportsOwed).toBeNull();
+      const countAfter = body2.alerts.reportsOwed?.count ?? 0;
+      expect(countAfter).toBe(countBefore - 1);
     } finally {
       await testDb.delete(fishingReports).where(eq(fishingReports.tripId, sailedTrip.id));
       await testDb.delete(trips).where(eq(trips.id, sailedTrip.id));

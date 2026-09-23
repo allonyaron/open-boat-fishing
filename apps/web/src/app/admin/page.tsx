@@ -208,7 +208,7 @@ export default function TodayPage() {
   }
 
   const actions = {
-    onWhosComing: (tripId: string) => router.push(`/admin/trips/${tripId}`),
+    onWhosComing: (tripId: string) => router.push(`/admin/trips/${tripId}/passengers`),
     onSeats: (tripId: string) => {
       const trip = todayTrips.find((t) => t.id === tripId);
       if (trip) setDialog({ type: "seats", tripId, currentCapacity: trip.capacity });

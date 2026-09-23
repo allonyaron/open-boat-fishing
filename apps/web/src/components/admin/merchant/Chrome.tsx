@@ -111,7 +111,7 @@ export function Chrome({
 
   return (
     <div className="min-h-screen bg-merchant-page text-merchant-ink">
-      <header className="sticky top-0 z-20 flex items-center justify-between bg-merchant-chrome px-4 py-2.5">
+      <header className="print:hidden sticky top-0 z-20 flex items-center justify-between bg-merchant-chrome px-4 py-2.5">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setDrawerOpen(true)}
@@ -143,8 +143,8 @@ export function Chrome({
         <NavList pathname={pathname} onNav={() => setDrawerOpen(false)} />
       </aside>
 
-      <div className="mx-auto max-w-[1280px] grid grid-cols-1 md:grid-cols-[216px_minmax(0,1fr)]">
-        <aside className="hidden md:block p-4">
+      <div className="mx-auto max-w-[1280px] grid grid-cols-1 md:grid-cols-[216px_minmax(0,1fr)] print:block">
+        <aside className="print:hidden hidden md:block p-4">
           <NavList pathname={pathname} onNav={() => {}} />
           <div className="mt-3 rounded-xl border border-merchant-hairline bg-white p-3 text-13 text-merchant-muted">
             Everything is Eastern time
