@@ -3,19 +3,19 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { dollars } from "@openboat/utils";
-import { fmtTimeCompactET, fmtDayLabelET } from "@/lib/format";
+import { fmtTimeCompactET, fmtDayLabelET, fmtLongDateET, fmtLongMonthDayET } from "@/lib/format";
 import {
   Card,
   CardHeader,
   CardRow,
   Button,
-  Input,
-  Label,
-  Select,
-  Dialog,
   TripList,
   useToast,
+  CancelDialog,
+  SeatsDialog,
+  AddDepartureDialog,
   type TripRowData,
+  type ProductOption,
 } from "@/components/admin/merchant";
 
 type TodayResponse = {
@@ -28,38 +28,11 @@ type TodayResponse = {
   };
 };
 
-type ProductOption = { id: string; displayName: string; vessel: { name: string } };
-
 type DialogState =
   | { type: "cancel"; tripId: string }
   | { type: "seats"; tripId: string; currentCapacity: number }
   | { type: "addDeparture" }
   | null;
-
-const CANCEL_REASONS = [
-  { value: "weather", label: "Weather — it isn't safe to go out" },
-  { value: "mechanical", label: "Engine or boat trouble" },
-  { value: "low_bookings", label: "Not enough people booked" },
-];
-
-function fmtLongDateET(dateStr: string): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-function fmtLongMonthDayET(dateStr: string): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 export default function TodayPage() {
   const router = useRouter();
@@ -230,7 +203,7 @@ export default function TodayPage() {
             <Button variant="secondary" onClick={() => setDialog({ type: "addDeparture" })} disabled={!data}>
               Add a departure
             </Button>
-            <Button variant="primary" disabled title="Calendar lands in a later phase">
+            <Button variant="primary" onClick={() => router.push("/admin/calendar")}>
               Open the calendar
             </Button>
           </div>
@@ -280,7 +253,7 @@ export default function TodayPage() {
               <CardRow
                 key={day.date}
                 className="flex items-center justify-between gap-3 cursor-pointer hover:bg-merchant-fill"
-                onClick={() => showToast("Calendar lands in a later phase.")}
+                onClick={() => router.push(`/admin/calendar?date=${day.date}`)}
               >
                 <div>
                   <div className="text-14 font-semibold text-merchant-ink">{day.label}</div>
@@ -450,167 +423,3 @@ function PhonePreview({ trips, actions }: { trips: TripRowData[]; actions: Param
   );
 }
 
-function CancelDialog({
-  open,
-  busy,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  busy: boolean;
-  onClose: () => void;
-  onConfirm: (reason: string) => void;
-}) {
-  const [reason, setReason] = useState(CANCEL_REASONS[0].value);
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="Cancel trip"
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
-            Keep the trip
-          </Button>
-          <Button variant="destructive" onClick={() => onConfirm(reason)} disabled={busy}>
-            Cancel and refund
-          </Button>
-        </>
-      }
-    >
-      <Label htmlFor="cancel-reason">Reason</Label>
-      <Select id="cancel-reason" value={reason} onChange={(e) => setReason(e.target.value)}>
-        {CANCEL_REASONS.map((r) => (
-          <option key={r.value} value={r.value}>
-            {r.label}
-          </option>
-        ))}
-      </Select>
-      <div className="mt-4 rounded-lg bg-merchant-amber-soft px-3 py-2.5 text-13 text-merchant-amber-deep">
-        Everyone is refunded automatically and notified. If a customer booked this trip with another, only this trip
-        is refunded. This cannot be undone.
-      </div>
-    </Dialog>
-  );
-}
-
-function SeatsDialog({
-  open,
-  busy,
-  currentCapacity,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  busy: boolean;
-  currentCapacity: number;
-  onClose: () => void;
-  onConfirm: (capacity: number) => void;
-}) {
-  const [value, setValue] = useState(currentCapacity);
-  useEffect(() => setValue(currentCapacity), [currentCapacity, open]);
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="Seats on this trip"
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={() => onConfirm(value)} disabled={busy || value < 1}>
-            Save seats
-          </Button>
-        </>
-      }
-    >
-      <Label htmlFor="seats">Seats</Label>
-      <Input id="seats" type="number" min={1} value={value} onChange={(e) => setValue(Number(e.target.value))} />
-      <p className="mt-2 text-13 text-merchant-muted">Just this one trip. Your weekly schedule stays as it is.</p>
-    </Dialog>
-  );
-}
-
-function AddDepartureDialog({
-  open,
-  busy,
-  products,
-  dateLabel,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  busy: boolean;
-  products: ProductOption[];
-  dateLabel: string;
-  onClose: () => void;
-  onConfirm: (form: { productId: string; departureTime: string; returnTime: string; capacity: number }) => void;
-}) {
-  const [productId, setProductId] = useState("");
-  const [departureTime, setDepartureTime] = useState("07:00");
-  const [returnTime, setReturnTime] = useState("12:00");
-  const [capacity, setCapacity] = useState(20);
-
-  useEffect(() => {
-    if (open && products.length > 0 && !productId) setProductId(products[0].id);
-  }, [open, products, productId]);
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="Add a departure"
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            disabled={busy || !productId}
-            onClick={() => onConfirm({ productId, departureTime, returnTime, capacity })}
-          >
-            Add departure
-          </Button>
-        </>
-      }
-    >
-      <p className="text-13 text-merchant-muted mb-3">
-        Adding a one-off departure for {dateLabel}. Your weekly schedule won&rsquo;t change.
-      </p>
-      <div className="flex flex-col gap-3">
-        <div>
-          <Label htmlFor="trip-type">Trip type</Label>
-          <Select id="trip-type" value={productId} onChange={(e) => setProductId(e.target.value)}>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.displayName} · {p.vessel.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label htmlFor="leaves">Leaves</Label>
-            <Input id="leaves" type="time" value={departureTime} onChange={(e) => setDepartureTime(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="back">Back</Label>
-            <Input id="back" type="time" value={returnTime} onChange={(e) => setReturnTime(e.target.value)} />
-          </div>
-        </div>
-        <div>
-          <Label htmlFor="add-capacity">Seats</Label>
-          <Input
-            id="add-capacity"
-            type="number"
-            min={1}
-            value={capacity}
-            onChange={(e) => setCapacity(Number(e.target.value))}
-          />
-        </div>
-      </div>
-    </Dialog>
-  );
-}

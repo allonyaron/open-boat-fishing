@@ -20,6 +20,27 @@ export function fmtTimeCompactET(iso: string | Date): string {
   return minute === "00" ? `${hour}${suffix}` : `${hour}:${minute}${suffix}`;
 }
 
+/** "Wednesday, September 23". dateStr is YYYY-MM-DD. */
+export function fmtLongDateET(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** "September 23". dateStr is YYYY-MM-DD. */
+export function fmtLongMonthDayET(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 /** "Tomorrow" for todayStr+1, else "Sat, Sep 26". Both args are YYYY-MM-DD. */
 export function fmtDayLabelET(dateStr: string, todayStr: string): string {
   const [ty, tm, td] = todayStr.split("-").map(Number);

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { trips, vessels, products, bookingItems, tickets } from "@openboat/db";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { parseTime, toTimeString, isOvernight, tripEndDate } from "@/lib/trip-materialization";
 
 export async function GET(req: NextRequest) {
@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const from = searchParams.get("from") ?? new Date().toISOString().slice(0, 10);
-  const limit = Math.min(Number(searchParams.get("limit") ?? 60), 200);
+  const to = searchParams.get("to"); // optional upper bound — e.g. a calendar month grid
+  const limit = Math.min(Number(searchParams.get("limit") ?? 60), 400);
 
   const tripRows = await db
     .select({
@@ -48,7 +49,13 @@ export async function GET(req: NextRequest) {
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))
     .innerJoin(products, eq(trips.productId, products.id))
-    .where(and(eq(trips.operatorId, session.operatorId), gte(trips.departureDate, from)))
+    .where(
+      and(
+        eq(trips.operatorId, session.operatorId),
+        gte(trips.departureDate, from),
+        to ? lte(trips.departureDate, to) : undefined,
+      ),
+    )
     .orderBy(trips.startTime)
     .limit(limit);
 

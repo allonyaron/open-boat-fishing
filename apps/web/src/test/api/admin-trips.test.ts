@@ -93,6 +93,17 @@ describe("GET /api/admin/trips", () => {
     expect(trip.vessel).toBeDefined();
     expect(trip.product).toBeDefined();
   });
+
+  it("respects the optional to bound, excluding trips after it", async () => {
+    const { GET } = await import("@/app/api/admin/trips/route");
+    const res = await GET(getReq(`/api/admin/trips?from=2000-01-01&to=2050-01-01`));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const inRange = body.find((t: { id: string }) => t.id === ctx.tripId);
+    expect(inRange).toBeDefined();
+    const outOfRange = body.find((t: { id: string }) => t.id === cancelledTripId); // seeded at 2099-12-31
+    expect(outOfRange).toBeUndefined();
+  });
 });
 
 describe("POST /api/admin/trips — Add a departure", () => {
