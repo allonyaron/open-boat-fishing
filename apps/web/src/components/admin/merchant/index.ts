@@ -14,3 +14,5 @@ export { CancelDialog, SeatsDialog, AddDepartureDialog } from "./TripDialogs";
 export type { ProductOption } from "./TripDialogs";
 export { ScheduleDialog } from "./ScheduleDialog";
 export type { SchedulePatternInput } from "./ScheduleDialog";
+export { ReportDialog } from "./ReportDialog";
+export type { ReportFormInput, FishCount } from "./ReportDialog";

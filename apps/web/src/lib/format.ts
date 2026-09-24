@@ -48,6 +48,8 @@ export function fmtDayLabelET(dateStr: string, todayStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
   const diffDays = Math.round((date.getTime() - today.getTime()) / 86_400_000);
+  if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Tomorrow";
+  if (diffDays === -1) return "Yesterday";
   return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 }

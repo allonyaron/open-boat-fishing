@@ -72,12 +72,14 @@ describe("GET /api/admin/today", () => {
     // can disagree with this endpoint's ET-based "today" right around the
     // UTC/ET day boundary. Seed a trip on the endpoint's own todayET() so
     // this test is deterministic regardless of when the suite runs.
+    // scheduleId: null (a one-off) so this can never collide with ctx.tripId's
+    // own (schedule_id, departure_date) row on the days those dates coincide.
     const todaysDate = todayET();
     const [todaysTrip] = await testDb
       .insert(trips)
       .values({
         operatorId: ctx.operatorId,
-        scheduleId: ctx.scheduleId,
+        scheduleId: null,
         vesselId: ctx.vesselId,
         productId: ctx.productId,
         departureDate: todaysDate,
@@ -187,11 +189,13 @@ describe("GET /api/admin/today", () => {
 
   it("surfaces a reports-owed alert for a sailed trip with no report, oldest first", async () => {
     const yesterday = addDaysToDateString(todayET(), -1);
+    // scheduleId: null — avoids any chance of colliding with ctx.tripId's own
+    // (schedule_id, departure_date) row during the UTC/ET day-boundary window.
     const [sailedTrip] = await testDb
       .insert(trips)
       .values({
         operatorId: ctx.operatorId,
-        scheduleId: ctx.scheduleId,
+        scheduleId: null,
         vesselId: ctx.vesselId,
         productId: ctx.productId,
         departureDate: yesterday,

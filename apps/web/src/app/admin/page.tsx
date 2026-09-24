@@ -214,7 +214,7 @@ export default function TodayPage() {
             alerts={data.alerts}
             dismissed={dismissed}
             onDismiss={(key) => setDismissed((prev) => new Set(prev).add(key))}
-            onOpenReport={(tripId) => router.push(`/admin/trips/${tripId}`)}
+            onOpenReport={(tripId) => router.push(`/admin/reports?tripId=${tripId}`)}
           />
         )}
 
