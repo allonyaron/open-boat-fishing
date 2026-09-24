@@ -346,7 +346,7 @@ function Alerts({
       body: `Your schedule runs out ${fmtLongMonthDayET(alerts.seasonEnd.date)} — nothing is on the calendar after that, so customers can't book past it.`,
       ctaLabel: "Weekly schedule",
       cta: () => {
-        window.location.href = "/admin/settings/schedules";
+        window.location.href = "/admin/schedule";
       },
     });
   }

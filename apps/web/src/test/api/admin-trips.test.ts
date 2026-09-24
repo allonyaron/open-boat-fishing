@@ -172,6 +172,25 @@ describe("POST /api/admin/trips — Add a departure", () => {
     const [row] = await testDb.select({ endTime: trips.endTime }).from(trips).where(eq(trips.id, body.id));
     expect(row.endTime.toISOString().slice(0, 10)).toBe("2098-06-17");
   });
+
+  it("interprets departureTime as Eastern time, not literal UTC", async () => {
+    // Typed times are ET wall-clock per the "Everything is Eastern time"
+    // invariant — the stored UTC instant must convert back to the same
+    // clock time in America/New_York, not the raw digits taken as UTC.
+    const { POST } = await import("@/app/api/admin/trips/route");
+    const res = await POST(
+      postReq("/api/admin/trips", { ...validBody, departureDate: "2098-06-20", departureTime: "19:00" }),
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    const [row] = await testDb.select({ startTime: trips.startTime }).from(trips).where(eq(trips.id, body.id));
+    const etHour = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      hour12: false,
+      timeZone: "America/New_York",
+    }).format(row.startTime);
+    expect(etHour).toBe("19");
+  });
 });
 
 describe("GET /api/admin/trips/[tripId]", () => {

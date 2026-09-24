@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator, seedBooking, cleanupBookings, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { trips, schedules, fishingReports, bookings } from "@openboat/db";
+import { trips, schedules, fishingReports, bookings, bookingItems, tickets } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { todayET, addDaysToDateString } from "@/lib/date-et";
@@ -68,7 +68,52 @@ describe("GET /api/admin/today", () => {
   });
 
   it("stats reflect booked tickets on today's trip", async () => {
-    const { ticketId } = await seedBooking(ctx, { status: "confirmed" });
+    // ctx's default trip is seeded with db-helpers' UTC-based "today," which
+    // can disagree with this endpoint's ET-based "today" right around the
+    // UTC/ET day boundary. Seed a trip on the endpoint's own todayET() so
+    // this test is deterministic regardless of when the suite runs.
+    const todaysDate = todayET();
+    const [todaysTrip] = await testDb
+      .insert(trips)
+      .values({
+        operatorId: ctx.operatorId,
+        scheduleId: ctx.scheduleId,
+        vesselId: ctx.vesselId,
+        productId: ctx.productId,
+        departureDate: todaysDate,
+        startTime: new Date(`${todaysDate}T20:00:00Z`),
+        endTime: new Date(`${todaysDate}T23:00:00Z`),
+        capacity: 20,
+        seatsRemaining: 19,
+        status: "scheduled",
+      })
+      .returning({ id: trips.id });
+
+    const [booking] = await testDb
+      .insert(bookings)
+      .values({
+        operatorId: ctx.operatorId,
+        confirmationCode: randomUUID().slice(0, 6).toUpperCase(),
+        status: "confirmed",
+        totalCents: 10000,
+        platformFeeCents: 150,
+        customerEmail: "stats-today@test.com",
+      })
+      .returning({ id: bookings.id });
+    const [item] = await testDb
+      .insert(bookingItems)
+      .values({ bookingId: booking.id, tripId: todaysTrip.id, operatorId: ctx.operatorId, subtotalCents: 10000 })
+      .returning({ id: bookingItems.id });
+    await testDb.insert(tickets).values({
+      bookingItemId: item.id,
+      bookingId: booking.id,
+      operatorId: ctx.operatorId,
+      ticketType: "adult",
+      priceCents: 10000,
+      feeAmountCents: 150,
+      qrPayload: randomUUID(),
+    });
+
     try {
       const { GET } = await import("@/app/api/admin/today/route");
       const res = await GET(getReq());
@@ -76,8 +121,10 @@ describe("GET /api/admin/today", () => {
       expect(body.stats.tripsGoingOut).toBeGreaterThanOrEqual(1);
       expect(body.stats.peopleBooked).toBeGreaterThanOrEqual(1);
     } finally {
-      await cleanupBookings(ctx.tripId);
-      void ticketId;
+      await testDb.delete(tickets).where(eq(tickets.bookingItemId, item.id));
+      await testDb.delete(bookingItems).where(eq(bookingItems.id, item.id));
+      await testDb.delete(bookings).where(eq(bookings.id, booking.id));
+      await testDb.delete(trips).where(eq(trips.id, todaysTrip.id));
     }
   });
 

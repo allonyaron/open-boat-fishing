@@ -11,7 +11,7 @@ import { useDensity } from "./DensityContext";
 const NAV: { href: string; label: string; disabled?: boolean }[] = [
   { href: "/admin", label: "Today" },
   { href: "/admin/calendar", label: "Calendar" },
-  { href: "/admin/settings/schedules", label: "Weekly schedule" }, // old page — Phase 6 moves this to /admin/schedule
+  { href: "/admin/schedule", label: "Weekly schedule" },
   { href: "/admin/reports", label: "Reports", disabled: true }, // Phase 7
   { href: "/admin/revenue", label: "Money" }, // old page — Phase 8 moves this to /admin/money
   { href: "/admin/settings", label: "Settings" },

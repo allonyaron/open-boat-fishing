@@ -161,3 +161,15 @@ describe("PATCH /api/admin/settings/schedules/[scheduleId]", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("GET /api/admin/settings/schedules — tripCount", () => {
+  it("reports the number of materialized trips per pattern", async () => {
+    const scheduleId = await seedPattern("2098-09-01", "2098-09-07");
+    const { GET } = await import("@/app/api/admin/settings/schedules/route");
+    const res = await GET(new NextRequest("http://localhost/api/admin/settings/schedules"));
+    const body = await res.json();
+    const found = body.find((s: { id: string }) => s.id === scheduleId);
+    expect(found).toBeDefined();
+    expect(found.tripCount).toBe(7);
+  });
+});

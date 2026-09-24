@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { schedules, trips, products, vessels } from "@openboat/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   type DayOfWeek,
   VALID_DAYS,
@@ -12,6 +12,7 @@ import {
   isOvernight,
   tripEndDate,
 } from "@/lib/trip-materialization";
+import { etWallClockToUTC } from "@/lib/date-et";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
@@ -40,6 +41,10 @@ export async function GET(req: NextRequest) {
         name: vessels.name,
         color: vessels.color,
       },
+      tripCount: sql<number>`(
+        select cast(count(*) as int) from ${trips} t
+        where t.schedule_id = schedules.id
+      )`.as("trip_count"),
     })
     .from(schedules)
     .innerJoin(products, eq(schedules.productId, products.id))
@@ -119,8 +124,8 @@ export async function POST(req: NextRequest) {
       productId,
       vesselId: product.vesselId,
       departureDate: date,
-      startTime: new Date(`${date}T${departureTime}Z`),
-      endTime: new Date(`${retDate}T${returnTime}Z`),
+      startTime: etWallClockToUTC(date, departureTime),
+      endTime: etWallClockToUTC(retDate, returnTime),
       capacity,
       seatsRemaining: capacity,
     };

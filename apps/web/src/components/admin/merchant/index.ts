@@ -12,3 +12,5 @@ export type { TripRowData, TripRowActions } from "./TripRow";
 export { Chrome } from "./Chrome";
 export { CancelDialog, SeatsDialog, AddDepartureDialog } from "./TripDialogs";
 export type { ProductOption } from "./TripDialogs";
+export { ScheduleDialog } from "./ScheduleDialog";
+export type { SchedulePatternInput } from "./ScheduleDialog";

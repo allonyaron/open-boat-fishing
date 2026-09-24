@@ -12,6 +12,7 @@ import {
   isOvernight,
   tripEndDate,
 } from "@/lib/trip-materialization";
+import { etWallClockToUTC } from "@/lib/date-et";
 
 // Edits a weekly pattern (and, via the `active` flag, pauses/resumes it).
 //
@@ -139,8 +140,8 @@ export async function PATCH(
       productId,
       vesselId: product.vesselId,
       departureDate: date,
-      startTime: new Date(`${date}T${departureTime}Z`),
-      endTime: new Date(`${retDate}T${returnTime}Z`),
+      startTime: etWallClockToUTC(date, departureTime),
+      endTime: etWallClockToUTC(retDate, returnTime),
       capacity,
       seatsRemaining: capacity,
     };

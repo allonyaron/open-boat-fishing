@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/session";
 import { trips, vessels, products, bookingItems, tickets } from "@openboat/db";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { parseTime, toTimeString, isOvernight, tripEndDate } from "@/lib/trip-materialization";
+import { etWallClockToUTC } from "@/lib/date-et";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
@@ -108,8 +109,8 @@ export async function POST(req: NextRequest) {
       productId,
       vesselId: product.vesselId,
       departureDate,
-      startTime: new Date(`${departureDate}T${departureTime}Z`),
-      endTime: new Date(`${retDate}T${returnTime}Z`),
+      startTime: etWallClockToUTC(departureDate, departureTime),
+      endTime: etWallClockToUTC(retDate, returnTime),
       capacity,
       seatsRemaining: capacity,
     })
