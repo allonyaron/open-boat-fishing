@@ -4,11 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useDensity } from "./DensityContext";
 
-// Target IA per the redesign. Screens not built yet either fall back to the
-// still-functional old page at a different URL, or — where no old equivalent
-// exists — render disabled rather than as a dead link, since this app is
-// live on a public demo mid-rollout.
-const NAV: { href: string; label: string; disabled?: boolean }[] = [
+const NAV: { href: string; label: string }[] = [
   { href: "/admin", label: "Today" },
   { href: "/admin/calendar", label: "Calendar" },
   { href: "/admin/schedule", label: "Weekly schedule" },
@@ -24,20 +20,7 @@ function isActive(href: string, pathname: string) {
 function NavList({ pathname, onNav }: { pathname: string; onNav: () => void }) {
   return (
     <nav className="flex flex-col gap-0.5">
-      {NAV.map(({ href, label, disabled }) => {
-        if (disabled) {
-          return (
-            <div
-              key={href}
-              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-13 text-merchant-disabled cursor-default"
-              title="Coming soon"
-            >
-              <span className="w-[7px] h-[7px] rounded-[2px] flex-shrink-0 bg-merchant-disabled" />
-              {label}
-              <span className="ml-auto text-11 text-merchant-disabled">soon</span>
-            </div>
-          );
-        }
+      {NAV.map(({ href, label }) => {
         const active = isActive(href, pathname);
         return (
           <Link
