@@ -138,12 +138,18 @@ export async function POST(req: NextRequest) {
         }
 
         const productIds = [...new Set(tripRows.map((t) => t.productId))];
-        const scheduleIds = [...new Set(tripRows.map((t) => t.scheduleId))];
+        // One-off "Add a departure" trips have scheduleId null — they can never have a
+        // schedule-level price override, so drop nulls before querying schedulePrices.
+        const scheduleIds = [
+          ...new Set(tripRows.map((t) => t.scheduleId).filter((id): id is string => id !== null)),
+        ];
         const vesselIds = [...new Set(tripRows.map((t) => t.vesselId))];
 
         const [productPriceRows, schedulePriceRows, vesselRows] = await Promise.all([
           tx.select().from(productPrices).where(inArray(productPrices.productId, productIds)),
-          tx.select().from(schedulePrices).where(and(inArray(schedulePrices.scheduleId, scheduleIds), eq(schedulePrices.operatorId, operator.id))),
+          scheduleIds.length > 0
+            ? tx.select().from(schedulePrices).where(and(inArray(schedulePrices.scheduleId, scheduleIds), eq(schedulePrices.operatorId, operator.id)))
+            : Promise.resolve([]),
           tx.select().from(vessels).where(and(inArray(vessels.id, vesselIds), eq(vessels.operatorId, operator.id))),
         ]);
 

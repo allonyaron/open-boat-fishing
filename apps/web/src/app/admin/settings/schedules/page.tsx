@@ -131,11 +131,11 @@ function ScheduleForm({
 
       <div className="grid sm:grid-cols-3 gap-4">
         <div>
-          <label className="block text-sm font-medium text-ink mb-1">Departure (UTC)</label>
+          <label className="block text-sm font-medium text-ink mb-1">Departure (Eastern time)</label>
           <input className={inputCls} type="time" value={departureTime} onChange={(e) => setDepartureTime(e.target.value)} required />
         </div>
         <div>
-          <label className="block text-sm font-medium text-ink mb-1">Return (UTC)</label>
+          <label className="block text-sm font-medium text-ink mb-1">Return (Eastern time)</label>
           <input className={inputCls} type="time" value={returnTime} onChange={(e) => setReturnTime(e.target.value)} required />
         </div>
         <div>
@@ -143,11 +143,6 @@ function ScheduleForm({
           <input className={inputCls} type="number" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} required />
         </div>
       </div>
-
-      <p className="text-xs text-faint">
-        Times are stored in UTC. Eastern Time is UTC−5 (winter) / UTC−4 (summer).
-        A 7:00 AM ET departure = 12:00 UTC in winter, 11:00 UTC in summer.
-      </p>
 
       {error && <p className="text-sm text-warning">{error}</p>}
 

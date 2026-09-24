@@ -1,0 +1,1 @@
+ALTER TABLE "trips" ALTER COLUMN "schedule_id" DROP NOT NULL;

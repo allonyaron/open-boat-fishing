@@ -65,6 +65,14 @@ function patchReq(path: string, body: object) {
   });
 }
 
+function postReq(path: string, body: object) {
+  return new NextRequest(`http://localhost${path}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "content-type": "application/json" },
+  });
+}
+
 describe("GET /api/admin/trips", () => {
   it("returns 401 when not authenticated", async () => {
     vi.mocked(requireAdmin).mockResolvedValueOnce(unauthorized());
@@ -84,6 +92,104 @@ describe("GET /api/admin/trips", () => {
     expect(trip).toMatchObject({ id: ctx.tripId, status: "scheduled" });
     expect(trip.vessel).toBeDefined();
     expect(trip.product).toBeDefined();
+  });
+
+  it("respects the optional to bound, excluding trips after it", async () => {
+    const { GET } = await import("@/app/api/admin/trips/route");
+    const res = await GET(getReq(`/api/admin/trips?from=2000-01-01&to=2050-01-01`));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const inRange = body.find((t: { id: string }) => t.id === ctx.tripId);
+    expect(inRange).toBeDefined();
+    const outOfRange = body.find((t: { id: string }) => t.id === cancelledTripId); // seeded at 2099-12-31
+    expect(outOfRange).toBeUndefined();
+  });
+});
+
+describe("POST /api/admin/trips — Add a departure", () => {
+  const validBody = {
+    productId: "",
+    departureDate: "2098-06-15",
+    departureTime: "07:00",
+    returnTime: "12:00",
+    capacity: 30,
+  };
+
+  beforeAll(() => {
+    validBody.productId = ctx.productId;
+  });
+
+  it("returns 401 when not authenticated", async () => {
+    vi.mocked(requireAdmin).mockResolvedValueOnce(unauthorized());
+    const { POST } = await import("@/app/api/admin/trips/route");
+    const res = await POST(postReq("/api/admin/trips", validBody));
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 400 for a malformed departureDate", async () => {
+    const { POST } = await import("@/app/api/admin/trips/route");
+    const res = await POST(postReq("/api/admin/trips", { ...validBody, departureDate: "not-a-date" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 for a non-positive capacity", async () => {
+    const { POST } = await import("@/app/api/admin/trips/route");
+    const res = await POST(postReq("/api/admin/trips", { ...validBody, capacity: 0 }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 for a product belonging to another operator", async () => {
+    const { POST } = await import("@/app/api/admin/trips/route");
+    const res = await POST(
+      postReq("/api/admin/trips", { ...validBody, productId: "00000000-0000-0000-0000-000000000000" }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 201 and creates a trip with scheduleId null", async () => {
+    const { POST } = await import("@/app/api/admin/trips/route");
+    const res = await POST(postReq("/api/admin/trips", validBody));
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.scheduleId).toBeNull();
+    expect(body.capacity).toBe(30);
+    expect(body.seatsRemaining).toBe(30);
+    expect(body.departureDate).toBe("2098-06-15");
+  });
+
+  it("computes an overnight endTime when returnTime is earlier than departureTime", async () => {
+    const { POST } = await import("@/app/api/admin/trips/route");
+    const res = await POST(
+      postReq("/api/admin/trips", {
+        ...validBody,
+        departureDate: "2098-06-16",
+        departureTime: "20:00",
+        returnTime: "01:00",
+      }),
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    const [row] = await testDb.select({ endTime: trips.endTime }).from(trips).where(eq(trips.id, body.id));
+    expect(row.endTime.toISOString().slice(0, 10)).toBe("2098-06-17");
+  });
+
+  it("interprets departureTime as Eastern time, not literal UTC", async () => {
+    // Typed times are ET wall-clock per the "Everything is Eastern time"
+    // invariant — the stored UTC instant must convert back to the same
+    // clock time in America/New_York, not the raw digits taken as UTC.
+    const { POST } = await import("@/app/api/admin/trips/route");
+    const res = await POST(
+      postReq("/api/admin/trips", { ...validBody, departureDate: "2098-06-20", departureTime: "19:00" }),
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    const [row] = await testDb.select({ startTime: trips.startTime }).from(trips).where(eq(trips.id, body.id));
+    const etHour = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      hour12: false,
+      timeZone: "America/New_York",
+    }).format(row.startTime);
+    expect(etHour).toBe("19");
   });
 });
 
