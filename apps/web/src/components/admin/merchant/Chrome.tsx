@@ -13,7 +13,7 @@ const NAV: { href: string; label: string; disabled?: boolean }[] = [
   { href: "/admin/calendar", label: "Calendar" },
   { href: "/admin/schedule", label: "Weekly schedule" },
   { href: "/admin/reports", label: "Reports" },
-  { href: "/admin/revenue", label: "Money" }, // old page — Phase 8 moves this to /admin/money
+  { href: "/admin/money", label: "Money" },
   { href: "/admin/settings", label: "Settings" },
 ];
 

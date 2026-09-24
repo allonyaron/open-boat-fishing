@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const state = req.nextUrl.searchParams.get("state");
   const nonce = req.cookies.get("stripe_connect_nonce")?.value;
 
-  const errDest = new URL("/admin/settings", req.url);
+  const errDest = new URL("/admin/money", req.url);
   errDest.searchParams.set("stripe", "error");
 
   if (!state || !nonce) {
@@ -36,14 +36,14 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     console.error(`Stripe Connect OAuth error for operator ${session.operatorId}: ${error} — ${errorDesc}`);
-    const dest = new URL("/admin/settings", req.url);
+    const dest = new URL("/admin/money", req.url);
     dest.searchParams.set("stripe", "cancelled");
     return NextResponse.redirect(dest);
   }
 
   const code = req.nextUrl.searchParams.get("code");
   if (!code) {
-    const dest = new URL("/admin/settings", req.url);
+    const dest = new URL("/admin/money", req.url);
     dest.searchParams.set("stripe", "error");
     return NextResponse.redirect(dest);
   }
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
 
     if (!tokenRes.ok || !data.stripe_user_id) {
       console.error("Stripe OAuth token exchange failed:", data);
-      const dest = new URL("/admin/settings", req.url);
+      const dest = new URL("/admin/money", req.url);
       dest.searchParams.set("stripe", "error");
       return NextResponse.redirect(dest);
     }
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     accountId = data.stripe_user_id;
   } catch (err) {
     console.error("Stripe OAuth token exchange threw:", err);
-    const dest = new URL("/admin/settings", req.url);
+    const dest = new URL("/admin/money", req.url);
     dest.searchParams.set("stripe", "error");
     return NextResponse.redirect(dest);
   }
@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
 
   console.log(`Stripe connected for operator ${session.operatorId}: ${accountId}`);
 
-  const dest = new URL("/admin/settings", req.url);
+  const dest = new URL("/admin/money", req.url);
   dest.searchParams.set("stripe", "connected");
   const successResponse = NextResponse.redirect(dest);
   successResponse.cookies.delete("stripe_connect_nonce");

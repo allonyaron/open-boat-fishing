@@ -89,9 +89,36 @@ describe("GET /api/admin/reports/pending", () => {
   });
 
   it("does not list a scheduled (future) trip even with no report", async () => {
-    const { GET } = await import("@/app/api/admin/reports/pending/route");
-    const res = await GET(getReq());
-    const body = await res.json();
-    expect(body.find((t: { id: string }) => t.id === ctx.tripId)).toBeUndefined();
+    // ctx's own default trip departs at a fixed 7am ET "today" — once the
+    // suite runs past that hour, settleTrips() legitimately (and correctly)
+    // flips it to pending_settlement, which IS report-eligible. Seed an
+    // explicit far-future trip instead so this test isn't time-of-day
+    // dependent. scheduleId: null avoids any (schedule_id, departure_date)
+    // collision risk with ctx's own row.
+    const future = addDaysToDateString(todayET(), 10);
+    const [futureTrip] = await testDb
+      .insert(trips)
+      .values({
+        operatorId: ctx.operatorId,
+        scheduleId: null,
+        vesselId: ctx.vesselId,
+        productId: ctx.productId,
+        departureDate: future,
+        startTime: new Date(`${future}T07:00:00Z`),
+        endTime: new Date(`${future}T12:00:00Z`),
+        capacity: 20,
+        seatsRemaining: 20,
+        status: "scheduled",
+      })
+      .returning({ id: trips.id });
+
+    try {
+      const { GET } = await import("@/app/api/admin/reports/pending/route");
+      const res = await GET(getReq());
+      const body = await res.json();
+      expect(body.find((t: { id: string }) => t.id === futureTrip.id)).toBeUndefined();
+    } finally {
+      await testDb.delete(trips).where(eq(trips.id, futureTrip.id));
+    }
   });
 });
