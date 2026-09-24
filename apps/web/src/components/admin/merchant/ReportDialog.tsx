@@ -156,7 +156,6 @@ export function ReportDialog({
           {form.photoUrls.length > 0 && (
             <div className="grid grid-cols-4 gap-2 mb-2">
               {form.photoUrls.map((url) => (
-                // eslint-disable-next-line @next/next/no-img-element
                 <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-merchant-fill-3">
                   <img src={url} alt="" className="w-full h-full object-cover" />
                   <button
