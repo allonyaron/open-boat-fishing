@@ -55,7 +55,7 @@ function req(body: object, ip: string) {
   return new NextRequest("http://localhost/api/admin/auth/login", {
     method: "POST",
     body: JSON.stringify(body),
-    headers: { "content-type": "application/json", "x-forwarded-for": ip },
+    headers: { "content-type": "application/json", "x-forwarded-for": ip, "x-operator-id": ctx.operatorId },
   });
 }
 

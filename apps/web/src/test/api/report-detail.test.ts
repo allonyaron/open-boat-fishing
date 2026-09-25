@@ -28,7 +28,9 @@ afterAll(async () => {
 });
 
 function req(id: string) {
-  return new NextRequest(`http://localhost/api/reports/${id}`);
+  return new NextRequest(`http://localhost/api/reports/${id}`, {
+    headers: { "x-operator-id": ctx.operatorId },
+  });
 }
 
 async function handle(id: string) {

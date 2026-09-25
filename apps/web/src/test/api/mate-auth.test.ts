@@ -16,7 +16,7 @@ afterAll(async () => {
 function req(body: unknown) {
   return new NextRequest("http://localhost/api/mate/auth", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-operator-id": ctx.operatorId },
     body: JSON.stringify(body),
   });
 }

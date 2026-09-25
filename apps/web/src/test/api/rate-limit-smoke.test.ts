@@ -68,7 +68,7 @@ describe("Rate limit smoke — auth routes return 429 after limit", () => {
     const makeReq = () =>
       new NextRequest("http://localhost/api/mate/auth", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-operator-id": ctx.operatorId },
         body: JSON.stringify({ email, pin: "0000" }),
       });
 
@@ -83,7 +83,11 @@ describe("Rate limit smoke — auth routes return 429 after limit", () => {
     const makeReq = () =>
       new NextRequest("http://localhost/api/admin/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-forwarded-for": "10.0.0.2" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": "10.0.0.2",
+          "x-operator-id": ctx.operatorId,
+        },
         body: JSON.stringify({ email: "admin@test.com", password: "wrong" }),
       });
 
