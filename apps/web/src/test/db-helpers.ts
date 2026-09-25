@@ -24,7 +24,7 @@ import {
   customers,
   pushTokens,
 } from "@openboat/db";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -256,13 +256,9 @@ export async function cleanupOperator(operatorId: string) {
   await testDb.delete(trips).where(eq(trips.operatorId, operatorId));
   await testDb.delete(schedules).where(eq(schedules.operatorId, operatorId));
   await testDb.delete(productPrices).where(
-    eq(
+    inArray(
       productPrices.productId,
-      testDb
-        .select({ id: products.id })
-        .from(products)
-        .where(eq(products.operatorId, operatorId))
-        .limit(1),
+      testDb.select({ id: products.id }).from(products).where(eq(products.operatorId, operatorId)),
     ),
   );
   await testDb.delete(products).where(eq(products.operatorId, operatorId));
