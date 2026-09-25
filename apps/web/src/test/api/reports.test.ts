@@ -27,7 +27,7 @@ afterAll(async () => {
 function req(params: Record<string, string> = {}) {
   const url = new URL("http://localhost/api/reports");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  return new NextRequest(url);
+  return new NextRequest(url, { headers: { "x-operator-id": ctx.operatorId } });
 }
 
 describe("GET /api/reports", () => {

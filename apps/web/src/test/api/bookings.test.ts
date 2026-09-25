@@ -452,22 +452,22 @@ describe("GET /api/bookings — wallet lookup", () => {
   });
 
   it("returns 400 when email is missing", async () => {
-    const res = await GET(getReq({ code: confirmedCode }));
+    const res = await GET(getReq({ code: confirmedCode }, ctx.operatorId));
     expect(res.status).toBe(400);
   });
 
   it("returns 400 when code is missing", async () => {
-    const res = await GET(getReq({ email: confirmedEmail }));
+    const res = await GET(getReq({ email: confirmedEmail }, ctx.operatorId));
     expect(res.status).toBe(400);
   });
 
   it("returns 404 for wrong code", async () => {
-    const res = await GET(getReq({ email: confirmedEmail, code: "ZZZZZZ" }));
+    const res = await GET(getReq({ email: confirmedEmail, code: "ZZZZZZ" }, ctx.operatorId));
     expect(res.status).toBe(404);
   });
 
   it("returns 404 for wrong email", async () => {
-    const res = await GET(getReq({ email: "wrong@example.com", code: confirmedCode }));
+    const res = await GET(getReq({ email: "wrong@example.com", code: confirmedCode }, ctx.operatorId));
     expect(res.status).toBe(404);
   });
 
@@ -487,14 +487,14 @@ describe("GET /api/bookings — wallet lookup", () => {
       })
       .returning({ id: bookings.id });
 
-    const res = await GET(getReq({ email: pendingEmail, code: pendingCode }));
+    const res = await GET(getReq({ email: pendingEmail, code: pendingCode }, ctx.operatorId));
     expect(res.status).toBe(404);
 
     await testDb.delete(bookings).where(eq(bookings.id, b.id));
   });
 
   it("returns full booking detail for a confirmed booking", async () => {
-    const res = await GET(getReq({ email: confirmedEmail, code: confirmedCode }));
+    const res = await GET(getReq({ email: confirmedEmail, code: confirmedCode }, ctx.operatorId));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.id).toBe(confirmedBookingId);
