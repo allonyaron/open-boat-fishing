@@ -23,6 +23,8 @@ import {
   magicLinkOtps,
   customers,
   pushTokens,
+  domains,
+  capacityChanges,
 } from "@openboat/db";
 import { eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -249,6 +251,7 @@ export async function cleanupOperator(operatorId: string) {
   // Cascade down the FK chain — order matters (children before parents)
   await testDb.delete(fishingReports).where(eq(fishingReports.operatorId, operatorId));
   await testDb.delete(checkIns).where(eq(checkIns.operatorId, operatorId));
+  await testDb.delete(capacityChanges).where(eq(capacityChanges.operatorId, operatorId));
   await testDb.delete(tickets).where(eq(tickets.operatorId, operatorId));
   await testDb.delete(payments).where(eq(payments.operatorId, operatorId));
   await testDb.delete(bookingItems).where(eq(bookingItems.operatorId, operatorId));
@@ -265,6 +268,7 @@ export async function cleanupOperator(operatorId: string) {
   await testDb.delete(staff).where(eq(staff.operatorId, operatorId));
   await testDb.delete(vessels).where(eq(vessels.operatorId, operatorId));
   await testDb.delete(magicLinkOtps).where(eq(magicLinkOtps.operatorId, operatorId));
+  await testDb.delete(domains).where(eq(domains.operatorId, operatorId));
   await testDb.delete(pushTokens).where(eq(pushTokens.operatorId, operatorId));
   await testDb.delete(customers).where(eq(customers.operatorId, operatorId));
   await testDb.delete(operators).where(eq(operators.id, operatorId));
