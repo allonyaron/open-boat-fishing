@@ -4,17 +4,44 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - "apps/web/**"
-      - "packages/**"
 
 concurrency:
   group: web-checks-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # "Typecheck & Next.js Build" and "Smoke Test (Vercel Preview)" are required
+  # status checks on main's branch protection. Required checks that never run
+  # (e.g. because a path filter on the trigger skipped the whole workflow)
+  # show as permanently pending and block every PR that doesn't touch web
+  # code. Detecting the path change inside the workflow instead — as a
+  # job-level `if:` — keeps both job names always scheduled: they run for
+  # real on web/package changes, or report "skipped" (which GitHub counts as
+  # a pass) otherwise.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for web/package changes
+        id: filter
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" \
+             | grep -qE '^(apps/web/|packages/)'; then
+            echo "web=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "web=false" >> "$GITHUB_OUTPUT"
+          fi
+
   typecheck-and-build:
     name: Typecheck & Next.js Build
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
 
     steps:
