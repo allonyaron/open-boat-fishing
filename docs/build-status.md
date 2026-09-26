@@ -99,6 +99,27 @@ Captain posts a report after each trip. One report per trip (unique constraint o
 
 ---
 
+## Admin Console Redesign — "Merchant" direction (complete, 2026-09-26)
+
+Full visual + IA redesign of the operator-facing admin console (Step 9's dashboard), built in 9
+phases across commits `145fbc6` through `8c7fea8`, plus a final Sign-in screen (PR #20). All 9
+screens shipped and verified against code — see `docs/admin-console-handoff-status.md` for the
+full per-screen detail and the shared `apps/web/src/components/admin/merchant/` component kit
+(`Chrome`, `DensityContext` dock/desk toggle, `Card`/`Button`/`Input`, and every dialog).
+
+- Today (`/admin`) is now the post-login home — alerts, stats row, trip rows, Coming up, phone
+  preview. Supersedes the pre-redesign `/admin/trips` list, which still exists as a **legacy route**
+  (not part of the redesigned nav) along with `/admin/revenue` (superseded by Money).
+- Calendar, Weekly schedule, Reports, Money, Settings, Passenger list — all rebuilt in the Merchant
+  visual language.
+- **Sign-in** (`/admin/login`) — rebuilt last, as a Server Component (`getOperatorRecord()` for the
+  operator-name subtitle) + client `LoginForm`, reusing the merchant kit. The spec's "Mate" PIN
+  segmented-control option was dropped: there's no PIN-based login route for the web admin, and
+  mates already authenticate through the separate native mobile app (Step 8). Post-login redirect
+  goes to `/admin` (Today), not the legacy `/admin/trips`.
+
+---
+
 ## Booking Flow Backlog — Deferred (post-Batch 3)
 
 These items were scoped during the booking-flow UX review but deferred beyond Batch 3 (items 14–18).
