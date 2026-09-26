@@ -31,7 +31,11 @@ async function adminLogin(page: Page) {
   await page.getByRole("button", { name: "Sign in" }).click();
 
   try {
-    await page.waitForURL("/admin/trips", { timeout: 10_000 });
+    // Post-login lands on /admin (the Today dashboard) since the Merchant
+    // redesign, not /admin/trips — assert login succeeded generically, then
+    // navigate to the legacy trips list every test below still expects.
+    await page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 10_000 });
+    await page.goto("/admin/trips");
     return true;
   } catch {
     return false;

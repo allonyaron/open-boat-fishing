@@ -1,14 +1,15 @@
 # Admin Console Handoff — Status
 
-Tracks implementation of `design_handoff_admin_console/` (the "Merchant" redesign handoff for the
-operator-facing admin console).
+Tracked implementation of the "Merchant" redesign handoff for the operator-facing admin console
+(originally `design_handoff_admin_console/`, deleted 2026-09-26 now that all 8 screens are done and
+verified — this doc is self-sufficient).
 
 ---
 
 ## Done — verified against code, 2026-09-26
 
-7 of the handoff's 8 screens shipped, across commits `145fbc6` (Phase 0/1: backend gaps + shared
-chrome) through `8c7fea8` (Phase 9: Settings, final phase):
+All 8 of the handoff's screens shipped, across commits `145fbc6` (Phase 0/1: backend gaps + shared
+chrome) through `8c7fea8` (Phase 9: Settings, final phase), plus Sign-in (this batch):
 
 - Today (alerts, stats row, trip rows, Coming up, phone preview)
 - Calendar
@@ -17,6 +18,7 @@ chrome) through `8c7fea8` (Phase 9: Settings, final phase):
 - Money (payout banner, Earned/Held/Given back buckets)
 - Settings (four cards: Your boats, Trips you sell, Your people, Your business)
 - Passenger list
+- Sign-in (`apps/web/src/app/admin/login/`)
 
 Plus the full shared component kit the handoff's dialog table calls for, in
 `apps/web/src/components/admin/merchant/`: `Chrome.tsx`, `DensityContext.tsx` (the Dock/Desk
@@ -30,49 +32,19 @@ copy and structure line-by-line — not just checking that files exist.
 in `apps/web/src/app/admin/page.tsx`: no real weather data source exists, and firing that copy off
 departure time alone would show captains false safety information on days with normal weather.
 
----
+**Second intentional deviation — Sign-in's "Mate" PIN option was dropped from the design.** The
+spec called for a two-option segmented control (Captain/office vs. Mate PIN), but the existing
+`/api/admin/auth/login` route only accepts email+password and rejects non-admin roles with 403 —
+there was no PIN-based login route for the web admin, and mates already authenticate through the
+separate native mobile app (see `docs/native-app-handoff-status.md`). Product decision: out of
+scope for the web admin rather than building a new PIN route just for this screen. The shipped
+page is the office/admin-only path — email + password, full-width `#303030` submit button, the
+"Full access — schedule, money, settings." hint — with the segmented control and PIN path
+skipped entirely.
 
-## Not done — Sign-in screen (screen 8 of the handoff)
-
-`apps/web/src/app/admin/login/page.tsx` is still the pre-redesign page — navy/gold branding, plain
-email+password form. None of the Merchant redesign's sign-in screen was built.
-
-This was never scheduled, not missed: there is no "Phase 2" commit anywhere in history, and Phase 9
-(Settings) is explicitly labeled "(final phase)" in its own commit message. The 9-phase plan simply
-never included a sign-in redesign.
-
-**Full design spec**, copied here from `design_handoff_admin_console/README.md` section "8. Sign
-in" so this doc is self-sufficient once that directory is deleted:
-
-> Full-screen `#1a1a1a` overlay, centered white card (380px, radius 16px, padding 24px,
-> `box-shadow: 0 10px 40px rgba(0,0,0,0.4)`).
->
-> "Open Boat" 14px/700 + operator name 13px `#616161`. A two-option segmented control on `#f1f1f1`:
-> **Captain or office** (email + password) and **Mate** (PIN only, 20px text,
-> `letter-spacing: 8px`, numeric input mode). Error: bg `#fee9e8`, fg `#8e1f0b`, radius 8px. Submit
-> is a full-width 46px `#303030` button that reads "Signing in…" while busy. Hint under it: office
-> = "Full access — schedule, money, settings."; mate = "A mate only sees who's aboard and checks
-> them in."
-
-Relevant API grounding (also from the handoff): `POST /api/admin/auth/login`, `/logout`,
-`GET /me` for session.
-
-**Open question the spec doesn't resolve:** the existing `/api/admin/auth/login` route only accepts
-email+password and rejects non-admin roles with 403 — there is currently no PIN-based login route
-for the web admin. Mates already authenticate through the separate native mobile app (see
-`docs/native-app-handoff-status.md`). Implementing the "Mate" segmented option as designed would
-need either a new API route, or a product decision that it's out of scope for the web admin (mates
-have their own app already) and the control should just be dropped down to the office/admin path
-alone.
-
-## Next up
-
-1. Decide whether the "Mate" PIN option belongs on the web admin's sign-in screen (see open
-   question above) — this determines whether a new API route is needed or the design simplifies to
-   admin-only.
-2. Implement the redesigned `/admin/login` page per the spec above, reusing the existing
-   `apps/web/src/components/admin/merchant/` kit (`Card`, `Button`, `Input`) for visual consistency
-   with the rest of the redesigned admin.
-3. Verify in a real browser session — static typecheck doesn't catch rendering/UX bugs.
-4. Delete `design_handoff_admin_console/` once this lands and is verified. Everything else in that
-   handoff is already implemented and verified (see "Done" above) — no need to re-review it.
+`apps/web/src/app/admin/login/page.tsx` is now an async Server Component (`getOperatorRecord()` for
+the operator-name subtitle) rendering `apps/web/src/app/admin/login/LoginForm.tsx` (the interactive
+`"use client"` piece), reusing `Card`, `Button` (`variant="primary"`), `Input`, and `Label` from the
+`merchant/` kit. Verified in a real browser via an ad hoc Playwright script (dev server +
+`chromium.launch()`): empty state, invalid-credentials error state, mobile viewport, and a full
+successful sign-in redirecting to `/admin`.
