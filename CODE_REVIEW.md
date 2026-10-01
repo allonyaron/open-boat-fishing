@@ -3316,3 +3316,656 @@ has no operator concept of its own: the host it calls decides the operator, and 
     `(tabs)`. Pass 9 (CI/deploy) can pick up the config part.
 - **Rate limits:** the clients don't loop on `/api/auth/*`. The only limiter-defeating patterns are on the wallet GET
   (P2-8 polling, P8-6 refresh fan-out).
+
+---
+
+## Pass 9 Remainder (O, L, P)
+
+**Scope:**
+- **O (notifications and misc lib):** `lib/email.ts`, `lib/push.ts`, `lib/posthog.ts`, `components/PostHogProvider.tsx`,
+  `lib/date-et.ts`, `lib/format.ts`, `api/reports/route.ts`, `api/reports/[reportId]/route.ts`,
+  `api/reports/upload/route.ts` (Vercel Blob client upload), `api/reports/upload-photo/route.ts` (server `put`), and the
+  public pages `(public)/fishing-reports/page.tsx` and `[reportId]/page.tsx`.
+- **L (admin UI):** every page under `app/admin/**` (the merchant pages in the nav, plus the legacy pages that are still
+  routable) and `components/admin/merchant/*`, `components/admin/ClearDemoCustomers.tsx`.
+- **P (packages, CI, deploy):** `packages/utils`, `packages/types`, `packages/design`, `.github/workflows/*` (and its
+  README), `apps/web/vercel.json`, `apps/web/next.config.mjs`, `pnpm-workspace.yaml`, `apps/mobile/eas.json`,
+  `apps/mobile/app.json`.
+- **Read only to confirm the contract or close handoffs:** the admin API routes the pages call (`today`, `trips`,
+  `trips/[tripId]`, `trips/[tripId]/cancel`, `tickets/[ticketId]/refund`, `revenue`), `cron/trip-reminders`,
+  `lib/notifications/send-confirmation-email.ts`, `lib/webhooks/payment-intent-*`, `DemoBanner`, `app/layout.tsx`,
+  `(public)/page.tsx` and `book/page.tsx`, `components/BookingCalendar/format.ts`, mobile `(tabs)/{trips,tickets}.tsx`,
+  `boarding/[ticketId].tsx`, `reports-list.tsx`, `(mate)/report/[tripId].tsx`, the posthog-js 1.415 autocapture source,
+  Next 14.2.30's image loader and optimizer, and `e2e/admin.spec.ts`.
+
+**Runtime checks (all read-only; no fixtures created):**
+- Ran `etWallClockToUTC` / `etMidnightUTC` under `TZ=UTC` for both 2026 DST dates (P9-6).
+- `gh run list` / `gh run view --log-failed` for the four workflows, and
+  `GET repos/…/actions/permissions/workflow` (P9-1, P9-8).
+- One read-only query on the dev DB: `fishing_reports` is empty there, so P9-2 rests on the Next source, not on a
+  rendered photo.
+
+**Summary:** No Critical and no High. The tenant core holds up here too:
+- push lookups, public report reads and every admin page are scoped to the right operator;
+- no staff-only field reaches a public page;
+- no admin page takes its operator from anywhere but the session-gated API.
+
+The problems are about what reaches the customer, the office and the deploy pipeline:
+- **CI never runs a test (P9-1).** The 51 web API test files, the DB tests, the utils tests and the 51 mobile unit tests
+  exist, but no workflow runs them. The only gates are typecheck, `next build`, and a `/api/health` call that doesn't
+  touch the DB (F1-9) on a preview that has already migrated the production DB (F1-15).
+- **Fishing-report photos can't render (P9-2).** `next.config.mjs` has no `images.remotePatterns`, so the Next image
+  optimizer rejects every Blob URL. That covers the public report page, the homepage's latest-report card and the
+  legacy admin trip page. This also corrects P6-9, which assumed an allow-list was configured.
+- **The mobile wallet hides tonight's boarding pass at 8 PM EDT (P9-3).** "Upcoming" is decided by the UTC date, and a
+  past row has no QR and no link. This is the sharpest of the Pass 8 date handoffs.
+- **The office manifest can't tell a paid passenger from an abandoned hold (P9-4),** and **every merchant
+  mutation, including trip cancel and ticket refund, fails silently on a non-JSON error (P9-5).**
+
+### What's clean (verified)
+
+- **Push targeting.** `getTokensForEmails` filters `operatorId`, `active`, the per-category opt-in and the email list
+  (`push.ts:26-32`), and drops non-Expo tokens (`:34`). Both sides of the email match are lowercased
+  (`bookings/route.ts:32`, `push/register` takes the email from the verified token). Every caller passes an operator ID
+  that comes from the row it's notifying about (`booking.operatorId`, `meta.operatorId`, `session.operatorId`).
+  Tracker `:226-228` ("verify push.ts scopes by operator", `[x]`) is verified.
+- **Time formatting in `lib/format.ts`.** `fmtTimeET` and `fmtTimeCompactET` pass `timeZone: "America/New_York"`.
+  The date-only helpers build `Date.UTC(...)` and format with `timeZone: "UTC"`, so a `YYYY-MM-DD` never shifts.
+  `fmtDayLabelET` takes `today` from the caller, and the merchant pages pass the server's `todayET()`. `todayET()` and
+  `addDaysToDateString` (noon UTC) are correct on every date. The one bug is in `etWallClockToUTC` (P9-6).
+  `@openboat/utils` `fmtTime` is the same ET formatter and has tests.
+- **Public report pages and API.**
+  - Both pages are `force-dynamic` (tracker `:51-55` verified).
+  - Both select an explicit column list: no `staffId`, no customer data, nothing staff-only.
+  - The captain's text is rendered through React escaping, and there's no `dangerouslySetInnerHTML` anywhere in
+    `app/` or `components/`.
+  - Cross-operator report IDs 404 (`[reportId]/route.ts:41`, `page.tsx:43`).
+- **Photo upload hygiene.**
+  - Both upload routes authenticate before reading the body.
+  - The MIME allow-list excludes SVG (`upload-photo/route.ts:5`, `upload/route.ts:6`), so nothing uploaded can run
+    script from the Blob host.
+  - `upload-photo` sanitizes the filename (`:25`).
+  - *Needs confirmation:* a chosen pathname shouldn't be able to replace an existing blob. The `@vercel/blob` 2.8
+    client sends `x-allow-overwrite` only when the option is set (`dist/index.js:287-288`), so the default is the Blob
+    service's, documented as "no overwrite" since 1.0. If that ever didn't hold, P9-10 item 1 would become
+    cross-tenant photo replacement, because public pages expose each photo's full path. Setting
+    `allowOverwrite: false` explicitly in `onBeforeGenerateToken` and `put` removes the doubt.
+- **Admin UI operator source.** Every admin page except `admin/login` is a client component that loads data only through
+  `/api/admin/*`, which takes the operator from the session (Pass 7). No page reads `x-operator-id`, a query-string
+  operator, or `localStorage` for tenancy. `admin/settings/page.tsx` passes only the deployment's `DEMO_MODE` flag. The
+  two exceptions are covered under "Auth invariants" below.
+- **Clickjacking is mitigated for admin.** No `X-Frame-Options` / CSP `frame-ancestors` is set anywhere
+  (`next.config.mjs`, `vercel.json`, middleware). But the admin cookie is `SameSite=Lax` (`session-factory.ts:19`), so a
+  cross-site frame loads the admin console signed out. Adding `frame-ancestors 'none'` is still cheap
+  defense-in-depth.
+- **PostHog and passenger names (Pass 8 handoff): not via click text on the merchant pages.** Autocapture records
+  `$el_text` only for the clicked element. It takes direct text for most elements, and nested span text for `a` and
+  `button` (`posthog-js/lib/src/autocapture.js:71-75, 176-184`). Ancestors contribute text only if they're `a`, `button`,
+  `form`, `input`, `select`, `textarea` or `label`.
+  - On the manifest (`passengers/page.tsx:220-263`), names, emails and phones sit in plain `div`/`span`s, and the only
+    clickable elements are labelled "Aboard", "Undo" and "Refund".
+  - On Today, the clickable rows show times and boat names only (`page.tsx:252-266`).
+  - Input values are never captured.
+
+  The remaining exposure is session replay (P9-12).
+- **Shared packages.** `dollars` and `fmtTime` are correct and tested. `@openboat/design` is constants only.
+  `@openboat/types` exports nothing; it's harmless, but it's an empty package that `next.config.mjs` still transpiles.
+- **Required-check design in `web-checks.yml`.** The job-level `if:` keeps both required job names scheduled
+  (`:13-20, 41-44`), and the smoke step fails closed when no deployment URL comes back (`:126-130`).
+- **`pnpm-workspace.yaml`.** The overrides match CLAUDE.md's rationale. `allowBuilds` is the pnpm 11 key, and the repo
+  pins `pnpm@11.9.0`. P9-14 is about the overrides' *reach*, not their values.
+- **Tracker items in scope, verified:** `:16-18` (crons registered: two are, and `reset-demo-data` is absent by
+  design on Hobby), `:51-55` (reports ISR), `:196-199` (reminders dedupe emails with a `Set`), `:226-228` (push scope),
+  and security audit `:107-111` (`waitUntil` for the webhook's email and push). For `:221-224`, see P9-7.
+
+### Operator-scoping check (against the Pass 1 source table)
+
+| Route / page | Operator source | Scoped explicitly | Scoped only by derivation (P2-10 pattern) |
+|---|---|---|---|
+| `GET api/reports` | header (row 1) | `fishingReports.operatorId` `:42` | `trips`/`vessels`/`products` joined by FK `:37-39`; `vesselId` filter `:44` |
+| `GET api/reports/[reportId]` | header (row 1) | `:41` | same joins `:38-40` |
+| `POST api/reports/upload` | mate token bound to header, or admin session | no DB access | Blob pathname is client-chosen and not operator-prefixed (P9-10) |
+| `POST api/reports/upload-photo` | mate token bound to header | no DB access | pathname `reports/<ts>-<name>`, not operator-prefixed (P9-10) |
+| `(public)/fishing-reports`, `[reportId]` | `getOperatorRecord()` (header) | `:49`; `:43` | same joins |
+| `lib/push.ts` | caller-supplied operator ID | `:28` | — |
+| `lib/email.ts` | none (pure send) | n/a | sender is the operator's `emailFrom` (P7-4 item 2) |
+| PostHog server capture | booking row | `operator_id` property only | — |
+| `app/admin/**` (all but login) | admin session, through `/api/admin/*` | Pass 7 table | — |
+| `app/admin/login` | header, via `getOperatorRecord()` | name only, before sign-in | — |
+| `app/admin/reports` published list | **header**, through the public `GET /api/reports` (`reports/page.tsx:51`) | `:42` of that route | mixed with session-scoped pending list (see "Auth invariants") |
+
+No leak. The joined rows in the report reads are reached through an operator-scoped `fishing_reports` row. Under F1-10
+nothing in the schema stops a report from pointing at another tenant's trip, but both writers (mate and admin report
+routes) verify the trip first (Passes 6 and 7).
+
+### Findings
+
+#### P9-1 · Medium · CI never runs a test; the only web gates are typecheck, build, and a health check that skips the DB
+
+- **Where:** `.github/workflows/web-checks.yml:63-74` (typecheck and `next build` only) and `:124-141` (`/api/health` on
+  the Vercel preview); `mobile-checks.yml:36-43` (typecheck and `expo-doctor`). There's no `test` / `vitest` /
+  `playwright` step in any workflow. Test suites that exist: `apps/web/src/test/api` (51 files),
+  `packages/db` and `packages/utils` (`vitest run`), `apps/mobile` (51 tests, CLAUDE.md), and `e2e/*.spec.ts`. The root
+  `turbo test` script is never invoked.
+- **What's wrong (confirmed):**
+  - Every regression test written for the money-path fixes (H1, M8, the webhook idempotency guards, the rate limiter,
+    the cross-tenant 404s) runs only when a developer remembers to run it locally. "All testing phases complete" in
+    CLAUDE.md describes suites that nothing enforces.
+  - The smoke test proves only that the preview's env parses. `/api/health` doesn't query the DB (F1-9). By the time
+    it runs, the preview build has already applied the branch's migrations to the **production** database (F1-15).
+  - The `/book` render check handed off from Pass 8 can't simply be added to the smoke job. Previews have no
+    `OPERATOR_ID` (it's scoped to Production, F1-15 evidence), and their per-deployment host isn't in `domains`, so
+    every tenant page on a preview 404s at the middleware.
+- **Why it matters:** Most findings in this review are regressions a test would catch once written: P2-2 / P4-2 seat
+  double-restores, P3-1 expired-hold tickets, P8-2's `/book` 500. Without CI running the suites, a fix can be undone by
+  the next unrelated PR with every check green.
+- **Suggested fix:** Add one `tests` job to `web-checks.yml`, required on `main`:
+  - a `postgres:16` service container; `pnpm --filter @openboat/db migrate`, then `seed-demo.ts`;
+  - `pnpm turbo test` (web API suites, db, utils, and mobile lib tests, which need no simulator);
+  - `next build && next start` with `OPERATOR_ID` set to the seeded demo operator, then Playwright `booking-flow.spec.ts`
+    plus a `/book` render assertion (closes the Pass 8 handoff), using Stripe test keys from secrets, or skipping the
+    payment step when they're absent.
+  - Keep the preview smoke test, but only after F1-15's separate preview DB exists. Make `/api/health` do F1-9's
+    `select 1`.
+
+#### P9-2 · Medium · Fishing-report photos are rejected by the image optimizer: no `images.remotePatterns` is configured
+
+- **Where:** `apps/web/next.config.mjs:1-13` (no `images` key). Remote `next/image` uses:
+  `(public)/fishing-reports/[reportId]/page.tsx:145-155` (the photo grid), `(public)/page.tsx:453-458` (homepage
+  "latest report" photo), and `admin/trips/[tripId]/page.tsx:402` (legacy). Photo URLs are Vercel Blob URLs
+  (`upload-photo/route.ts:32`, `ReportDialog.tsx:74-80`).
+- **What's wrong (confirmed in the Next 14.2.30 source; not rendered, because the dev DB has no reports):**
+  - In production the default loader just rewrites `src` to `/_next/image?url=<blob>` (`image-loader.js`, the host
+    check is wrapped in `NODE_ENV !== "production"`).
+  - The optimizer then answers **400 `"url" parameter is not allowed`** for any absolute URL with no matching
+    `domains` / `remotePatterns` (`image-optimizer.js:325-333`). Vercel's optimizer applies the same build-time
+    config.
+  - So every captain's photo shows as a broken image on the page the captain was told is "live on your Fishing Reports
+    page" (`reports/page.tsx:100`).
+  - In dev, Next's defaults are `domains: []` and `remotePatterns: []` (`image-config.js:54, 64`). Empty arrays are
+    truthy, so the loader's dev-only host check runs and **throws at render** ("hostname … is not configured"). Any
+    page with a report photo errors locally. Nobody would have seen photos work locally, and the dev DB currently has
+    no reports, so nobody hit the error either.
+  - The admin `ReportDialog` preview uses a plain `<img>` (`:160`), so the office sees the photos and the public
+    doesn't.
+- **Correction to P6-9:** P6-9 said "`next/image`'s host allow-list limits the inline images". No allow-list exists;
+  it blocks *all* remote images, including legitimate ones. The OpenGraph image (`[reportId]/page.tsx:70`) is a raw
+  URL and does work, so a foreign URL (P6-9 / P7-8) still reaches link previews.
+- **Why it matters:** Photos are the main content of a fishing report, which is the operator's marketing page. The
+  homepage's "Recent catch" card shows a broken image the moment any report with a photo exists.
+- **Suggested fix:** Add `images: { remotePatterns: [{ protocol: "https", hostname: "<store-id>.public.blob.vercel-storage.com", pathname: "/reports/**" }] }`
+  (the exact Blob host, not a `*.vercel-storage.com` wildcard, so P6-9's foreign URLs stay blocked). Pair it with
+  P9-10's operator-prefixed paths and P6-9's write-time validation. Add a Playwright check that a seeded report's
+  first `<img>` returns 200.
+
+#### P9-3 · Medium · Mobile wallet moves tonight's trip to PAST at 8 PM EDT, hiding its boarding pass; other "today" calculations use the UTC date (Pass 8 date handoff)
+
+- **Where:**
+  - `apps/mobile/app/(tabs)/tickets.tsx:173-178`: `today = new Date().toISOString().slice(0, 10)` (UTC), then
+    `upcoming = departureDate >= today`, `past = departureDate < today`.
+  - `:293-306` `PastRow`: name, date and "BOOK AGAIN" only. No QR and no `onPress` to the boarding pass.
+  - `:35-45` `fmtCountdown`: `tripDate = startIso.slice(0, 10)` (the UTC date of the departure instant), compared
+    with UTC `today` / `tomorrow`.
+  - `(tabs)/trips.tsx:34-36`: `todayStr()` is UTC; it's the default selected day and decides the "TODAY" labels.
+  - `boarding/[ticketId].tsx:112-116`: `boardIso.setHours(bh, bm)` in the device's zone.
+  - Web: `components/BookingCalendar/format.ts:26-27` (`fmtDayLabel`, UTC today/tomorrow) and
+    `(public)/book/page.tsx:6-9` (`currentMonth()` in server time, i.e. UTC on Vercel).
+- **What's wrong (confirmed in code):**
+  1. **Wallet.** From 8 PM EDT (7 PM EST), the UTC date is tomorrow. Any trip whose `departureDate` is today ET drops
+     to PAST, which can't open its pass. A night trip departing at 8 PM EDT loses its pass at departure time. One
+     departing at 7 PM EST (winter) loses it at 7 PM, while boarding is still going on. The "offline at the dock" wallet
+     goes blank for exactly the trips that board in the evening.
+  2. **Wallet header.** For any departure at or after 8 PM EDT, `startIso.slice(0,10)` is the *next* calendar day. The
+     "next trip" card says "SUN, OCT 4" for a Saturday 8 PM trip, while the row below it says "SAT, OCT 3 · 8:00 PM"
+     (from `departureDate`, `:286`).
+  3. **Trips tab and web calendar.** After 8 PM ET, "TODAY" marks tomorrow's date and tonight loses the label. The
+     mobile Trips tab opens on tomorrow. Customers see the date beside the label, so this is confusing rather than
+     costly.
+  4. **Boarding countdown.** It's correct for a phone set to ET. For a phone in any other zone (a visiting customer,
+     or a phone left on home time), "Boarding in N min" is off by the zone difference.
+  5. **`/book`.** It opens on next month from 8 PM ET on the last day of a month. P8-2 replaces this code anyway.
+- **Why it matters:** Item 1 is the same outcome as P8-5/P8-6 (no usable pass at the gangway), but it hits every
+  evening departure and needs no unusual state. The mate scanner and manual search still work, so the trip isn't lost,
+  but the customer is told their pass is gone.
+- **Suggested fix:**
+  - Add `todayET()` and `etDateOf(iso)` to `@openboat/utils` (the same `Intl` code as `lib/date-et.ts`; the
+    mobile app already formats with `timeZone: "America/New_York"` through `@openboat/utils` `fmtTime` in seven
+    screens), and use them in all six places. Keep `lib/date-et.ts` as a re-export so web and mobile share
+    one implementation.
+  - Split upcoming and past on `endTime > now` (or `startTime > now − 6h`), not on dates. A trip stays "upcoming" until
+    it's actually over.
+  - In `fmtCountdown`, use `trip.departureDate`.
+  - For the boarding time, combine `departureDate` + `boardingTime` with `etWallClockToUTC` (after P9-6), not
+    `setHours`.
+
+#### P9-4 · Medium · The office manifest doesn't show booking status: unpaid holds and cancelled bookings look like paid passengers, and "Paid for this trip" counts them
+
+- **Where:** `admin/trips/[tripId]/passengers/page.tsx:138-142` (`liveTickets` = every non-voided ticket of every
+  booking; `paidCents` = their list prices), `:203-268` (`booking.status` is in the type at `:34` but is never
+  rendered), `StatusPill.tsx:62-66` (`ticketPillStatus` looks only at `voided` / `checkedIn`). The API sends every
+  booking on the trip, whatever its status (`api/admin/trips/[tripId]/route.ts:38-49`). The same applies to the legacy
+  `trips/[tripId]/page.tsx:223-226`.
+- **What's wrong (confirmed in code):**
+  - A `pending` booking (customer at checkout, or a hold that expired without payment) is listed exactly like a paid
+    one, with an "Aboard" button. Because of P3-1, an expired hold's tickets are never voided, so every abandoned cart
+    on the trip stays on the office manifest permanently.
+  - The same holds for a `cancelled` booking whose tickets weren't voided (P4-1's pending bookings on a cancelled trip,
+    P4-8).
+  - "N of M aboard" uses those tickets as the denominator, and "Paid for this trip" adds their list prices. The list
+    price is also wrong for discounted bookings (P2-2).
+- **Why it matters:** The office uses this screen to decide who to wait for, and to answer "has this person paid?" at
+  the window. Today it can't answer that. Combined with P7-7 (office check-in accepts unpaid bookings), the office can
+  board someone who never paid with nothing on screen to warn them. "Paid for this trip" is a money figure that can be
+  overstated by any number of abandoned carts.
+- **Suggested fix:**
+  - Show a status pill per booking ("Paid", "Awaiting payment", "Cancelled"), and disable "Aboard" and "Refund" unless
+    the booking is `confirmed`.
+  - Compute the counts and `paidCents` from confirmed bookings only. Take `paidCents` from the booking or payment
+    total (or `booking_items.subtotalCents`), not from ticket list prices.
+  - Or filter server-side: return `confirmed` bookings in the main list, and the rest in a separate collapsed
+    "Not paid" group. The P3-1 fix (void tickets on expiry) removes most of the noise; this makes the screen correct
+    even before that lands.
+
+#### P9-5 · Medium · Every merchant mutation, including trip cancel and ticket refund, fails silently on a non-JSON error response (Pass 7 handoff, swept)
+
+- **Where:** every mutation handler follows one pattern: `const body = await res.json(); if (!res.ok) showToast(...)`
+  inside `try { … } finally { setBusy(false) }`, with **no `catch`**:
+  - Today `page.tsx:95` (cancel), `:120` (seats), `:141` (add departure);
+  - Calendar `calendar/page.tsx:110`, `:135`, `:156` (the same three, copied);
+  - Weekly schedule `schedule/page.tsx:77` (pause), `:101` (save), which is the Pass 7 handoff;
+  - Passengers `passengers/page.tsx:88` (check-in), `:107` (refund);
+  - Settings `SettingsClient.tsx:114`, `:137`, `:175` (boat, trip type, person);
+  - Reports `reports/page.tsx:82`.
+  - Only `ClearDemoCustomers.tsx:26` catches.
+  - The legacy pages (P9-13) are worse: `trips/[tripId]/page.tsx:125-137` (refund) and `trips/page.tsx:104-117`
+    (cancel) have no `try` at all, so `setRefunding(null)` never runs and the button stays in its busy state.
+- **What's wrong (confirmed in code):** Any response without a JSON body makes `res.json()` throw. That covers an
+  unhandled server error (Next returns a 500 with no JSON), a Vercel 504 on timeout, a 413, or the proxy's 502. The
+  `finally` clears `busy`, the rejection goes unhandled, **no toast appears and the dialog stays open**. Concrete
+  cases:
+  - **Trip cancel** (`api/admin/trips/[tripId]/cancel/route.ts:68-110`) issues one `stripe.refunds.create` per booking,
+    sequentially, with no `maxDuration`. That makes it the route most likely to hit the function timeout on a full boat
+    (*needs confirmation* against the project's configured duration). If it does, some customers have been refunded
+    at Stripe and the DB transaction never committed. The admin sees an open dialog with an enabled "Cancel and
+    refund" button. Retrying is protected only by P4-3's 24-hour idempotency key.
+  - **Ticket refund**: the same silence, and the dialog invites a second click. P4-4 (no lock on the refund path)
+    makes that second click unsafe.
+  - **Pause** (P7-2): the FK violation surfaces as a 500. No toast appears, and after a reload the pattern reads
+    "Paused" while its trips stay on sale.
+- **Why it matters:** These are the operator's money and inventory actions. A silent failure looks to the user like
+  "nothing happened, try again", which is exactly the retry the backend is weakest against (P4-3, P4-4).
+- **Suggested fix:**
+  - Add one `adminFetch(url, init)` helper in `components/admin/merchant` that returns
+    `{ ok, status, body }`, using `await res.json().catch(() => ({}))`. Use it in every handler, and add a `catch` that
+    toasts "Couldn't reach the booking system — check the trip before trying again."
+  - For trip cancel and refund specifically, on a failure or unknown result **reload the trip** before re-enabling the
+    button, so the admin sees what actually happened.
+  - Give the cancel route `export const maxDuration = 60`, and make the per-booking refunds concurrent (bounded) or
+    queued.
+  - The cancel / seats / add-departure trio is copied verbatim between Today and Calendar. Move it into a
+    `useTripActions()` hook so the fix lands once.
+
+#### P9-6 · Low · `etWallClockToUTC` uses the noon offset, so times between midnight and 2 AM ET on DST-change dates are an hour off (Pass 7 handoff, confirmed at runtime)
+
+- **Where:** `lib/date-et.ts:38-51`. `etMidnightUTC` (`:54-56`) calls it, and `api/admin/today/route.ts:85-86` uses
+  that for the "Taken in today" window. Callers: schedule POST / PATCH and one-off trip POST, for both departure and
+  **return** times (`settings/schedules/route.ts:127-128`, `[scheduleId]/route.ts:143-144`, `trips/route.ts:112-113`).
+- **What's wrong (measured, `TZ=UTC`):**
+
+  | Input (ET wall clock) | Stored instant | Shown in ET | Error |
+  |---|---|---|---|
+  | 2026-03-08 00:30 | 04:30Z | **Mar 7, 11:30 PM EST** | 1 h early, previous calendar day |
+  | 2026-03-08 01:30 | 05:30Z | 12:30 AM EST | 1 h early |
+  | 2026-03-08 midnight (`etMidnightUTC`) | 04:00Z | Mar 7, 11:00 PM | window starts 1 h early |
+  | 2026-11-01 00:30 | 05:30Z | 1:30 AM EDT | 1 h late |
+  | 2026-11-01 midnight (`etMidnightUTC`) | 05:00Z | 1:00 AM EDT | window misses the first hour |
+  | either date, 03:00 and 07:00 | correct | correct | — |
+
+- **Why it matters:** It's narrow: two dates a year, times before 2 AM. But that's exactly when an overnight trip
+  *returns* (a 7 PM–1 AM trip on the night before a change gets an `endTime` an hour off) and when a "midnight special"
+  or offshore trip departs. On the spring date, a 00:30 departure is stored on the previous calendar day, while its
+  `departureDate` says the next one.
+- **Suggested fix:** Compute the offset at the target wall-clock time, not at noon. Take a first guess with the noon
+  offset, read the offset at that guessed instant, and re-apply it if it differs (two iterations converge). Reject the
+  non-existent 02:00–02:59 on the spring date, and pick the first occurrence on the fall date. Add a unit test with the
+  table above (P9-16).
+
+#### P9-7 · Low · The trip-cancellation push is the only notification not wrapped in `waitUntil`; the tracker fix landed in two places of three
+
+- **Where:** `api/admin/trips/[tripId]/cancel/route.ts:172-183`: `sendPushToEmails(...).catch(...)` is not awaited
+  before the response at `:186`. Compare `cron/expire-pending-bookings/route.ts:108-120`,
+  `lib/webhooks/payment-intent-canceled.ts:19-31` and `payment-intent-succeeded.ts:101-119`, which all use
+  `waitUntil`.
+- **What's wrong:** On Vercel the function can be frozen as soon as the response is sent, and in-flight promises are
+  dropped. Tracker `:221-224` (`[x]`) fixed exactly this for the expiry cron, and the security audit (`:111`) fixed it
+  for the webhook. The trip-cancel route, which was written later, repeats the pattern. The DB lookup at `:165-170`
+  runs before it and is awaited, so the risk is only the Expo HTTP call.
+- **Why it matters:** P4-6 already found that this push is the **only** notice a customer gets that their trip was
+  cancelled. This makes even that best-effort notice unreliable. Customers who don't hear turn up at the dock.
+- **Suggested fix:** Wrap it in `waitUntil` (one line), together with P4-6's email notice. Annotate tracker `:221` to
+  cover all senders, or add a lint rule (no floating promises in `app/api/**`) so the class can't recur.
+
+#### P9-8 · Low · Mobile CI/CD: the preview workflow has never succeeded, its OTA step is inert, and the store release has no gates
+
+- **Where:** `.github/workflows/mobile-preview.yml:39-49`, `mobile-release.yml:42-54`, `mobile-checks.yml:43, 45-70`;
+  `apps/mobile/eas.json:9, 20, 55-58`; `apps/mobile/package.json` (no `expo-updates`); `app.json` (no `updates` /
+  `runtimeVersion`).
+- **What's wrong:**
+  1. **Confirmed:** `mobile-preview` has failed on **every one of its last 23 runs** (`gh run list`). The iOS build
+     stops with "EAS CLI couldn't find any credentials suitable for internal distribution" (run `36218688352`), so
+     every merge to `main` that touches mobile produces a red X that people have learned to ignore.
+  2. **Latent:** the `eas update --branch main` step has never run. `expo-updates` isn't a dependency, so builds don't
+     check for updates and the step would do nothing even if reached. If OTA is wired up later as the README
+     describes, the risk is that `eas update` bundles JS with the runner's environment, not the `eas.json` build-profile
+     `env` (*needs confirmation* against the installed `eas-cli`; Expo's docs say profile env applies to builds and
+     EAS environment variables to updates). In that case `EXPO_PUBLIC_API_URL` is undefined, `getApiUrl()` throws in
+     release builds (`lib/api.ts:9`), and every installed app that takes the update crashes at launch. If
+     `EXPO_PUBLIC_APP_VARIANT` is unset, mate devices on the same channel would also receive the consumer bundle.
+  3. **Release on any `v*` tag:**
+     - it runs no typecheck and no tests;
+     - it builds with the placeholder `EXPO_PUBLIC_API_URL: "https://your-domain.com"` (`eas.json:9`, P8-12) unless
+       someone remembered to edit it;
+     - it submits with `--latest` instead of binding the submission to the build it just made;
+     - it ships Android straight to the `production` track (`eas.json:57`) at 100%.
+  4. **Confirmed:** the "comment on PR" step in `mobile-checks` fails with 403 "Resource not accessible by integration".
+     The repo's default workflow token is read-only (`default_workflow_permissions: read`), and the workflow declares
+     no `permissions:` block. The failure message never reaches the PR.
+  5. `npx expo-doctor@latest` and `npm install -g eas-cli` are unpinned, so a CI result can change with no repo change.
+- **Why it matters:** The release pipeline is the one path that pushes code to every customer's phone with no review
+  step after the tag. Today it would ship a binary pointed at a third-party domain with nothing to stop it.
+- **Suggested fix:**
+  - Disable the preview workflow (or run it Android-only) until iOS ad hoc credentials exist.
+  - Remove the `eas update` step until `expo-updates`, `runtimeVersion` and per-variant channels are configured. When
+    they are, set `EXPO_PUBLIC_*` as EAS environment variables per channel, not only in `eas.json`.
+  - In `mobile-release`: run typecheck and `pnpm --filter @openboat/mobile test` first; fail if `EXPO_PUBLIC_API_URL`
+    isn't `https://` or contains `your-domain` / `REPLACE_`; use `eas build --auto-submit`; submit Android to
+    `internal` (or a staged rollout) and promote by hand.
+  - Add `permissions: { contents: read, pull-requests: write }` to `mobile-checks.yml`. Pin `expo-doctor` and `eas-cli`.
+
+#### P9-9 · Low · Tenant branding is set per deployment or build, not per operator: the demo banner, a "CAPTREE FISHING" fallback, and one Apple Pay merchant name
+
+- **Where:** `components/DemoBanner.tsx:3-4` (gated only on `env.DEMO_MODE`), rendered on every page by
+  `app/layout.tsx:56`. Mobile: `(tabs)/trips.tsx:32, 162` (`EXPO_PUBLIC_OPERATOR_NAME ?? "CAPTREE FISHING"`).
+  `eas.json:8-13` sets no `EXPO_PUBLIC_OPERATOR_NAME`, and it sets one `EXPO_PUBLIC_MERCHANT_NAME` / Apple merchant ID
+  for every build.
+- **What's wrong (confirmed in code):**
+  - `openboatfishing.com` is planned as "production sandbox + public demo" with `DEMO_MODE=true`. Any real operator
+    provisioned there through `/platform` gets a banner on every customer page reading "No real payments — test with
+    card 4242… Bookings reset nightly", plus an "Admin login →" link. This is the customer-facing half of P7-10, where
+    the same deployment flag also arms "Clear demo customers".
+  - Every EAS build titles the Trips tab "CAPTREE FISHING", the original client's name, whichever operator the build
+    serves, unless `EXPO_PUBLIC_OPERATOR_NAME` is set as an EAS project environment variable (the one source not
+    visible from the repo). That includes the OpenBoat demo build.
+  - The Apple Pay sheet says "OpenBoat Fishing" for every operator's app.
+- **Why it matters:** A customer told "no real payments" on a live tenant has grounds for a dispute. A store app that
+  shows another business's name damages trust, and on a platform pitched to competing operators, showing the original
+  client's name to the others is a commercial problem.
+- **Suggested fix:**
+  - Gate the banner (and P7-10's button and cron) on an `operators.is_demo` flag read with the operator row in the
+    root layout.
+  - On mobile, fetch the operator's display name from the API (`/api/trips` already resolves the operator), or fail the
+    build when `EXPO_PUBLIC_OPERATOR_NAME` is unset (the P8-12 pattern). Never fall back to a real business's name.
+  - Move per-operator values (name, merchant name, API URL, bundle ID; see the bundle-ID handoff) into one per-operator
+    EAS profile or `app.config.ts` input.
+
+#### P9-10 · Low · Report photo uploads: Blob paths aren't operator-scoped, the 10 MB limit is unreachable, the completion callback hits the auth wall, and photos keep their location metadata
+
+- **Where:** `api/reports/upload/route.ts:9-38`; `api/reports/upload-photo/route.ts:19-30`; clients
+  `merchant/ReportDialog.tsx:74-80` and `admin/trips/[tripId]/page.tsx:166-176` (pathname
+  `reports/${tripId}/${Date.now()}-${file.name}`, chosen by the browser), and the mate app's
+  `(mate)/report/[tripId].tsx:76-99`.
+- **What's wrong:**
+  1. **Not operator-scoped (confirmed).** Every tenant shares one Blob store. `onBeforeGenerateToken` accepts whatever
+     pathname the client sends (`:24-30`), and `upload-photo` writes `reports/<ts>-<name>`, so nothing in a URL ties a
+     photo to its operator. P6-9 and P7-8 suggest accepting only the Blob host, but every tenant's photos share that
+     host. A host check would still let operator A's report embed operator B's photos.
+  2. **Unreachable size limit (needs confirmation).** `upload-photo` streams the request body through a serverless
+     function. Vercel caps function request bodies at 4.5 MB, so the `MAX_SIZE_BYTES = 10 MB` check (`:7, 19-22`) never
+     applies, and a phone photo between 4.5 and 10 MB fails with a platform 413. The mate app's
+     `quality: 0.8` re-encode (`:80`) keeps most 12 MP photos under that, but 24/48 MP photos and HEIC can exceed it.
+     The mate sees a generic "Upload failed". Without a `content-length` header (chunked upload) the check is skipped
+     entirely, leaving only the platform cap.
+  3. **Callback hits the auth wall (needs confirmation).** `handleUpload` registers an `onUploadCompleted` callback.
+     Vercel's call to it carries no mate token or admin cookie, and the route authenticates *before* `handleUpload`
+     (`:11-16`), so the callback gets 401. The callback is a no-op, so the only effect is failed-callback noise. The
+     documented pattern authenticates inside `onBeforeGenerateToken`.
+  4. **Location metadata (needs confirmation for mobile).** The admin web upload sends the original file, so EXIF
+     (including GPS) is published as-is on a public, indexed page. On mobile, `exif: false` only stops the picker
+     *returning* EXIF to JS; whether the 0.8 re-encode strips GPS depends on the platform. For a fishing operator,
+     published coordinates are the captain's spots. Customers' faces in catch photos are a separate, accepted
+     marketing choice.
+- **Suggested fix:**
+  - Build the pathname server-side as `reports/<operatorId>/<tripId>/<uuid>.<ext>`: in `onBeforeGenerateToken`, ignore
+    the client's path, or reject anything outside that prefix. Then P6-9 / P7-8's validator checks the
+    `https://<store>/reports/<operatorId>/` prefix, not just the host.
+  - Use client uploads (`handleUpload`) for the mate app too, which removes the 4.5 MB ceiling. Or cap at 4 MB, and
+    resize on the device to about 2048 px.
+  - Move the auth check into `onBeforeGenerateToken`, or drop `onUploadCompleted`.
+  - Strip EXIF before upload: canvas re-encode on web, `expo-image-manipulator` on mobile.
+
+#### P9-11 · Low · Public reports API and pages: the pagination cursor repeats a report on every page, and bad IDs return 500
+
+- **Where:** `api/reports/route.ts:43` (`lte(createdAt, cursor)`) and `:52` (`nextCursor` = the last item's
+  `createdAt`); the consumer is mobile `reports-list.tsx:92-98`, which appends with no dedupe, and `keyExtractor` is
+  `r.id` (`:138`). Also `:43` (`new Date(cursor)`), `:44` (`vesselId`), `[reportId]/route.ts:41` and
+  `fishing-reports/[reportId]/page.tsx:43` (unvalidated UUIDs), and `[reportId]/page.tsx:50, 87`.
+- **What's wrong (confirmed in code):**
+  - The last report of page *n* is the first of page *n+1*, so the mobile list shows it twice, and React Native warns
+    about duplicate keys. Two reports with the same `createdAt` at a boundary can also be skipped.
+  - `?cursor=garbage` produces `Invalid Date`, and a non-UUID `vesselId` or `reportId` is a Postgres `22P02`. Both
+    surface as 500 (and as a 500 page on the public route), not 400/404.
+  - The public detail page runs `fetchReport` twice per request (in `generateMetadata` and in the page), and each run
+    calls `getOperatorRecord()` again (F1-16 pattern).
+- **Suggested fix:**
+  - Use a keyset cursor `(createdAt, id)` with a strict `<`, e.g. `nextCursor = base64(createdAt|id)`.
+  - Validate `cursor` / `vesselId` / `reportId` with Zod, returning 400 or `notFound()`.
+  - Wrap `fetchReport` in React `cache()`.
+
+#### P9-12 · Low · PostHog: the server event uses the customer's email as its ID, session replay isn't disabled, and nothing marks admin pages off-limits (Pass 8 handoff)
+
+- **Where:** `lib/webhooks/payment-intent-succeeded.ts:134-145` (`distinctId: booking.customerEmail ?? bookingId`);
+  `components/PostHogProvider.tsx:10-15` (no `disable_session_recording`, `autocapture` default on, no
+  `before_send`); `app/layout.tsx:57` (the provider wraps `/admin/**` too); `lib/posthog.ts:5-13` plus `:146`
+  (`ph.shutdown()` after every capture on a shared singleton).
+- **What's wrong:**
+  1. **Email as the person ID (confirmed).** Every paying customer becomes a PostHog person keyed by their email. That
+     is the server half of P8-9: no client event calls `identify`, so nothing joins the funnel to it. The email adds no
+     analytic value over the booking ID, which is already a property.
+  2. **Session replay (needs confirmation in the PostHog project).** posthog-js starts recording whenever the
+     *project's* remote config enables replay, unless the client sets `disable_session_recording: true`. Replay masks
+     inputs by default, but not page text. One toggle in the PostHog UI would therefore record the office manifest
+     (names, emails, phones, notes), the money pages, and the customer boarding pages. Click autocapture alone doesn't
+     send names from the merchant pages (see "What's clean").
+  3. Admin `$pageleave` events carry trip IDs only, which is harmless. But there's no route-level opt-out, so any
+     future clickable row that shows a name (a common UI change) would start sending it.
+  4. `ph.shutdown()` per event on a shared client is the misuse posthog-node warns about ("use `flush()` for
+     per-request cleanup"). It works, but logs a warning whenever two webhooks overlap.
+  5. Client events carry no `operator_id`, so in centralized mode one PostHog project can't separate tenants' funnels.
+     That's an analytics gap, not a leak.
+- **Suggested fix:**
+  - Use `distinctId: bookingId`, or a salted hash of the email.
+  - Init with `disable_session_recording: true` and `mask_all_text: true` on any route that shows customer data. Better:
+    don't mount `PostHogProvider` under `/admin` and `/boarding` at all. Combine this with P8-9's `before_send`
+    URL scrubbing.
+  - Replace `shutdown()` with `await ph.flush()`.
+  - Register `operator_id` as a super-property from the root layout's operator.
+
+#### P9-13 · Low · Legacy admin pages are still routable after the merchant redesign, and the Playwright admin spec tests them instead of the live UI
+
+- **Where:** not linked from the nav (`merchant/Chrome.tsx:7-14`), but still routable: `/admin/trips`,
+  `/admin/trips/[tripId]`, `/admin/revenue`, `/admin/settings/{vessels,products,schedules,staff,operator}` (about
+  2,500 lines). They link only to each other. `e2e/admin.spec.ts:38, 102, 145, 170, 209, 259, 276` drives
+  `/admin/trips` and `/admin/revenue`.
+- **What's wrong:**
+  - The only E2E coverage of the admin console exercises screens operators no longer see. The merchant pages, where
+    P9-4 and P9-5 live, have no E2E test.
+  - The legacy pages keep live money actions (refund at `trips/[tripId]/page.tsx:125-137, 489`, trip cancel at
+    `trips/page.tsx:104-117`) with weaker error handling than P9-5. Their times are formatted in the browser's zone
+    with no `timeZone` (`trips/page.tsx:48-57, 249-253`), and they compute "today" in UTC (`:121`) or local time
+    (`:60-70`).
+  - Every finding against the admin UI has to be fixed twice, or someone has to know which copy to skip.
+- **Suggested fix:** Delete the legacy pages, or `redirect()` each to its merchant equivalent (`/admin/trips/[id]` →
+  `/admin/trips/[id]/passengers`, `/admin/revenue` → `/admin/money`, `/admin/settings/*` → `/admin/settings`). Port
+  `admin.spec.ts` to the merchant pages, with getByRole selectors as the project's test rule requires.
+
+#### P9-14 · Low (needs confirmation) · The React 19 override also applies to the Next 14 web app
+
+- **Where:** `pnpm-workspace.yaml:12-13` (`react` / `react-dom: 19.0.0`, workspace-wide); `apps/web/package.json:31-32`
+  declares `^18.3.1`; `apps/web/node_modules/react` is **19.0.0**. Next 14.2.30 declares a peer range of
+  `react ^18.2.0`.
+- **What's wrong:** CLAUDE.md justifies the override by the React Native renderer, but pnpm applies it to every
+  workspace. App Router code is bundled against Next's vendored React, so most pages don't touch the installed copy.
+  Anything resolved outside that alias still does: the Pages-router fallback (`/_error`), and the web vitest run,
+  which tests against React 19 while production runs on 18. That's a mismatch nobody chose.
+- **Why it matters:** It's a latent source of "works in tests, breaks in prod" behavior, and of hard-to-trace build
+  failures on the next Next or React bump.
+- **Suggested fix:** Scope the overrides to the mobile tree (pnpm supports `"@openboat/mobile>react": "19.0.0"`, or
+  per-dependency selectors for the RN packages), rebuild, and check `next build` plus a rendered `/_error`. Per
+  CLAUDE.md, don't drop the overrides without testing the mobile build and Metro singleton resolution.
+
+#### P9-15 · Low · Notification nits
+
+- **Email** (`lib/email.ts`, `send-confirmation-email.ts`):
+  - Ticket lines use `tickets.priceCents` (the list price, P2-2), while "Total" is `booking.totalCents`. A
+    group-discount booking's lines don't add up to its total (same as P8-15 on the web page).
+  - The email never names the operator, or gives its phone or dock address. "Questions? … call us before your
+    departure" (`:123`) has no number. In centralized mode every tenant's email is identical apart from the sender
+    address.
+  - There's no `text` part, which hurts deliverability for an email that carries boarding information.
+  - Escaping and the global host are already P3-11 / P7-4 item 3 / P3-6.
+- **Push** (`lib/push.ts:52-53`):
+  - `Promise.allSettled` discards the Expo tickets, so `DeviceNotRegistered` errors are never read and
+    `push_tokens.active` is never set to false. Dead tokens accumulate and are retried on every send.
+  - A whole failed chunk is also silent (no log).
+  - Read the ticket errors, deactivate tokens on `DeviceNotRegistered`, and log the rest.
+- **Reminder push in UTC:** P3-7 is **still unfixed** (`trip-reminders/route.ts:71-75`, no `timeZone`). It isn't
+  re-reported here; it's a one-line `fmtTimeET` swap.
+- **`app.json:33-36`:** `RECORD_AUDIO` on Android (and, through the camera plugin's default, an iOS microphone prompt)
+  for an app that only scans QR codes. Set the `expo-camera` plugin's `recordAudioAndroid: false` /
+  `microphonePermission: false`, so store review and users aren't asked for a microphone without reason.
+
+#### P9-16 · Low · Test gaps on this pass
+
+- `lib/date-et.ts` and `lib/format.ts` have no unit tests. A table test of P9-6's DST rows, plus the
+  8 PM ET rollover for `todayET`, run under `TZ=UTC` and `TZ=America/Los_Angeles`, would have caught both P9-6 and
+  P3-7.
+- Nothing asserts that a report photo renders (P9-2), or that `/api/reports` pages without repeats (P9-11).
+- The mobile wallet has no test for the upcoming/past split around 8 PM ET (P9-3). It's a pure function once extracted.
+- The merchant admin pages have no E2E coverage (P9-13). The cases worth having: a refund that returns 500 shows an
+  error (P9-5), and a pending booking is marked unpaid on the manifest (P9-4).
+- Everything above only helps once CI runs tests (P9-1).
+
+### Auth invariants (this pass)
+
+- **Token audiences.** `POST /api/reports/upload` accepts a mate token *or* an admin session, through two separate
+  verifiers (`requireMate`, then `requireAdmin`). There's no fallback to customer auth. A customer bearer token is
+  rejected by `requireMate`'s `aud:"mate"` check (Pass 5). `upload-photo` is mate-only. No route in scope verifies a
+  customer token.
+- **Separate tables.** Nothing in scope queries `customers` or `staff`. Push targets `push_tokens` by the booking's email,
+  never by staff.
+- **`checkRateLimit()` first.** No auth endpoint is in scope, so the rule doesn't apply. The upload routes are
+  authenticated and unthrottled; that's acceptable at their volume.
+- **Operator only from the admin session, on admin pages.** It holds for every merchant and legacy page, with two
+  exceptions, both harmless today:
+  - `admin/login/page.tsx:5` reads the header operator for its *name* only, before sign-in. That's correct: there's
+    no session yet.
+  - `admin/reports/page.tsx:51` lists *published* reports through the public, header-scoped `GET /api/reports`, while
+    pending trips come from the session-scoped `/api/admin/reports/pending`. On a matching host they're the same
+    operator. It's the mixed-source pattern F1-8 warns about, and it's the only place in the admin UI. Fold it into
+    F1-8's `requireAdmin` host check, or add an `/api/admin/reports` list.
+- **No staff-only data on public pages.** The public report pages and API select no `staffId`, no capacity or fee
+  fields and no customer data. The homepage and report pages render only operator-public fields (name, phone, dock
+  address). The admin-only `trips/[tripId]` payload (PII, PI IDs) is fetched only behind `requireAdmin`.
+
+### Handoffs closed
+
+- **From Pass 7, `etWallClockToUTC` takes the offset at noon UTC: confirmed at runtime, and wider than handed off**
+  (P9-6). Both DST dates are affected, in both directions, and `etMidnightUTC` inherits the error into the admin
+  "taken in today" window. Low.
+- **From Pass 7, `schedule/page.tsx:85, 113` call `res.json()` without a guard: confirmed, and swept.** Every merchant
+  mutation has the same `try/finally` with no `catch`. That's 14 handlers across six pages, including trip cancel and
+  refund. The legacy pages have no `try` at all (P9-5).
+- **From Pass 8, PostHog autocapture probably sends passenger names: not on the merchant manifest or Today views.**
+  The names aren't inside clickable elements, and ancestor text isn't captured (see "What's clean", with the
+  posthog-js line refs). The real exposures are session replay, which a project setting can turn on, and the
+  email-as-`distinctId` on the server (P9-12).
+- **From Pass 8, date bugs: all confirmed; the wallet one is worse than handed off** (P9-3).
+  - `tickets.tsx` hides tonight's pass under PAST from 8 PM EDT, and the header shows the next day's date for evening
+    departures.
+  - `boarding/[ticketId].tsx:113-116` is wrong only off ET.
+  - `fmtDayLabel`, `trips.tsx:34-36` and `book/page.tsx:6-9` mislabel or misselect after 8 PM ET.
+  - One shared `todayET` / `etDateOf` in `@openboat/utils` fixes all of them.
+  - Not affected: `api/mate/trips/route.ts:14`, because the mate app always sends its local date
+    (`(mate)/index.tsx:126`, `login.tsx:61`).
+- **From Pass 8 (CI / deploy), add a `/book` page-render smoke test: can't live in the current smoke job.** Previews
+  have no operator (no `OPERATOR_ID`, and the host isn't in `domains`), so every tenant page 404s there. Put it in
+  P9-1's CI job, against a seeded Postgres service with `OPERATOR_ID` set.
+- **From Pass 8, separate mate and consumer bundle IDs and schemes: still open.** `app.json:6, 22, 32` still give
+  both variants `openboatfishing` / `com.openboat.fishing`. There's no `app.config.ts`, and `eas.json`'s `mate`
+  profile changes only `EXPO_PUBLIC_APP_VARIANT`. Commit `5999f87` ("stale bundle identity fixed") was about the old
+  `com.captree.fishing` native projects, not this. The fix stands as written in Pass 8: an `app.config.ts` keyed on
+  `EXPO_PUBLIC_APP_VARIANT`, giving e.g. `com.openboat.fishing.mate` / `openboatmate`, plus the `(mate)` / `(tabs)`
+  layout guards. Do it before the first TestFlight build, because a bundle ID can't change after store submission.
+- **From Pass 8, remove the `eas.json` placeholder `EXPO_PUBLIC_API_URL`: still present** (`eas.json:9`, and `:20` for
+  `development`). P9-8 adds that the tag-triggered release would ship it. Gate the release workflow on it as well as
+  removing it.
+- **Earlier cross-references this pass was asked to build on:**
+  - P3-6 (one global host in emails): still open. P9-9 is the per-build equivalent on mobile.
+  - P3-7: still open (P9-15).
+  - P3-11 / P7-4 item 3 (unescaped email HTML): still open, and unchanged.
+  - P6-9 / P7-8: refined by P9-2 (there's no allow-list at all) and P9-10 (the host isn't per-tenant).
+  - P8-9: P9-12 adds the server half.
+  - F1-15 and F1-9: P9-1 builds on both.
+- **Tracker drift (same pattern as earlier passes):**
+  - `docs/architecture-review-findings.md:221-224` (push fire-and-forget, `[x]`) was fixed for the cron. The
+    trip-cancel route, written later, repeats it (P9-7). Annotate it as a pattern, not a single site.
+  - `:51-55`, `:196-199` and `:226-228` are verified (see "What's clean"). `:16-18` (crons registered, `[x]`) is
+    partial: `reset-demo-data` is still not in `vercel.json` (Hobby's two-cron limit, as CLAUDE.md notes).
+  - `.github/workflows/README.md` says `web-checks.yml` triggers only on `apps/web/**` / `packages/**` changes. It
+    now runs on every PR to `main` and decides inside the job (`web-checks.yml:21-44`). The README also describes
+    an OTA flow that has never run (P9-8). Update both lines.
+  - CLAUDE.md "Testing status: all phases done" should say the suites aren't enforced by CI until P9-1 lands.
+
+### Open items with no later pass
+
+This is the last pass. Everything below stays open after the review.
+
+**1. Handoffs.** Every "Handoffs to later passes" bullet in Passes 1–8 was closed by its target pass:
+- Pass 2's by Passes 3, 4 and 8;
+- Pass 3's by Passes 4, 6 and 8;
+- Pass 5's by Passes 6, 7 and 8;
+- Pass 6's by Passes 7 and 8;
+- Pass 7's and Pass 8's by this pass.
+
+Two were closed as "still open in code": the bundle-ID split and the `eas.json` placeholder (above). They need an
+owner, but no further review.
+
+**2. Items marked "needs confirmation".** Each needs a check outside the code:
+
+| ID | What's uncertain | How to confirm | Blocks launch? |
+|---|---|---|---|
+| P2-5 / Pass 8 closure | Live-mode payment-method config offers delayed-settlement methods | Stripe Dashboard (live) → Payment methods, platform and Connect defaults | Yes, before taking live payments |
+| P2-6 | Lock-order deadlock on multi-trip carts | k6 load test (Step 11) with overlapping two-trip carts | No |
+| P3-2 | Which events each webhook endpoint listens to (whether a Connect endpoint exists) | Stripe Dashboard → Webhooks → "Listening to" | Yes, before adding a Connect endpoint |
+| P3-3 | Destination-charge disputes and Dashboard refunds don't recover funds from the operator | Test-mode dispute with `4000000000000259` on a destination charge | Yes |
+| P5-4 | Connect OAuth `redirect_uri` matching, and the legacy Standard-OAuth status | Test-mode connect of an unactivated account | Yes, for onboarding a second operator |
+| P7-4 item 2 | Cross-tenant sender impersonation through one Resend account | Resend dashboard: list verified domains | Yes, before a second tenant |
+| P7-9 | A 20-year daily pattern exceeds 65,535 bind parameters | Dev DB: POST such a pattern | No |
+| P8-3 item 5 | Stripe.js rejects or allows Elements amount ≠ PI amount | Procedure in P8-3 (group-discount vessel + `booking-flow.spec.ts`) | Yes (money shown ≠ money charged) |
+| P8-13 (web half) | React 18.2 vendored in Next 14 blocks `javascript:` hrefs or only warns | Set a `javascript:` `termsUrl` on dev, click it | No (P7-4 fixes the source) |
+| P9-5 | Trip cancel on a full boat exceeds the function timeout | Check the project's max duration; time a 30-booking test-mode cancel | No, if P9-5's fix lands |
+| P9-8 item 2 | `eas update` ignores `eas.json` profile `env` | `eas update --dry-run`/docs for the installed `eas-cli` | Only before enabling OTA |
+| P9-10 items 2–4, and the Blob overwrite default ("What's clean") | 4.5 MB body cap on `upload-photo`; 401 on the Blob callback; EXIF kept after re-encode; service-side no-overwrite default | Upload a 6 MB photo from the mate app on a preview; read Blob callback logs; `exiftool` on an uploaded file | No |
+| P9-12 item 2 | Session replay enabled in the PostHog project | PostHog → Project settings → Session replay | Yes, if enabled (PII to a vendor) |
+| P9-14 | React 19 in the web app breaks anything outside the App Router alias | `next build` + render `/_error` with the override scoped vs. unscoped | No |
+
+**3. Still open in code, by severity.** These are the review's launch-blocking set, for whoever plans the fixes.
+- **Critical:** P3-1 (expired holds produce boardable tickets and earned fees), and P2-2 (raised to Critical in
+  Pass 4's handoffs).
+- **High:** F1-15 (previews migrate and write the production DB), P2-1, P3-2, P3-3, P4-1, P4-2, P5-1, P7-1, P7-2,
+  P8-1, P8-2.
+- **Pre-launch items already tracked in CLAUDE.md**, which this review didn't re-report: HMAC QR signing (it
+  interacts with P6-2 and P8-1, so signing alone isn't enough), the Twilio SMS TODO, weekend pricing seed data
+  (which flips P8-3 to an overcharge), and the Hobby-plan daily crons (which leave P3-5's holds and P3-7's reminders
+  mostly inert until Pro).
+- **Process:** P9-1 (CI running the suites) is what keeps the fixes for the items above fixed. Land it first.
