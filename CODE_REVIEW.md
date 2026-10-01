@@ -1,5 +1,314 @@
 # Code Review
 
+## Launch Blockers
+
+These must be fixed before the first real payment on `openboatfishing.com` or on any operator domain. The list
+covers:
+- every Critical and High still open in code (the set in Pass 9, "Open items with no later pass" §3, re-checked
+  below);
+- every Medium that lets the amount charged differ from the amount shown, lets someone board without paying, or
+  leaks one customer's or operator's data to another.
+
+Items are in the order to fix them, not by pass. Findings that share one fix are on one line. Rough sizes: **S** is
+about a day or less, **M** 2–5 days, **L** 1–2 weeks. ⚠ marks a finding that still "needs confirmation", with the
+check that would settle it.
+
+### Severity re-check
+
+I re-read each Critical and High against the later passes. Nothing was downgraded or closed.
+- **[P2-2](#p2-2--high--tickets-store-the-list-price-not-the-price-paid-per-ticket-refunds-then-double-restore-seats-and-over-refund): High → Critical.** Pass 4 ("Handoffs closed") found that per-ticket refund is a one-click action
+  on every passenger row, which makes the double restore routine on a live trip. The heading still says High; treat
+  it as Critical.
+- **[F1-2](#f1-2--medium-latent-high-once-operator_id-is-removed--crons-will-404-in-centralized-mode): Medium today, High once `OPERATOR_ID` is removed** (as its heading says). "Any operator domain"
+  means centralized mode, so it's listed below under "Before a second operator".
+- **[P3-1](#p3-1--critical--unpaid-and-expired-holds-produce-boardable-tickets-and-their-fees-are-later-counted-as-earned): Critical, holds and widened.** Pass 6 runtime-confirmed that a pending booking's ticket scans
+  green. Passes 7 and 9 found the same gap on the office check-in (P7-7) and the office manifest (P9-4).
+- **[P8-1](#p8-1--high--confirmation-and-delivery-pages-accept-a-confirmation-code-alone-with-no-throttle-the-response-leads-to-every-boarding-pass-on-the-booking-and-redirect_status-is-trusted-as-proof-of-payment): High, unchanged.** Pass 8 asks for it to be treated as launch-blocking alongside P3-1.
+- **[P2-5](#p2-5--medium-needs-confirmation--web-checkout-may-accept-delayed-settlement-payment-methods): Medium, partly settled.** Pass 8 found no delayed-settlement method in the test-mode
+  configuration. Live mode is unchecked.
+- **[P4-1](#p4-1--high--trip-cancellation-doesnt-stop-sales-or-cancel-pending-bookings-so-customers-get-charged-for-a-cancelled-trip): High, unchanged.** Pass 9 (P9-5) adds that a cancel that times out fails silently in the UI.
+- [F1-15](#f1-15--high-confirmed--preview-builds-run-migrations-against-and-write-to-the-production-database), [P2-1](#p2-1--high--departed-trips-can-be-booked-and-paid-for), [P3-2](#p3-2--high-latent-exploitable-once-a-connect-webhook-endpoint-is-added--payment_intent-handlers-trust-metadatabookingid-without-binding-it-to-the-pi-amount-or-operator) (latent), [P3-3](#p3-3--high-stripe-behavior-needs-confirmation--disputes-and-dashboard-refunds-on-destination-charges-never-recover-funds-from-the-operator-lost-or-won-disputes-arent-handled) (⚠), [P4-2](#p4-2--high--partial-trip-cancel-refunds-ignore-tickets-already-refunded-individually-so-the-operator-over-refunds), [P5-1](#p5-1--high--admin-and-platform-sessions-are-valid-for-14-days-and-are-never-re-checked-so-deactivating-an-admin-doesnt-remove-their-access),
+  [P7-1](#p7-1--high--editing-a-weekly-patterns-time-capacity-or-product-silently-skips-every-trip-already-on-the-calendar), [P7-2](#p7-2--high--pausing-or-narrowing-a-pattern-fails-with-an-fk-violation-once-any-affected-trip-has-booking-history-after-the-pattern-is-already-saved-as-paused) and [P8-2](#p8-2--high-confirmed-in-code-impact-depends-on-deploy-env--book-fetches-its-first-month-of-trips-over-http-from-next_public_base_url-which-defaults-to-localhost-and-ignores-the-requests-tenant) (impact depends on the deploy env): unchanged.
+- Not severity changes, recorded so they aren't re-checked: [F1-13](#f1-13--low--product_prices-has-no-operator_id) was closed as safe in Pass 2;
+  P9-2 corrected P6-9's premise that an image allow-list exists.
+
+### Blockers, in fix order
+
+One row per fix. Findings that share a fix are on the same row.
+
+| # | Finding(s) | Fix | Size | Depends on · ⚠ check |
+|---|---|---|---|---|
+| 1 | [F1-15](#f1-15--high-confirmed--preview-builds-run-migrations-against-and-write-to-the-production-database): preview builds migrate and write the production DB | Give Preview its own Neon branch and `DATABASE_URL`, and run migrations only when `VERCEL_ENV=production`. | S | None. Goes first, because most fixes below ship a migration that a pushed branch would otherwise apply to prod. |
+| 2 | [P9-1](#p9-1--medium--ci-never-runs-a-test-the-only-web-gates-are-typecheck-build-and-a-health-check-that-skips-the-db) + [F1-9](#f1-9--low--apihealth-doesnt-check-the-db-contrary-to-its-comment): CI runs no tests; `/api/health` skips the DB. *Sequencing enabler, not a blocker by the criteria.* | Add a required CI job that runs `pnpm turbo test` and the booking Playwright spec against a seeded Postgres service, and make `/api/health` run `select 1`. | M | 1. |
+| 3 | [P8-2](#p8-2--high-confirmed-in-code-impact-depends-on-deploy-env--book-fetches-its-first-month-of-trips-over-http-from-next_public_base_url-which-defaults-to-localhost-and-ignores-the-requests-tenant): `/book` loads trips from `NEXT_PUBLIC_BASE_URL`, not the request's tenant | Have the page call a shared `getTripsForMonth(operator.id, month)` directly and delete the env fallback. | S | None. ⚠ Is `NEXT_PUBLIC_BASE_URL` set in Vercel Production, and does `/book` render on prod? |
+| 4 | [P2-1](#p2-1--high--departed-trips-can-be-booked-and-paid-for): departed trips can be booked and paid for | Reject under the trip lock once `startTime <= now`, and drop departed trips from `/api/trips`. | S | None. |
+| 5 | [P2-5](#p2-5--medium-needs-confirmation--web-checkout-may-accept-delayed-settlement-payment-methods): web checkout may accept delayed-settlement methods | Pin the allowed payment-method types on the PaymentIntent and in `Elements`. | S | None. ⚠ Stripe Dashboard (live) → Payment methods, for the platform and Connect defaults. |
+| 6 | [P3-2](#p3-2--high-latent-exploitable-once-a-connect-webhook-endpoint-is-added--payment_intent-handlers-trust-metadatabookingid-without-binding-it-to-the-pi-amount-or-operator): PI handlers trust `metadata.bookingId` | Ignore `payment_intent.*` events that carry `event.account`, and confirm or cancel only when the stored PI id, amount, currency and destination all match. | S | None. Must land before any Connect webhook endpoint. ⚠ Dashboard → Webhooks → "Listening to". |
+| 7 | [P3-1](#p3-1--critical--unpaid-and-expired-holds-produce-boardable-tickets-and-their-fees-are-later-counted-as-earned) + [P7-7](#p7-7--low--office-check-in-accepts-unpaid-bookings-and-undo-is-a-hard-delete) + [P9-4](#p9-4--medium--the-office-manifest-doesnt-show-booking-status-unpaid-holds-and-cancelled-bookings-look-like-paid-passengers-and-paid-for-this-trip-counts-them): unpaid holds give live tickets (server and office) | Void tickets and reverse fees when a pending booking is cancelled (with a backfill), and require `bookings.status = 'confirmed'` wherever a ticket counts as live: manifests, both check-in routes, the boarding page, `settleTrips`, capacity counts and the office "Paid" total. | M | 1 (backfill). Items 8, 14, 15 and 16 build on this one. |
+| 8 | [P2-2](#p2-2--high--tickets-store-the-list-price-not-the-price-paid-per-ticket-refunds-then-double-restore-seats-and-over-refund) + [P3-12](#p3-12--low--refactor-the-two-cancel-paths-duplicate-an-n1-seat-restore-loop) + [P4-2](#p4-2--high--partial-trip-cancel-refunds-ignore-tickets-already-refunded-individually-so-the-operator-over-refunds) + [P4-4](#p4-4--medium--per-ticket-refund-has-no-lock-or-conditional-void-so-concurrent-submits-restore-the-seat-twice) + [P4-7](#p4-7--medium--seat-restores-still-land-on-cancelled-trips-adding-the-capacity-check-first-would-break-the-webhook-and-the-cron) + [F1-12](#f1-12--low--seats_remaining-check-lives-only-in-a-migration-and-there-is-no-upper-bound-check): seats restored twice, refunds over-paid | Store each ticket's net price, and route every void through one `releaseBookingInventory` helper. The helper restores seats only for the rows it voided (`RETURNING`) and skips cancelled trips. Trip-cancel refunds come from the live tickets' net price, and `seats_remaining <= capacity` is added last. | L | 7, and P2-11's `priceCart` for the net-price allocation. The helper lands before the CHECK (P4-7). |
+| 9 | [P4-1](#p4-1--high--trip-cancellation-doesnt-stop-sales-or-cancel-pending-bookings-so-customers-get-charged-for-a-cancelled-trip) + auto-refund part of [P3-4](#p3-4--medium--stripe-side-failures-are-logged-and-acknowledged-with-a-200-so-stripe-never-retries): trip cancel keeps selling and leaves pending bookings payable | Commit the trip's `cancelled` status first, then cancel its pending PIs and bookings. The succeeded handler auto-refunds any booking on a cancelled trip, idempotently, and rethrows on transient errors. | M | 8. Extract trip cancel into `cancelTrip` here (P4-10, pulled forward from Phase 3), so 9 and 10 rewrite the route once. |
+| 10 | [P4-3](#p4-3--medium--refund-retry-safety-is-only-a-24-hour-idempotency-key-the-fixed-tracker-items-never-got-a-ledger): refund retry safety is a 24-hour key | Write a refund record before each Stripe call, so retries skip recorded refunds and send stable params. | M | 8 and 9 (builds on 9's `cancelTrip` extraction). Qualifies through item 4 (a refunded ticket stays boardable). |
+| 11 | [P3-3](#p3-3--high-stripe-behavior-needs-confirmation--disputes-and-dashboard-refunds-on-destination-charges-never-recover-funds-from-the-operator-lost-or-won-disputes-arent-handled): disputes and Dashboard refunds don't recover funds from the operator | Reverse the transfer on dispute creation and on any refund without a `transfer_reversal`, and handle `charge.dispute.closed` (won and lost). | M | 8. ⚠ Test-mode dispute with `4000000000000259` on a destination charge: check the platform balance, whether `charge.refunded` fires, and a Dashboard refund's `transfer_reversal`. |
+| 12 | [P5-1](#p5-1--high--admin-and-platform-sessions-are-valid-for-14-days-and-are-never-re-checked-so-deactivating-an-admin-doesnt-remove-their-access) + [F1-8](#f1-8--low--admin-session-isnt-bound-to-the-request-host-invariant-drift): admin sessions outlive deactivation | Seal with `ttl: maxAge`, and have `requireAdmin` re-check the staff row, a `session_version` and the host operator on every request. Bind the platform session to the current `PLATFORM_SECRET`. | M | An async `isAuthorized` hook (Pass 7, "Handoffs closed"). |
+| 13 | [P5-3](#p5-3--medium--a-4-digit-mate-pin-can-be-brute-forced-in-about-three-weeks-with-no-lockout-and-no-alert) + [P5-2](#p5-2--medium-confirmed-by-measurement--the-dummy-bcrypt-hash-is-malformed-so-the-staff-enumeration-timing-fix-does-nothing) + PIN minimum in [P7-6](#p7-6--low--staff-crud-a-duplicate-email-returns-500-passwords-are-trimmed-on-write-but-not-at-login-the-last-admin-can-be-deactivated-and-credential-changes-dont-end-sessions) (item 6): mate PIN brute force | Require 6-digit PINs with a persistent timed lockout and an admin alert, and use a valid cost-12 dummy hash from a shared `lib/password.ts`. | S | None. Included because a guessed PIN yields every manifest's customer PII and every boarding credential. |
+| 14 | [P7-2](#p7-2--high--pausing-or-narrowing-a-pattern-fails-with-an-fk-violation-once-any-affected-trip-has-booking-history-after-the-pattern-is-already-saved-as-paused) + [P7-1](#p7-1--high--editing-a-weekly-patterns-time-capacity-or-product-silently-skips-every-trip-already-on-the-calendar): pausing or editing a weekly pattern leaves the old trips on sale | Make the schedule PATCH one transaction around a shared `reconcileSchedule`. It withdraws trips that have history, updates unbooked trips in place, and refuses silent changes to booked ones. | L (interim S: disable the time, capacity and product fields in "Change") | 7. Build P7-3's `setTripCapacity` (pulled forward from Phase 2) and P7-11's `reconcileSchedule` / `buildTripRow` (pulled forward from Phase 3) here. |
+| 15 | [P8-1](#p8-1--high--confirmation-and-delivery-pages-accept-a-confirmation-code-alone-with-no-throttle-the-response-leads-to-every-boarding-pass-on-the-booking-and-redirect_status-is-trusted-as-proof-of-payment): a code alone, unthrottled, opens every boarding pass | Verify the PI from Stripe's return params instead of `redirect_status`, gate the confirmation and boarding pages behind email + code or a short-lived signed token, and filter `getConfirmedBooking` by status. | M | 7 (P3-1(b)). QR signing does not close this. |
+| 16 | [P6-1](#p6-1--medium--scanning-a-voided-ticket-shows-nothing-at-all-the-mate-gets-no-rejected-signal) + [P6-3](#p6-3--medium--duplicate-check-ins-are-reported-as-success-and-the-manifest-screen-never-syncs-while-its-open-so-two-gangways-can-both-board-the-same-ticket) + the offline half of P3-1 (Pass 6, "Handoffs closed"): no reject signal, duplicates pass | Extract a pure `resolveScan` that visibly rejects voided and unpaid tickets. Have the server return `alreadyCheckedIn`, and sync after each check-in. | M | 7. Same mate-app build as 17; do it first, because 17's signature check lives in `resolveScan`. |
+| 17 | QR signing (CLAUDE.md tech debt) + [P6-2](#p6-2--medium--the-scanner-also-accepts-the-bare-ticket-uuid-which-will-defeat-qr-signing-the-manifest-ships-every-tickets-credential): the scanner accepts the bare ticket UUID | HMAC-sign `qrPayload`, and have the scanner verify it with a per-operator, per-trip key, with no `ticket.id` fallback and no shipped payloads. Render QR codes locally. | L | 15 and 16 (the check goes inside `resolveScan`). Same mate-app build as 16. |
+| 18 | [P8-3](#p8-3--medium-amount-mismatch-behavior-needs-confirmation--web-checkout-displays-and-pre-authorizes-client-side-list-prices-the-server-charges-a-different-totalcents): checkout shows and pre-authorizes client-side list prices | Make the server quote from `priceCart` the only total that checkout shows, passes to `Elements` and checks against the POST's `totalCents`. | M | 8 (`priceCart`). Must land before weekday/weekend prices are seeded. ⚠ Item 5: run the group-discount procedure in P8-3 with `booking-flow.spec.ts`. |
+| 19 | [P8-4](#p8-4--medium--mobile-resume-bar-opens-a-stale-cart-and-a-multi-month-cart-silently-drops-trips): the mobile resume bar pays for a stale cart | Keep one persisted mobile cart with trip snapshots, read by the bar, the cart screen and checkout. | M | None. |
+
+#### Before a second operator (centralized mode)
+
+These block "any operator domain" once `OPERATOR_ID` is removed. They don't block the single-operator demo.
+
+| # | Finding(s) | Fix | Size | Depends on |
+|---|---|---|---|---|
+| 20 | [F1-2](#f1-2--medium-latent-high-once-operator_id-is-removed--crons-will-404-in-centralized-mode) + [F1-1](#f1-1--medium--stripe-webhook-availability-depends-on-one-tenants-domains-row) + [F1-3](#f1-3--low--client-supplied-x-operator-id-isnt-stripped-on-skipped-paths) + [P5-10](#p5-10--low--token-to-host-binding-is-skipped-when-x-operator-id-is-absent): crons and the webhook 404 without a tenant host | Exempt `/api/cron/` and `/api/webhooks/` from tenant resolution, strip inbound `x-operator-id` on every skipped path, give `reset-demo-data` a `DEMO_OPERATOR_ID`, and treat a missing header as a token mismatch. | S | F1-3 before P5-10. |
+
+#### Conditional pre-launch checks
+
+These don't meet the criteria, but Pass 9's needs-confirmation table marks them "blocks launch". Run the check. If it
+fails, the fix becomes a blocker.
+- [P5-4](#p5-4--medium-stripe-behavior-needs-confirmation--connect-callback-marks-onboarding-complete-without-asking-stripe-and-nothing-reacts-when-an-account-is-disconnected) ⚠, before onboarding a second operator. In test mode, connect an unactivated account, then revoke the
+  platform's access, and attempt a booking each time. Confirm that each tenant's `redirect_uri` is registered, and
+  that Standard OAuth is allowed in live mode.
+- [P7-4](#p7-4--medium--operator-settings-accept-unvalidated-values-on-fields-that-gate-customer-sign-in-and-email) item 2 ⚠, before a second tenant. Resend dashboard → verified domains. If another tenant's or the
+  platform's domain is verified, tie `emailFrom` to the tenant's own domain (S, part of P7-4's Zod schema).
+- [P9-12](#p9-12--low--posthog-the-server-event-uses-the-customers-email-as-its-id-session-replay-isnt-disabled-and-nothing-marks-admin-pages-off-limits-pass-8-handoff) item 2 ⚠. PostHog → Project settings → Session replay. If it's on, set
+  `disable_session_recording: true` before launch.
+
+#### Sequencing notes (not findings that meet the criteria)
+
+- **DEMO_MODE (decided 2026-10-01).** `openboatfishing.com` stays a demo on Stripe test keys. Client sites (for example
+  the Laura Lee site on `captree.com`) run as **separate deployments**, with `DEMO_MODE` unset and live keys. That split is
+  required, not just preferred: `STRIPE_SECRET_KEY` and `DEMO_MODE` are both set per deployment (`apps/web/src/lib/env.ts:11, 23`), so
+  one deployment can't be both a test-mode demo and a live client. With that split, [P7-10](#p7-10--low--clear-demo-customers-is-gated-by-a-deployment-wide-flag-not-by-the-operator-and-deletes-paid-bookings-without-touching-stripe) and [P9-9](#p9-9--low--tenant-branding-is-set-per-deployment-or-build-not-per-operator-the-demo-banner-a-captree-fishing-fallback-and-one-apple-pay-merchant-name)
+  stay out of Phase 0. Two rules keep it safe: never set `DEMO_MODE` on a deployment with live keys, and never onboard a
+  real operator onto the demo deployment through `/platform`. Item 20 applies to a live deployment as soon as it hosts a
+  second client.
+- **Considered and left out:**
+  - [P2-4](#p2-4--medium--fee_bearer--fee_display-are-exposed-to-admins-but-have-no-effect-the-fee-always-comes-out-of-the-operators-price): the customer display matches the charge (Pass 8 closure); the mismatch is with the admin setting.
+  - [P4-5](#p4-5--medium--partial-trip-cancel-refunds-reverse-the-platform-fee-proportionally-but-the-db-reverses-it-per-ticket): platform revenue drift, not customer money.
+  - The rest of [P3-4](#p3-4--medium--stripe-side-failures-are-logged-and-acknowledged-with-a-200-so-stripe-never-retries).
+  - [P6-4](#p6-4--medium--the-local-queue-permanently-overrides-the-servers-check-in-state-office-undo-is-ignored-and-can-be-resurrected): headcount convergence, not payment.
+  - [P8-6](#p8-6--medium--mobile-wallet-refresh-never-learns-of-cancellations-and-refreshing-n-bookings-spends-n-wallet-limit-requests): the stale pass still fails at the scanner once 16 lands.
+- **Already tracked in CLAUDE.md, not re-listed:** the Twilio SMS TODO, and the Hobby-plan daily crons (P3-5's hold
+  release and P3-7's reminders depend on Pro).
+
+---
+
+## Executive Summary
+
+The ten issues that matter most, ranked by severity and impact.
+
+1. **[P3-1](#p3-1--critical--unpaid-and-expired-holds-produce-boardable-tickets-and-their-fees-are-later-counted-as-earned), blocker 7.** First because it needs nothing but a browser and a throwaway email: free boarding
+   passes the scanner accepts, plus oversold boats and fees counted as earned that were never charged. It's
+   runtime-confirmed.
+2. **[P2-2](#p2-2--high--tickets-store-the-list-price-not-the-price-paid-per-ticket-refunds-then-double-restore-seats-and-over-refund) group, blocker 8.** Refunding each passenger in a party is a routine one-click action. It
+   oversells a live trip and over-refunds on discounted bookings, and the operator pays the difference.
+3. **[F1-15](#f1-15--high-confirmed--preview-builds-run-migrations-against-and-write-to-the-production-database), blocker 1.** It isn't a booking bug, but pushing any branch can migrate the production DB. That
+   puts every other fix's migration in front of live traffic before review.
+4. **[P8-1](#p8-1--high--confirmation-and-delivery-pages-accept-a-confirmation-code-alone-with-no-throttle-the-response-leads-to-every-boarding-pass-on-the-booking-and-redirect_status-is-trusted-as-proof-of-payment), blocker 15.** A stranger can take a paying customer's seat with scripted guessing. It reopens a
+   fixed audit finding, and QR signing doesn't close it.
+5. **[P4-1](#p4-1--high--trip-cancellation-doesnt-stop-sales-or-cancel-pending-bookings-so-customers-get-charged-for-a-cancelled-trip), blocker 9.** Weather cancellations happen on the morning of the trip, exactly when people are
+   mid-checkout. They get charged for a boat that isn't sailing, with no refund and no signal.
+6. **[P5-1](#p5-1--high--admin-and-platform-sessions-are-valid-for-14-days-and-are-never-re-checked-so-deactivating-an-admin-doesnt-remove-their-access), blocker 12.** "Deactivate" doesn't remove a departed admin, and the admin session controls
+   refunds and, through P5-5, the payout destination.
+7. **[P3-3](#p3-3--high-stripe-behavior-needs-confirmation--disputes-and-dashboard-refunds-on-destination-charges-never-recover-funds-from-the-operator-lost-or-won-disputes-arent-handled), blocker 11 (⚠).** If confirmed, the platform absorbs every chargeback in full (the ticket price
+   plus about $15) while keeping $1.50. Ranked below the above only because it needs confirmation.
+8. **[P7-1](#p7-1--high--editing-a-weekly-patterns-time-capacity-or-product-silently-skips-every-trip-already-on-the-calendar) + [P7-2](#p7-2--high--pausing-or-narrowing-a-pattern-fails-with-an-fk-violation-once-any-affected-trip-has-booking-history-after-the-pattern-is-already-saved-as-paused), blocker 14.** Routine schedule edits report success while the old times,
+   capacities and trips stay on sale. The outcome matches P4-1, reached through a different action.
+9. **[P8-2](#p8-2--high-confirmed-in-code-impact-depends-on-deploy-env--book-fetches-its-first-month-of-trips-over-http-from-next_public_base_url-which-defaults-to-localhost-and-ignores-the-requests-tenant), blocker 3.** Either `/book` returns 500 in production or it shows another tenant's trips. Ranked
+   low for its severity because it shows up on day one.
+10. **[P9-1](#p9-1--medium--ci-never-runs-a-test-the-only-web-gates-are-typecheck-build-and-a-health-check-that-skips-the-db) (Medium), blocker 2.** No test runs in CI. That's why "fixed" items shipped half-done
+    (tracker drift, problem 2 below), and why any fix above can be undone silently.
+
+### Cross-cutting problems
+
+The candidates came with the brief; each was checked against the findings. Where an ID only partly fits, it says so.
+
+1. **Unpaid, cancelled or refunded tickets treated as live: confirmed, the largest class.** Whether a ticket is live
+   rests on `tickets.voided` alone, and each consumer decides for itself whether to also look at `bookings.status`.
+   Almost none do.
+   - The root cause is [P3-1](#p3-1--critical--unpaid-and-expired-holds-produce-boardable-tickets-and-their-fees-are-later-counted-as-earned).
+   - The same gap shows up in [P7-7](#p7-7--low--office-check-in-accepts-unpaid-bookings-and-undo-is-a-hard-delete) and [P9-4](#p9-4--medium--the-office-manifest-doesnt-show-booking-status-unpaid-holds-and-cancelled-bookings-look-like-paid-passengers-and-paid-for-this-trip-counts-them) (office), the Pass 6 handoff (scanner and capacity
+     `sold`), [P7-3](#p7-3--medium--admin-capacity-paths-skip-the-certificate-cap-and-the-audit-row-that-the-mate-path-enforces-the-greatest-clamp-hides-inventory-drift) item 5, [P7-2](#p7-2--high--pausing-or-narrowing-a-pattern-fails-with-an-fk-violation-once-any-affected-trip-has-booking-history-after-the-pattern-is-already-saved-as-paused) item 5, [P4-1](#p4-1--high--trip-cancellation-doesnt-stop-sales-or-cancel-pending-bookings-so-customers-get-charged-for-a-cancelled-trip) (pending bookings left on a cancelled trip),
+     [P4-8](#p4-8--low--trip-cancel-derives-cancel-the-booking-from-item-counts-not-live-tickets), [P2-9](#p2-9--low--calendar-endpoint-no-status-filter-no-rate-limit-and-a-free-confirmation-code-validity-oracle), [P8-1](#p8-1--high--confirmation-and-delivery-pages-accept-a-confirmation-code-alone-with-no-throttle-the-response-leads-to-every-boarding-pass-on-the-booking-and-redirect_status-is-trusted-as-proof-of-payment) item 2, [P8-15](#p8-15--low--confirmation-and-boarding-page-correctness-nits), [P3-8](#p3-8--low--out-of-order-chargerefunded-is-dropped-and-a-later-succeeded-retry-confirms-a-refunded-booking), [P3-9](#p3-9--low--tracker-drift-two-fixed-webhook-items-arent-implemented-and-manual-review-goes-only-to-logs) and
+     [P4-3](#p4-3--medium--refund-retry-safety-is-only-a-24-hour-idempotency-key-the-fixed-tracker-items-never-got-a-ledger) item 4.
+   - **Partial fits:** [P6-1](#p6-1--medium--scanning-a-voided-ticket-shows-nothing-at-all-the-mate-gets-no-rejected-signal) is a voided ticket that gets *no signal*, not one that's accepted.
+     [P8-6](#p8-6--medium--mobile-wallet-refresh-never-learns-of-cancellations-and-refreshing-n-bookings-spends-n-wallet-limit-requests) is the device keeping a cancelled booking's pass. [P6-4](#p6-4--medium--the-local-queue-permanently-overrides-the-servers-check-in-state-office-undo-is-ignored-and-can-be-resurrected) item 4 counts check-ins on voided
+     tickets.
+2. **Tracker drift: confirmed in six passes.** Items marked `[x]` that didn't land, or landed only in part:
+   - [F1-6](#f1-6--low--platform-secret-compare-is-still-not-timing-safe-prior-fix-only-half-landed) and [P3-9](#p3-9--low--tracker-drift-two-fixed-webhook-items-arent-implemented-and-manual-review-goes-only-to-logs) (two items);
+   - the three items in Pass 4's "Handoffs closed" ([P4-1](#p4-1--high--trip-cancellation-doesnt-stop-sales-or-cancel-pending-bookings-so-customers-get-charged-for-a-cancelled-trip), [P4-3](#p4-3--medium--refund-retry-safety-is-only-a-24-hour-idempotency-key-the-fixed-tracker-items-never-got-a-ledger));
+   - [P5-2](#p5-2--medium-confirmed-by-measurement--the-dummy-bcrypt-hash-is-malformed-so-the-staff-enumeration-timing-fix-does-nothing), [P5-5](#p5-5--medium--reconnecting-stripe-silently-replaces-the-payout-destination-state-isnt-bound-to-the-operator), [P5-7](#p5-7--low--otp-rate-limit-keys-arent-operator-scoped-the-tracker-is-wrong-in-both-directions) (wrong in both directions) and [P9-7](#p9-7--low--the-trip-cancellation-push-is-the-only-notification-not-wrapped-in-waituntil-the-tracker-fix-landed-in-two-places-of-three).
+
+   It also runs the other way: two Pass 7 items landed but are still unchecked, and CLAUDE.md's "all testing phases
+   done" describes suites nothing runs ([P9-1](#p9-1--medium--ci-never-runs-a-test-the-only-web-gates-are-typecheck-build-and-a-health-check-that-skips-the-db)). A related pattern is code that doesn't do what it says:
+   [P5-1](#p5-1--high--admin-and-platform-sessions-are-valid-for-14-days-and-are-never-re-checked-so-deactivating-an-admin-doesnt-remove-their-access) ("8 hours" is 14 days) and [P5-2](#p5-2--medium-confirmed-by-measurement--the-dummy-bcrypt-hash-is-malformed-so-the-staff-enumeration-timing-fix-does-nothing) (a malformed hash). The common cause is that no test checks
+   the behavior and CI wouldn't run one anyway.
+3. **List price vs price paid: confirmed.**
+   - **Server:** [P2-2](#p2-2--high--tickets-store-the-list-price-not-the-price-paid-per-ticket-refunds-then-double-restore-seats-and-over-refund) stores the list price. [P4-2](#p4-2--high--partial-trip-cancel-refunds-ignore-tickets-already-refunded-individually-so-the-operator-over-refunds) refunds the original subtotal. [P9-4](#p9-4--medium--the-office-manifest-doesnt-show-booking-status-unpaid-holds-and-cancelled-bookings-look-like-paid-passengers-and-paid-for-this-trip-counts-them) sums
+     list prices as "Paid". [P8-15](#p8-15--low--confirmation-and-boarding-page-correctness-nits) and [P9-15](#p9-15--low--notification-nits) print lines that don't add up to the total.
+     [P4-5](#p4-5--medium--partial-trip-cancel-refunds-reverse-the-platform-fee-proportionally-but-the-db-reverses-it-per-ticket) reverses fees per ticket in the DB but proportionally at Stripe.
+   - **Client:** [P8-3](#p8-3--medium-amount-mismatch-behavior-needs-confirmation--web-checkout-displays-and-pre-authorizes-client-side-list-prices-the-server-charges-a-different-totalcents).
+   - [P2-4](#p2-4--medium--fee_bearer--fee_display-are-exposed-to-admins-but-have-no-effect-the-fee-always-comes-out-of-the-operators-price) is the inverse: the setting says passengers pay the fee, and nobody does.
+   - Underneath all of it is [P2-11](#p2-11--low--the-pricing-logic-is-triplicated-inline-inside-the-lock-holding-transaction): there's no single pricing function.
+4. **One global host or env value in multi-tenant mode: confirmed, and wider than the three candidates.**
+   - **Links and pages:** [P3-6](#p3-6--medium-centralized-mode--confirmation-emails-link-every-operators-customers-to-one-global-host), [P8-2](#p8-2--high-confirmed-in-code-impact-depends-on-deploy-env--book-fetches-its-first-month-of-trips-over-http-from-next_public_base_url-which-defaults-to-localhost-and-ignores-the-requests-tenant) and [P8-7](#p8-7--medium--the-confirmation-pages-qr-cant-be-scanned-at-the-gangway-despite-this-screen-alone-is-enough-to-board).
+   - **Paths that depend on a tenant's domain:** [F1-1](#f1-1--medium--stripe-webhook-availability-depends-on-one-tenants-domains-row) and [F1-2](#f1-2--medium-latent-high-once-operator_id-is-removed--crons-will-404-in-centralized-mode).
+   - **Shared surfaces:** the platform console on every host ([F1-5](#f1-5--medium--platform-console-is-served-on-every-tenant-hostname)), one Connect redirect URI
+     ([P5-4](#p5-4--medium-stripe-behavior-needs-confirmation--connect-callback-marks-onboarding-complete-without-asking-stripe-and-nothing-reacts-when-an-account-is-disconnected) item 3), one Resend sender pool ([P7-4](#p7-4--medium--operator-settings-accept-unvalidated-values-on-fields-that-gate-customer-sign-in-and-email) item 2), and the deployment-wide `DEMO_MODE`
+     ([P7-10](#p7-10--low--clear-demo-customers-is-gated-by-a-deployment-wide-flag-not-by-the-operator-and-deletes-paid-bookings-without-touching-stripe), [P9-9](#p9-9--low--tenant-branding-is-set-per-deployment-or-build-not-per-operator-the-demo-banner-a-captree-fishing-fallback-and-one-apple-pay-merchant-name)).
+   - **Keys and identifiers:** global OTP rate-limit keys ([P5-7](#p5-7--low--otp-rate-limit-keys-arent-operator-scoped-the-tracker-is-wrong-in-both-directions)), globally unique confirmation codes
+     ([P2-7](#p2-7--low--a-confirmation-code-collision-surfaces-as-an-unhandled-500)), Blob paths with no operator prefix ([P9-10](#p9-10--low--report-photo-uploads-blob-paths-arent-operator-scoped-the-10-mb-limit-is-unreachable-the-completion-callback-hits-the-auth-wall-and-photos-keep-their-location-metadata)), one secret for five purposes
+     ([P5-12](#p5-12--low--refactor-the-two-token-modules-are-copies-and-one-secret-signs-five-things)), and per-build mobile branding ([P9-9](#p9-9--low--tenant-branding-is-set-per-deployment-or-build-not-per-operator-the-demo-banner-a-captree-fishing-fallback-and-one-apple-pay-merchant-name)).
+   - The cause: per-operator configuration isn't on the operator record.
+5. **Client and server holding separate copies of money logic: confirmed.**
+   - [P8-3](#p8-3--medium-amount-mismatch-behavior-needs-confirmation--web-checkout-displays-and-pre-authorizes-client-side-list-prices-the-server-charges-a-different-totalcents) is the main case.
+   - [P8-16](#p8-16--low--refactor-client-pricing-and-cart-state-are-implemented-four-times): four client cart copies.
+   - [P8-4](#p8-4--medium--mobile-resume-bar-opens-a-stale-cart-and-a-multi-month-cart-silently-drops-trips): the bar, the cart and checkout read different state.
+   - [P8-10](#p8-10--low--web-cart-shows-a-seats-held-countdown-before-any-seat-is-held): a client "hold" timer with no server hold behind it.
+   - [P8-14](#p8-14--low--customer-facing-cancellation-and-refund-promises-are-hard-coded): a hard-coded refund promise next to an unused `cancelWindowHrs`.
+   - The server has the same problem internally: [P2-11](#p2-11--low--the-pricing-logic-is-triplicated-inline-inside-the-lock-holding-transaction) computes the price three times.
+   - **Partial fit:** for [P2-4](#p2-4--medium--fee_bearer--fee_display-are-exposed-to-admins-but-have-no-effect-the-fee-always-comes-out-of-the-operators-price), the clients agree with the charge (Pass 8 closure).
+6. **Bearer credentials reaching places they shouldn't: confirmed.** Ticket and booking IDs double as credentials.
+   - [P6-2](#p6-2--medium--the-scanner-also-accepts-the-bare-ticket-uuid-which-will-defeat-qr-signing-the-manifest-ships-every-tickets-credential): a bare UUID boards, and the manifest ships every payload.
+   - [P5-3](#p5-3--medium--a-4-digit-mate-pin-can-be-brute-forced-in-about-three-weeks-with-no-lockout-and-no-alert): one PIN yields every payload.
+   - [P8-1](#p8-1--high--confirmation-and-delivery-pages-accept-a-confirmation-code-alone-with-no-throttle-the-response-leads-to-every-boarding-pass-on-the-booking-and-redirect_status-is-trusted-as-proof-of-payment): a code yields the booking ID, which yields every pass.
+   - Payloads go to `api.qrserver.com` (Passes 3, 6 and 8 handoffs).
+   - [P8-9](#p8-9--medium--customer-email-and-phone-and-the-pi-client-secret-go-into-the-return_url-and-from-there-to-posthog): the PI client secret and `/boarding/<id>` go to PostHog.
+   - [P6-8](#p6-8--low--customer-pii-and-boarding-credentials-persist-on-the-device-indefinitely) and [P8-11](#p8-11--low--sign-out-leaves-the-offline-wallet-the-pii-and-the-push-registration-on-the-device): payloads persist on devices after sign-out.
+   - [P3-1](#p3-1--critical--unpaid-and-expired-holds-produce-boardable-tickets-and-their-fees-are-later-counted-as-earned): `bookingId` is returned before payment.
+   - `extend-hold` takes a booking ID with no token (Pass 8 tracker note).
+   - **Partial fit:** [P9-12](#p9-12--low--posthog-the-server-event-uses-the-customers-email-as-its-id-session-replay-isnt-disabled-and-nothing-marks-admin-pages-off-limits-pass-8-handoff)'s email-as-`distinctId` is an identifier, not a credential.
+
+Three more classes the evidence supports:
+
+7. **Settings and columns that do nothing.**
+   - `fee_bearer` / `fee_display` ([P2-4](#p2-4--medium--fee_bearer--fee_display-are-exposed-to-admins-but-have-no-effect-the-fee-always-comes-out-of-the-operators-price)) and `cancelWindowHrs` ([P7-4](#p7-4--medium--operator-settings-accept-unvalidated-values-on-fields-that-gate-customer-sign-in-and-email) item 5).
+   - `online_cutoff` and `deposit_percentage` ([P2-1](#p2-1--high--departed-trips-can-be-booked-and-paid-for)).
+   - `stripeOnboardingComplete` ([P5-4](#p5-4--medium-stripe-behavior-needs-confirmation--connect-callback-marks-onboarding-complete-without-asking-stripe-and-nothing-reacts-when-an-account-is-disconnected)).
+   - `alreadyCheckedIn`, declared and never set ([P6-3](#p6-3--medium--duplicate-check-ins-are-reported-as-success-and-the-manifest-screen-never-syncs-while-its-open-so-two-gangways-can-both-board-the-same-ticket)).
+   - `termsAcceptedAt` with no acceptance signal ([P2-13](#p2-13--low--terms-acceptance-is-recorded-without-any-acceptance-signal)).
+   - The "re-materialize action" `schema.ts` refers to ([P7-1](#p7-1--high--editing-a-weekly-patterns-time-capacity-or-product-silently-skips-every-trip-already-on-the-calendar)).
+
+   Each one tells an admin or a customer something the system doesn't do.
+8. **Failures that reach only the logs, or nothing.**
+   - Stripe failures acknowledged with a 200 ([P3-4](#p3-4--medium--stripe-side-failures-are-logged-and-acknowledged-with-a-200-so-stripe-never-retries)).
+   - "Manual review" written only to logs ([P3-9](#p3-9--low--tracker-drift-two-fixed-webhook-items-arent-implemented-and-manual-review-goes-only-to-logs)).
+   - Silent admin mutations ([P9-5](#p9-5--medium--every-merchant-mutation-including-trip-cancel-and-ticket-refund-fails-silently-on-a-non-json-error-response-pass-7-handoff-swept)) and a silent mate 401 ([P6-5](#p6-5--medium--an-expired-mate-token-doesnt-lose-data-but-its-silent-and-the-only-way-out-locks-the-mate-out-of-the-cached-manifest)).
+   - Crons that 404 silently ([F1-2](#f1-2--medium-latent-high-once-operator_id-is-removed--crons-will-404-in-centralized-mode)).
+   - Dropped and unread push results ([P9-7](#p9-7--low--the-trip-cancellation-push-is-the-only-notification-not-wrapped-in-waituntil-the-tracker-fix-landed-in-two-places-of-three), [P9-15](#p9-15--low--notification-nits)).
+   - A push-only cancellation notice ([P4-6](#p4-6--medium--trip-cancellation-notice-is-push-only-and-goes-to-the-wrong-people)).
+   - An endless "processing" spinner ([P8-8](#p8-8--medium--failed-or-abandoned-payments-land-on-a-payment-processing-screen-that-never-ends)).
+
+   The operator learns about each one from a customer.
+9. **ET date and time math done ad hoc.** [P3-7](#p3-7--medium--trip-reminder-push-shows-the-departure-time-in-utc), [P9-3](#p9-3--medium--mobile-wallet-moves-tonights-trip-to-past-at-8-pm-edt-hiding-its-boarding-pass-other-today-calculations-use-the-utc-date-pass-8-date-handoff), [P9-6](#p9-6--low--etwallclocktoutc-uses-the-noon-offset-so-times-between-midnight-and-2-am-et-on-dst-change-dates-are-an-hour-off-pass-7-handoff-confirmed-at-runtime), [P7-2](#p7-2--high--pausing-or-narrowing-a-pattern-fails-with-an-fk-violation-once-any-affected-trip-has-booking-history-after-the-pattern-is-already-saved-as-paused) (UTC "today")
+   and the Pass 8 date handoffs. One shared `todayET` / `etDateOf` fixes most of them.
+
+---
+
+## Architecture Assessment
+
+The primitives are sound. The seat lock, the PI-failure compensation, the webhook's lock-and-recheck idempotency and
+per-query operator scoping all held up: nine passes found no cross-tenant read or write. The problems come from
+**where logic lives** and **what state is left implicit**. Both get worse as operators, bookings and developers grow.
+
+### Where the current structure will hurt
+
+**More operators (centralized mode).**
+- **Isolation is enforced only by convention.** The schema doesn't tie a child row's `operator_id` to its parent's
+  ([F1-10](#f1-10--medium--tenant-consistency-across-fks-isnt-enforced-by-the-schema)). Every pass's scoping table has "by derivation only" rows ([P2-10](#p2-10--low--several-follow-up-queries-are-scoped-only-by-derivation-which-falls-short-of-the-invariant-as-written)). The admin session
+  isn't bound to the host ([F1-8](#f1-8--low--admin-session-isnt-bound-to-the-request-host-invariant-drift)). It holds today, but the earlier P0 (`architecture-review-findings.md:32`)
+  shows a single missed predicate is enough, and the DB accepted the corrupt rows.
+- **The middleware skip list is a security boundary,** and four findings sit on it ([F1-1](#f1-1--medium--stripe-webhook-availability-depends-on-one-tenants-domains-row), [F1-2](#f1-2--medium-latent-high-once-operator_id-is-removed--crons-will-404-in-centralized-mode),
+  [F1-3](#f1-3--low--client-supplied-x-operator-id-isnt-stripped-on-skipped-paths), [P5-10](#p5-10--low--token-to-host-binding-is-skipped-when-x-operator-id-is-absent)). Each new exemption has to strip the header, and each token helper has to treat a
+  missing header as a failure.
+- **Deployment-level values do tenant-level jobs** (cross-cutting problem 4). Each new operator multiplies the broken
+  links, shared senders and shared flags.
+
+**More bookings.**
+- Hot lookups have no index and run inside `FOR UPDATE` transactions ([F1-11](#f1-11--medium--missing-indexes-on-hot-money-path-lookups)), and seat restores are N+1
+  ([P3-12](#p3-12--low--refactor-the-two-cancel-paths-duplicate-an-n1-seat-restore-loop)).
+- Trip cancel makes one Stripe refund per booking, sequentially, in a single request ([P9-5](#p9-5--medium--every-merchant-mutation-including-trip-cancel-and-ticket-refund-fails-silently-on-a-non-json-error-response-pass-7-handoff-swept) timeout), and
+  retries are unsafe after a day ([P4-3](#p4-3--medium--refund-retry-safety-is-only-a-24-hour-idempotency-key-the-fixed-tracker-items-never-got-a-ledger)).
+- The expiry cron can starve on its own skips ([P3-5](#p3-5--medium--the-expiry-cron-can-starve-on-its-own-skips-never-reconciles-paid-but-unconfirmed-bookings-and-cancels-after-a-failed-pi-cancel)). Check-in batches cost two round trips per event
+  ([P6-7](#p6-7--low--check-in-input-isnt-validated-bad-events-become-server_error-and-retry-forever)).
+- The confirmation-code collision rate grows with total bookings across all operators ([P2-7](#p2-7--low--a-confirmation-code-collision-surfaces-as-an-unhandled-500)), and
+  `rate_limits` and `magic_link_otps` grow without a purge ([P5-6](#p5-6--low--rate-limit-buckets-count-every-request-and-both-buckets-are-charged-even-when-one-has-already-blocked), [P5-9](#p5-9--low--otp-verify-isnt-atomic-wrong-guesses-dont-burn-the-code-and-otp-rows-are-never-purged)).
+- **Stripe and the DB drift apart, and nothing reconciles them.** Failures are acknowledged ([P3-4](#p3-4--medium--stripe-side-failures-are-logged-and-acknowledged-with-a-200-so-stripe-never-retries)), there's
+  no refund ledger ([P4-3](#p4-3--medium--refund-retry-safety-is-only-a-24-hour-idempotency-key-the-fixed-tracker-items-never-got-a-ledger)), the cron doesn't self-heal missed webhooks ([P3-5](#p3-5--medium--the-expiry-cron-can-starve-on-its-own-skips-never-reconciles-paid-but-unconfirmed-bookings-and-cancels-after-a-failed-pi-cancel) item 2), and an
+  out-of-order event is dropped ([P3-8](#p3-8--low--out-of-order-chargerefunded-is-dropped-and-a-later-succeeded-retry-confirms-a-refunded-booking)). Each is rare per booking. At volume they become a standing manual
+  cleanup.
+
+**More developers.**
+- **Domain logic lives inline in routes and screens:**
+  - booking creation ([P2-11](#p2-11--low--the-pricing-logic-is-triplicated-inline-inside-the-lock-holding-transaction)), trip cancel ([P4-10](#p4-10--low--refactor-trip-cancellation-is-180-lines-of-domain-logic-inline-in-a-route)) and schedule materialization
+    ([P7-11](#p7-11--low--refactor-trip-row-building-is-copied-into-three-routes-and-capacity-logic-into-two));
+  - two capacity paths, which have already drifted ([P7-3](#p7-3--medium--admin-capacity-paths-skip-the-certificate-cap-and-the-audit-row-that-the-mate-path-enforces-the-greatest-clamp-hides-inventory-drift));
+  - an 879-line scanner screen ([P6-10](#p6-10--low--refactor-scan-check-in-and-sync-logic-is-inline-in-an-879-line-screen-the-cache-prefetch-is-duplicated)), and admin handlers copied between pages ([P9-5](#p9-5--medium--every-merchant-mutation-including-trip-cancel-and-ticket-refund-fails-silently-on-a-non-json-error-response-pass-7-handoff-swept));
+  - legacy admin pages that are still live ([P9-13](#p9-13--low--legacy-admin-pages-are-still-routable-after-the-merchant-redesign-and-the-playwright-admin-spec-tests-them-instead-of-the-live-ui)), two hand-copied token modules ([P5-12](#p5-12--low--refactor-the-two-token-modules-are-copies-and-one-secret-signs-five-things)) and two
+    copies of a validator ([P7-8](#p7-8--low--admin-report-photourls-accept-any-url-the-validator-is-a-copy-of-the-mate-routes)).
+
+  Several passes found three to five findings that all change the same handler, and none of those handlers can be
+  unit-tested without going through HTTP.
+- **The gates don't gate.** CI runs no tests ([P9-1](#p9-1--medium--ci-never-runs-a-test-the-only-web-gates-are-typecheck-build-and-a-health-check-that-skips-the-db)), previews share the prod DB ([F1-15](#f1-15--high-confirmed--preview-builds-run-migrations-against-and-write-to-the-production-database)), the mobile
+  release has no checks ([P9-8](#p9-8--low--mobile-cicd-the-preview-workflow-has-never-succeeded-its-ota-step-is-inert-and-the-store-release-has-no-gates)), and a mobile-only dependency override reaches the web app
+  ([P9-14](#p9-14--low-needs-confirmation--the-react-19-override-also-applies-to-the-next-14-web-app)).
+
+### Boundaries that are weak or inconsistent
+
+1. **Route ↔ domain.** Handlers own business rules (above).
+2. **Server ↔ client on money.** Clients compute totals ([P8-3](#p8-3--medium-amount-mismatch-behavior-needs-confirmation--web-checkout-displays-and-pre-authorizes-client-side-list-prices-the-server-charges-a-different-totalcents), [P8-16](#p8-16--low--refactor-client-pricing-and-cart-state-are-implemented-four-times)).
+3. **Platform ↔ tenant.** Tenant config comes from env, and platform surfaces are served on tenant hosts
+   ([F1-5](#f1-5--medium--platform-console-is-served-on-every-tenant-hostname), cross-cutting problem 4).
+4. **App ↔ Stripe.** There's no durable record of intent before calling Stripe, and no reconciliation after
+   ([P4-3](#p4-3--medium--refund-retry-safety-is-only-a-24-hour-idempotency-key-the-fixed-tracker-items-never-got-a-ledger), [P3-4](#p3-4--medium--stripe-side-failures-are-logged-and-acknowledged-with-a-200-so-stripe-never-retries), [P3-5](#p3-5--medium--the-expiry-cron-can-starve-on-its-own-skips-never-reconciles-paid-but-unconfirmed-bookings-and-cancels-after-a-failed-pi-cancel)).
+5. **Device ↔ server on check-ins.** The local queue is treated as state, not as an outbox ([P6-4](#p6-4--medium--the-local-queue-permanently-overrides-the-servers-check-in-state-office-undo-is-ignored-and-can-be-resurrected)). There's
+   no conflict signal ([P6-3](#p6-3--medium--duplicate-check-ins-are-reported-as-success-and-the-manifest-screen-never-syncs-while-its-open-so-two-gangways-can-both-board-the-same-ticket)), and Undo is a delete the device can't see ([P7-7](#p7-7--low--office-check-in-accepts-unpaid-bookings-and-undo-is-a-hard-delete)).
+6. **Where the operator ID comes from.** The rule is "only from the request's tenant", and the code applies it
+   inconsistently:
+   - admin routes use the session's operator and never compare it with the host ([F1-8](#f1-8--low--admin-session-isnt-bound-to-the-request-host-invariant-drift));
+   - token-to-host binding is skipped when the header is absent ([P5-10](#p5-10--low--token-to-host-binding-is-skipped-when-x-operator-id-is-absent));
+   - skipped paths pass a client-supplied header through ([F1-3](#f1-3--low--client-supplied-x-operator-id-isnt-stripped-on-skipped-paths));
+   - one admin page mixes session-scoped and header-scoped data (Pass 9, "Auth invariants").
+7. **Parallel paths that enforce different rules.**
+   - Mate vs admin capacity: only the mate path has the certificate cap and the audit row ([P7-3](#p7-3--medium--admin-capacity-paths-skip-the-certificate-cap-and-the-audit-row-that-the-mate-path-enforces-the-greatest-clamp-hides-inventory-drift)).
+   - Mate vs office check-in: neither checks payment, and only the office can delete ([P7-7](#p7-7--low--office-check-in-accepts-unpaid-bookings-and-undo-is-a-hard-delete),
+     [P6-4](#p6-4--medium--the-local-queue-permanently-overrides-the-servers-check-in-state-office-undo-is-ignored-and-can-be-resurrected)).
+   - Customer vs mate tokens: hand-copied modules ([P5-12](#p5-12--low--refactor-the-two-token-modules-are-copies-and-one-secret-signs-five-things)).
+   - Mate vs admin report validators: copies ([P7-8](#p7-8--low--admin-report-photourls-accept-any-url-the-validator-is-a-copy-of-the-mate-routes)).
+   - Today vs Calendar admin actions: copies ([P9-5](#p9-5--medium--every-merchant-mutation-including-trip-cancel-and-ticket-refund-fails-silently-on-a-non-json-error-response-pass-7-handoff-swept)).
+   - Merchant vs legacy admin pages: both live ([P9-13](#p9-13--low--legacy-admin-pages-are-still-routable-after-the-merchant-redesign-and-the-playwright-admin-spec-tests-them-instead-of-the-live-ui)).
+
+   A fix to one copy leaves the other open.
+
+### The two structural changes with the most leverage
+
+**1. Make the ticket lifecycle explicit, and let one module own it.**
+- Give tickets a status (`held → live → refunded | voided | disputed`, plus boarding as an event). Set it only from
+  `lib/tickets`, or insert tickets only at `payment_intent.succeeded` ([P3-1](#p3-1--critical--unpaid-and-expired-holds-produce-boardable-tickets-and-their-fees-are-later-counted-as-earned)(c)).
+- Put the inventory helper ([P3-12](#p3-12--low--refactor-the-two-cancel-paths-duplicate-an-n1-seat-restore-loop)) and the refund ledger ([P4-3](#p4-3--medium--refund-retry-safety-is-only-a-24-hour-idempotency-key-the-fixed-tracker-items-never-got-a-ledger)) behind that module, and make every
+  consumer read `status = 'live'`.
+- It removes cross-cutting problem 1 by construction and simplifies [P3-1](#p3-1--critical--unpaid-and-expired-holds-produce-boardable-tickets-and-their-fees-are-later-counted-as-earned), [P2-2](#p2-2--high--tickets-store-the-list-price-not-the-price-paid-per-ticket-refunds-then-double-restore-seats-and-over-refund), [P4-1](#p4-1--high--trip-cancellation-doesnt-stop-sales-or-cancel-pending-bookings-so-customers-get-charged-for-a-cancelled-trip),
+  [P4-2](#p4-2--high--partial-trip-cancel-refunds-ignore-tickets-already-refunded-individually-so-the-operator-over-refunds), [P4-4](#p4-4--medium--per-ticket-refund-has-no-lock-or-conditional-void-so-concurrent-submits-restore-the-seat-twice), [P4-7](#p4-7--medium--seat-restores-still-land-on-cancelled-trips-adding-the-capacity-check-first-would-break-the-webhook-and-the-cron), [P4-8](#p4-8--low--trip-cancel-derives-cancel-the-booking-from-item-counts-not-live-tickets), [P3-3](#p3-3--high-stripe-behavior-needs-confirmation--disputes-and-dashboard-refunds-on-destination-charges-never-recover-funds-from-the-operator-lost-or-won-disputes-arent-handled)'s won/lost handling, [P3-8](#p3-8--low--out-of-order-chargerefunded-is-dropped-and-a-later-succeeded-retry-confirms-a-refunded-booking),
+  [P3-9](#p3-9--low--tracker-drift-two-fixed-webhook-items-arent-implemented-and-manual-review-goes-only-to-logs), [P6-1](#p6-1--medium--scanning-a-voided-ticket-shows-nothing-at-all-the-mate-gets-no-rejected-signal), [P6-4](#p6-4--medium--the-local-queue-permanently-overrides-the-servers-check-in-state-office-undo-is-ignored-and-can-be-resurrected), [P7-7](#p7-7--low--office-check-in-accepts-unpaid-bookings-and-undo-is-a-hard-delete), [P8-6](#p8-6--medium--mobile-wallet-refresh-never-learns-of-cancellations-and-refreshing-n-bookings-spends-n-wallet-limit-requests) and [P9-4](#p9-4--medium--the-office-manifest-doesnt-show-booking-status-unpaid-holds-and-cancelled-bookings-look-like-paid-passengers-and-paid-for-this-trip-counts-them).
+
+**2. One server-side pricing function as the only source of money figures.**
+- `priceCart` ([P2-11](#p2-11--low--the-pricing-logic-is-triplicated-inline-inside-the-lock-holding-transaction)) returns each ticket's list price, net price and fee. The booking route persists it,
+  and a quote endpoint serves it to both clients ([P8-3](#p8-3--medium-amount-mismatch-behavior-needs-confirmation--web-checkout-displays-and-pre-authorizes-client-side-list-prices-the-server-charges-a-different-totalcents)).
+- Refunds, the manifest's "Paid" figure, emails and confirmation pages read the stored net.
+- It closes cross-cutting problems 3 and 5 and simplifies [P2-2](#p2-2--high--tickets-store-the-list-price-not-the-price-paid-per-ticket-refunds-then-double-restore-seats-and-over-refund)(a), [P2-4](#p2-4--medium--fee_bearer--fee_display-are-exposed-to-admins-but-have-no-effect-the-fee-always-comes-out-of-the-operators-price), [P4-2](#p4-2--high--partial-trip-cancel-refunds-ignore-tickets-already-refunded-individually-so-the-operator-over-refunds),
+  [P4-5](#p4-5--medium--partial-trip-cancel-refunds-reverse-the-platform-fee-proportionally-but-the-db-reverses-it-per-ticket), [P7-5](#p7-5--low--vessel-group-discount-fields-are-stored-unvalidated-and-they-feed-the-charge-amount-directly), [P8-3](#p8-3--medium-amount-mismatch-behavior-needs-confirmation--web-checkout-displays-and-pre-authorizes-client-side-list-prices-the-server-charges-a-different-totalcents), [P8-15](#p8-15--low--confirmation-and-boarding-page-correctness-nits), [P8-16](#p8-16--low--refactor-client-pricing-and-cart-state-are-implemented-four-times), [P9-4](#p9-4--medium--the-office-manifest-doesnt-show-booking-status-unpaid-holds-and-cancelled-bookings-look-like-paid-passengers-and-paid-for-this-trip-counts-them) and
+  [P9-15](#p9-15--low--notification-nits). It is also refactoring-backlog item 1 (the booking domain module).
+
+**Next in line:** move per-operator configuration (public base URL, email sender, demo flag, branding, platform host)
+onto the operator record. That closes cross-cutting problem 4 before the second tenant arrives.
+
+---
+
 Review passes follow the order in `REVIEW_PLAN.md` §4. Each pass was cross-checked against
 `security-audit-2026-08-05.md` and `docs/architecture-review-findings.md`. Items those documents
 already track are not repeated, unless the current code contradicts their "fixed" status.
@@ -3969,3 +4278,106 @@ owner, but no further review.
   (which flips P8-3 to an overcharge), and the Hobby-plan daily crons (which leave P3-5's holds and P3-7's reminders
   mostly inert until Pro).
 - **Process:** P9-1 (CI running the suites) is what keeps the fixes for the items above fixed. Land it first.
+
+---
+
+## Fix Roadmap
+
+Finding IDs by phase. The rationale is in "Launch Blockers", "Cross-cutting problems" and "Architecture Assessment"
+at the top of this file.
+
+### Phase 0: launch blockers
+
+In the order of "Blockers, in fix order" (7 S, 10 M, 3 L):
+
+1. [F1-15](#f1-15--high-confirmed--preview-builds-run-migrations-against-and-write-to-the-production-database)
+2. [P9-1](#p9-1--medium--ci-never-runs-a-test-the-only-web-gates-are-typecheck-build-and-a-health-check-that-skips-the-db), [F1-9](#f1-9--low--apihealth-doesnt-check-the-db-contrary-to-its-comment)
+3. [P8-2](#p8-2--high-confirmed-in-code-impact-depends-on-deploy-env--book-fetches-its-first-month-of-trips-over-http-from-next_public_base_url-which-defaults-to-localhost-and-ignores-the-requests-tenant)
+4. [P2-1](#p2-1--high--departed-trips-can-be-booked-and-paid-for)
+5. [P2-5](#p2-5--medium-needs-confirmation--web-checkout-may-accept-delayed-settlement-payment-methods)
+6. [P3-2](#p3-2--high-latent-exploitable-once-a-connect-webhook-endpoint-is-added--payment_intent-handlers-trust-metadatabookingid-without-binding-it-to-the-pi-amount-or-operator)
+7. [P3-1](#p3-1--critical--unpaid-and-expired-holds-produce-boardable-tickets-and-their-fees-are-later-counted-as-earned), [P7-7](#p7-7--low--office-check-in-accepts-unpaid-bookings-and-undo-is-a-hard-delete), [P9-4](#p9-4--medium--the-office-manifest-doesnt-show-booking-status-unpaid-holds-and-cancelled-bookings-look-like-paid-passengers-and-paid-for-this-trip-counts-them)
+8. [P2-2](#p2-2--high--tickets-store-the-list-price-not-the-price-paid-per-ticket-refunds-then-double-restore-seats-and-over-refund), [P3-12](#p3-12--low--refactor-the-two-cancel-paths-duplicate-an-n1-seat-restore-loop), [P4-2](#p4-2--high--partial-trip-cancel-refunds-ignore-tickets-already-refunded-individually-so-the-operator-over-refunds), [P4-4](#p4-4--medium--per-ticket-refund-has-no-lock-or-conditional-void-so-concurrent-submits-restore-the-seat-twice), [P4-7](#p4-7--medium--seat-restores-still-land-on-cancelled-trips-adding-the-capacity-check-first-would-break-the-webhook-and-the-cron), [F1-12](#f1-12--low--seats_remaining-check-lives-only-in-a-migration-and-there-is-no-upper-bound-check)
+9. [P4-1](#p4-1--high--trip-cancellation-doesnt-stop-sales-or-cancel-pending-bookings-so-customers-get-charged-for-a-cancelled-trip), [P3-4](#p3-4--medium--stripe-side-failures-are-logged-and-acknowledged-with-a-200-so-stripe-never-retries) (auto-refund)
+10. [P4-3](#p4-3--medium--refund-retry-safety-is-only-a-24-hour-idempotency-key-the-fixed-tracker-items-never-got-a-ledger)
+11. [P3-3](#p3-3--high-stripe-behavior-needs-confirmation--disputes-and-dashboard-refunds-on-destination-charges-never-recover-funds-from-the-operator-lost-or-won-disputes-arent-handled)
+12. [P5-1](#p5-1--high--admin-and-platform-sessions-are-valid-for-14-days-and-are-never-re-checked-so-deactivating-an-admin-doesnt-remove-their-access), [F1-8](#f1-8--low--admin-session-isnt-bound-to-the-request-host-invariant-drift)
+13. [P5-3](#p5-3--medium--a-4-digit-mate-pin-can-be-brute-forced-in-about-three-weeks-with-no-lockout-and-no-alert), [P5-2](#p5-2--medium-confirmed-by-measurement--the-dummy-bcrypt-hash-is-malformed-so-the-staff-enumeration-timing-fix-does-nothing), [P7-6](#p7-6--low--staff-crud-a-duplicate-email-returns-500-passwords-are-trimmed-on-write-but-not-at-login-the-last-admin-can-be-deactivated-and-credential-changes-dont-end-sessions) (item 6)
+14. [P7-2](#p7-2--high--pausing-or-narrowing-a-pattern-fails-with-an-fk-violation-once-any-affected-trip-has-booking-history-after-the-pattern-is-already-saved-as-paused), [P7-1](#p7-1--high--editing-a-weekly-patterns-time-capacity-or-product-silently-skips-every-trip-already-on-the-calendar)
+15. [P8-1](#p8-1--high--confirmation-and-delivery-pages-accept-a-confirmation-code-alone-with-no-throttle-the-response-leads-to-every-boarding-pass-on-the-booking-and-redirect_status-is-trusted-as-proof-of-payment)
+16. [P6-1](#p6-1--medium--scanning-a-voided-ticket-shows-nothing-at-all-the-mate-gets-no-rejected-signal), [P6-3](#p6-3--medium--duplicate-check-ins-are-reported-as-success-and-the-manifest-screen-never-syncs-while-its-open-so-two-gangways-can-both-board-the-same-ticket)
+17. QR signing, [P6-2](#p6-2--medium--the-scanner-also-accepts-the-bare-ticket-uuid-which-will-defeat-qr-signing-the-manifest-ships-every-tickets-credential)
+18. [P8-3](#p8-3--medium-amount-mismatch-behavior-needs-confirmation--web-checkout-displays-and-pre-authorizes-client-side-list-prices-the-server-charges-a-different-totalcents)
+19. [P8-4](#p8-4--medium--mobile-resume-bar-opens-a-stale-cart-and-a-multi-month-cart-silently-drops-trips)
+20. Before a second operator: [F1-2](#f1-2--medium-latent-high-once-operator_id-is-removed--crons-will-404-in-centralized-mode), [F1-1](#f1-1--medium--stripe-webhook-availability-depends-on-one-tenants-domains-row), [F1-3](#f1-3--low--client-supplied-x-operator-id-isnt-stripped-on-skipped-paths), [P5-10](#p5-10--low--token-to-host-binding-is-skipped-when-x-operator-id-is-absent)
+
+- **Conditional checks:** [P5-4](#p5-4--medium-stripe-behavior-needs-confirmation--connect-callback-marks-onboarding-complete-without-asking-stripe-and-nothing-reacts-when-an-account-is-disconnected), [P7-4](#p7-4--medium--operator-settings-accept-unvalidated-values-on-fields-that-gate-customer-sign-in-and-email) (item 2), [P9-12](#p9-12--low--posthog-the-server-event-uses-the-customers-email-as-its-id-session-replay-isnt-disabled-and-nothing-marks-admin-pages-off-limits-pass-8-handoff) (item 2).
+- **Extractions pulled forward from Phase 3:** [P2-11](#p2-11--low--the-pricing-logic-is-triplicated-inline-inside-the-lock-holding-transaction) (items 8, 18), [P3-12](#p3-12--low--refactor-the-two-cancel-paths-duplicate-an-n1-seat-restore-loop) (item 8),
+  [P6-10](#p6-10--low--refactor-scan-check-in-and-sync-logic-is-inline-in-an-879-line-screen-the-cache-prefetch-is-duplicated) (item 16), [P4-10](#p4-10--low--refactor-trip-cancellation-is-180-lines-of-domain-logic-inline-in-a-route) (item 9), [P7-3](#p7-3--medium--admin-capacity-paths-skip-the-certificate-cap-and-the-audit-row-that-the-mate-path-enforces-the-greatest-clamp-hides-inventory-drift) and [P7-11](#p7-11--low--refactor-trip-row-building-is-copied-into-three-routes-and-capacity-logic-into-two) (item 14).
+
+### Phase 1: quick wins
+
+S-sized Medium and Low fixes, each removing a class of bug:
+
+| Shared fix | Findings |
+|---|---|
+| One Zod schema per route | [P7-4](#p7-4--medium--operator-settings-accept-unvalidated-values-on-fields-that-gate-customer-sign-in-and-email), [P6-7](#p6-7--low--check-in-input-isnt-validated-bad-events-become-server_error-and-retry-forever), [P7-5](#p7-5--low--vessel-group-discount-fields-are-stored-unvalidated-and-they-feed-the-charge-amount-directly), [P7-9](#p7-9--low--settings-and-calendar-writes-trust-the-body-beyond-their-allow-lists), [P5-11](#p5-11--low--small-hardening-gaps-on-the-platform-and-admin-login-routes-builds-on-f1-5--f1-6), [P9-11](#p9-11--low--public-reports-api-and-pages-the-pagination-cursor-repeats-a-report-on-every-page-and-bad-ids-return-500), [P7-6](#p7-6--low--staff-crud-a-duplicate-email-returns-500-passwords-are-trimmed-on-write-but-not-at-login-the-last-admin-can-be-deactivated-and-credential-changes-dont-end-sessions) (item 3) |
+| Unique violation → 409 or retry | [F1-4](#f1-4--medium--operator-provisioning-isnt-transactional-and-unique-violations-surface-as-500), [P2-7](#p2-7--low--a-confirmation-code-collision-surfaces-as-an-unhandled-500), [P7-6](#p7-6--low--staff-crud-a-duplicate-email-returns-500-passwords-are-trimmed-on-write-but-not-at-login-the-last-admin-can-be-deactivated-and-credential-changes-dont-end-sessions) (item 1), [P5-9](#p5-9--low--otp-verify-isnt-atomic-wrong-guesses-dont-burn-the-code-and-otp-rows-are-never-purged) (item 2) |
+| CSPRNG and constant-time compare helpers | [F1-6](#f1-6--low--platform-secret-compare-is-still-not-timing-safe-prior-fix-only-half-landed), [F1-7](#f1-7--low--temporary-admin-password-uses-mathrandom), [P5-8](#p5-8--low--otp-codes-come-from-mathrandom) |
+| `escapeHtml` in `lib/email.ts` | [P3-11](#p3-11--low--confirmation-email-interpolates-customername-into-html-without-escaping), [P7-4](#p7-4--medium--operator-settings-accept-unvalidated-values-on-fields-that-gate-customer-sign-in-and-email) (item 3) |
+| One report-photo validator, operator-prefixed Blob paths | [P6-9](#p6-9--low--fishing-report-photourls-accept-any-url), [P7-8](#p7-8--low--admin-report-photourls-accept-any-url-the-validator-is-a-copy-of-the-mate-routes), [P9-10](#p9-10--low--report-photo-uploads-blob-paths-arent-operator-scoped-the-10-mb-limit-is-unreachable-the-completion-callback-hits-the-auth-wall-and-photos-keep-their-location-metadata) (item 1) |
+| `safeHttpUrl` | [P8-13](#p8-13--low--unvalidated-operator-urls-reach-href-on-web-and-linkingopenurl-on-mobile-p7-4-item-4-client-half) |
+| `checkLoginLimits` | [P5-6](#p5-6--low--rate-limit-buckets-count-every-request-and-both-buckets-are-charged-even-when-one-has-already-blocked), [P5-7](#p5-7--low--otp-rate-limit-keys-arent-operator-scoped-the-tracker-is-wrong-in-both-directions) |
+| `operatorBaseUrl(operator)` | [P3-6](#p3-6--medium-centralized-mode--confirmation-emails-link-every-operators-customers-to-one-global-host), [P8-7](#p8-7--medium--the-confirmation-pages-qr-cant-be-scanned-at-the-gangway-despite-this-screen-alone-is-enough-to-board) |
+| Shared ET date helpers (`todayET`, `etDateOf`, `fmtTimeET`) | [P9-3](#p9-3--medium--mobile-wallet-moves-tonights-trip-to-past-at-8-pm-edt-hiding-its-boarding-pass-other-today-calculations-use-the-utc-date-pass-8-date-handoff), [P3-7](#p3-7--medium--trip-reminder-push-shows-the-departure-time-in-utc) |
+| `adminFetch` | [P9-5](#p9-5--medium--every-merchant-mutation-including-trip-cancel-and-ticket-refund-fails-silently-on-a-non-json-error-response-pass-7-handoff-swept) |
+| PostHog `before_send` URL scrubbing; booking ID as `distinctId` | [P8-9](#p8-9--medium--customer-email-and-phone-and-the-pi-client-secret-go-into-the-return_url-and-from-there-to-posthog), [P9-12](#p9-12--low--posthog-the-server-event-uses-the-customers-email-as-its-id-session-replay-isnt-disabled-and-nothing-marks-admin-pages-off-limits-pass-8-handoff) (item 1) |
+| `waitUntil` plus a no-floating-promises lint rule | [P9-7](#p9-7--low--the-trip-cancellation-push-is-the-only-notification-not-wrapped-in-waituntil-the-tracker-fix-landed-in-two-places-of-three) |
+| Explicit `operatorId` predicate sweep | [P2-10](#p2-10--low--several-follow-up-queries-are-scoped-only-by-derivation-which-falls-short-of-the-invariant-as-written) |
+
+### Phase 2: remaining Mediums
+
+- **Mediums:** [F1-5](#f1-5--medium--platform-console-is-served-on-every-tenant-hostname), [F1-11](#f1-11--medium--missing-indexes-on-hot-money-path-lookups), [P2-3](#p2-3--medium--each-payment-retry-creates-a-new-booking-and-holds-seats-again-old-holds-persist-until-the-cron-runs), [P2-4](#p2-4--medium--fee_bearer--fee_display-are-exposed-to-admins-but-have-no-effect-the-fee-always-comes-out-of-the-operators-price), [P3-4](#p3-4--medium--stripe-side-failures-are-logged-and-acknowledged-with-a-200-so-stripe-never-retries) (rest), [P3-5](#p3-5--medium--the-expiry-cron-can-starve-on-its-own-skips-never-reconciles-paid-but-unconfirmed-bookings-and-cancels-after-a-failed-pi-cancel),
+  [P4-5](#p4-5--medium--partial-trip-cancel-refunds-reverse-the-platform-fee-proportionally-but-the-db-reverses-it-per-ticket), [P4-6](#p4-6--medium--trip-cancellation-notice-is-push-only-and-goes-to-the-wrong-people), [P5-4](#p5-4--medium-stripe-behavior-needs-confirmation--connect-callback-marks-onboarding-complete-without-asking-stripe-and-nothing-reacts-when-an-account-is-disconnected), [P5-5](#p5-5--medium--reconnecting-stripe-silently-replaces-the-payout-destination-state-isnt-bound-to-the-operator), [P6-4](#p6-4--medium--the-local-queue-permanently-overrides-the-servers-check-in-state-office-undo-is-ignored-and-can-be-resurrected), [P6-5](#p6-5--medium--an-expired-mate-token-doesnt-lose-data-but-its-silent-and-the-only-way-out-locks-the-mate-out-of-the-cached-manifest), [P7-3](#p7-3--medium--admin-capacity-paths-skip-the-certificate-cap-and-the-audit-row-that-the-mate-path-enforces-the-greatest-clamp-hides-inventory-drift) (helper built in Phase 0 item 14; certificate-cap checks on schedules and vessels remain),
+  [P8-5](#p8-5--medium--mobile-wallet-shows-only-the-first-ticket-of-every-trip-a-party-of-four-gets-one-boarding-pass), [P8-6](#p8-6--medium--mobile-wallet-refresh-never-learns-of-cancellations-and-refreshing-n-bookings-spends-n-wallet-limit-requests), [P8-8](#p8-8--medium--failed-or-abandoned-payments-land-on-a-payment-processing-screen-that-never-ends), [P9-2](#p9-2--medium--fishing-report-photos-are-rejected-by-the-image-optimizer-no-imagesremotepatterns-is-configured). [F1-10](#f1-10--medium--tenant-consistency-across-fks-isnt-enforced-by-the-schema) is in Phase 3.
+- **Remaining Lows, fixed opportunistically:**
+  - Pass 2: [P2-6](#p2-6--low--deadlock-risk-on-multi-trip-carts-lock-order-isnt-deterministic--needs-confirmation), [P2-8](#p2-8--low--mobile-post-payment-polling-can-exhaust-the-customers-own-wallet-lookup-limit), [P2-9](#p2-9--low--calendar-endpoint-no-status-filter-no-rate-limit-and-a-free-confirmation-code-validity-oracle), [P2-12](#p2-12--low--latent-inactive-fares-products-and-vessels-are-still-sellable), [P2-13](#p2-13--low--terms-acceptance-is-recorded-without-any-acceptance-signal).
+  - Pass 3: [P3-10](#p3-10--low--pass-2-handoff-closed-extend-hold-revives-holds-that-have-already-lapsed).
+  - Pass 4: [P4-9](#p4-9--low--cancelling-a-sailed-or-settling-trip-only-logs-a-warning).
+  - Pass 5: [P5-9](#p5-9--low--otp-verify-isnt-atomic-wrong-guesses-dont-burn-the-code-and-otp-rows-are-never-purged) (rest).
+  - Pass 6: [P6-6](#p6-6--low--capacity-patch-sends-an-absolute-value-computed-from-a-possibly-stale-cache-so-it-can-silently-undo-an-office-change).
+  - Pass 7: [P7-6](#p7-6--low--staff-crud-a-duplicate-email-returns-500-passwords-are-trimmed-on-write-but-not-at-login-the-last-admin-can-be-deactivated-and-credential-changes-dont-end-sessions) (rest).
+  - Pass 8: [P8-10](#p8-10--low--web-cart-shows-a-seats-held-countdown-before-any-seat-is-held), [P8-11](#p8-11--low--sign-out-leaves-the-offline-wallet-the-pii-and-the-push-registration-on-the-device), [P8-12](#p8-12--low--unconfigured-store-builds-would-send-customer-tokens-to-a-placeholder-host-no-https-check), [P8-14](#p8-14--low--customer-facing-cancellation-and-refund-promises-are-hard-coded), [P8-15](#p8-15--low--confirmation-and-boarding-page-correctness-nits).
+  - Pass 9: [P9-6](#p9-6--low--etwallclocktoutc-uses-the-noon-offset-so-times-between-midnight-and-2-am-et-on-dst-change-dates-are-an-hour-off-pass-7-handoff-confirmed-at-runtime), [P9-8](#p9-8--low--mobile-cicd-the-preview-workflow-has-never-succeeded-its-ota-step-is-inert-and-the-store-release-has-no-gates), [P9-10](#p9-10--low--report-photo-uploads-blob-paths-arent-operator-scoped-the-10-mb-limit-is-unreachable-the-completion-callback-hits-the-auth-wall-and-photos-keep-their-location-metadata) (rest), [P9-12](#p9-12--low--posthog-the-server-event-uses-the-customers-email-as-its-id-session-replay-isnt-disabled-and-nothing-marks-admin-pages-off-limits-pass-8-handoff) (rest), [P9-14](#p9-14--low-needs-confirmation--the-react-19-override-also-applies-to-the-next-14-web-app),
+    [P9-15](#p9-15--low--notification-nits).
+
+### Phase 3: larger refactors
+
+"(Phase 0)" marks findings already fixed in Phase 0. The refactor keeps them fixed by construction.
+
+| Refactor | Findings it closes |
+|---|---|
+| Ticket lifecycle module (ticket status, `releaseBookingInventory`, refund ledger, check-in Undo as an event) | [P3-1](#p3-1--critical--unpaid-and-expired-holds-produce-boardable-tickets-and-their-fees-are-later-counted-as-earned) (c), [P3-12](#p3-12--low--refactor-the-two-cancel-paths-duplicate-an-n1-seat-restore-loop) (Phase 0), [P4-3](#p4-3--medium--refund-retry-safety-is-only-a-24-hour-idempotency-key-the-fixed-tracker-items-never-got-a-ledger) (Phase 0), [P4-8](#p4-8--low--trip-cancel-derives-cancel-the-booking-from-item-counts-not-live-tickets), [P4-10](#p4-10--low--refactor-trip-cancellation-is-180-lines-of-domain-logic-inline-in-a-route) (Phase 0), [P3-3](#p3-3--high-stripe-behavior-needs-confirmation--disputes-and-dashboard-refunds-on-destination-charges-never-recover-funds-from-the-operator-lost-or-won-disputes-arent-handled) (dispute closed), [P3-8](#p3-8--low--out-of-order-chargerefunded-is-dropped-and-a-later-succeeded-retry-confirms-a-refunded-booking), [P3-9](#p3-9--low--tracker-drift-two-fixed-webhook-items-arent-implemented-and-manual-review-goes-only-to-logs), [P6-4](#p6-4--medium--the-local-queue-permanently-overrides-the-servers-check-in-state-office-undo-is-ignored-and-can-be-resurrected), [P7-7](#p7-7--low--office-check-in-accepts-unpaid-bookings-and-undo-is-a-hard-delete) |
+| Booking domain module with a single pricing function (refactoring-backlog item 1) | [P2-11](#p2-11--low--the-pricing-logic-is-triplicated-inline-inside-the-lock-holding-transaction) (Phase 0), [P8-16](#p8-16--low--refactor-client-pricing-and-cart-state-are-implemented-four-times), [P2-4](#p2-4--medium--fee_bearer--fee_display-are-exposed-to-admins-but-have-no-effect-the-fee-always-comes-out-of-the-operators-price), [P8-3](#p8-3--medium-amount-mismatch-behavior-needs-confirmation--web-checkout-displays-and-pre-authorizes-client-side-list-prices-the-server-charges-a-different-totalcents) (Phase 0), [P7-5](#p7-5--low--vessel-group-discount-fields-are-stored-unvalidated-and-they-feed-the-charge-amount-directly), [P8-15](#p8-15--low--confirmation-and-boarding-page-correctness-nits), [P9-15](#p9-15--low--notification-nits) |
+| Schedule and capacity domain (`reconcileSchedule`, `buildTripRow`, `setTripCapacity`) | [P7-11](#p7-11--low--refactor-trip-row-building-is-copied-into-three-routes-and-capacity-logic-into-two) (Phase 0), [P7-1](#p7-1--high--editing-a-weekly-patterns-time-capacity-or-product-silently-skips-every-trip-already-on-the-calendar) (Phase 0), [P7-2](#p7-2--high--pausing-or-narrowing-a-pattern-fails-with-an-fk-violation-once-any-affected-trip-has-booking-history-after-the-pattern-is-already-saved-as-paused) (Phase 0), [P7-3](#p7-3--medium--admin-capacity-paths-skip-the-certificate-cap-and-the-audit-row-that-the-mate-path-enforces-the-greatest-clamp-hides-inventory-drift) (helper in Phase 0), [P6-6](#p6-6--low--capacity-patch-sends-an-absolute-value-computed-from-a-possibly-stale-cache-so-it-can-silently-undo-an-office-change) |
+| Tenant config and isolation (composite FKs, per-operator config, `is_demo`, token factory, cached operator fetch, mobile bundle-ID split) | [F1-10](#f1-10--medium--tenant-consistency-across-fks-isnt-enforced-by-the-schema), [F1-13](#f1-13--low--product_prices-has-no-operator_id), [F1-14](#f1-14--low--mixed-timestamp-and-timestamptz-on-expiry-columns), [F1-16](#f1-16--low--operator-record-is-fetched-twice-per-page-render-and-the-helpers-duplicate-each-other), [P2-10](#p2-10--low--several-follow-up-queries-are-scoped-only-by-derivation-which-falls-short-of-the-invariant-as-written), [P5-12](#p5-12--low--refactor-the-two-token-modules-are-copies-and-one-secret-signs-five-things), [P7-10](#p7-10--low--clear-demo-customers-is-gated-by-a-deployment-wide-flag-not-by-the-operator-and-deletes-paid-bookings-without-touching-stripe), [P9-9](#p9-9--low--tenant-branding-is-set-per-deployment-or-build-not-per-operator-the-demo-banner-a-captree-fishing-fallback-and-one-apple-pay-merchant-name) |
+| Mate client (`resolveScan`, `useCheckInQueue`, `refreshMateCache`, device data purge) | [P6-10](#p6-10--low--refactor-scan-check-in-and-sync-logic-is-inline-in-an-879-line-screen-the-cache-prefetch-is-duplicated) (Phase 0), [P6-5](#p6-5--medium--an-expired-mate-token-doesnt-lose-data-but-its-silent-and-the-only-way-out-locks-the-mate-out-of-the-cached-manifest), [P6-8](#p6-8--low--customer-pii-and-boarding-credentials-persist-on-the-device-indefinitely) |
+| Admin UI (retire the legacy pages, `useTripActions`) | [P9-13](#p9-13--low--legacy-admin-pages-are-still-routable-after-the-merchant-redesign-and-the-playwright-admin-spec-tests-them-instead-of-the-live-ui), [P9-5](#p9-5--medium--every-merchant-mutation-including-trip-cancel-and-ticket-refund-fails-silently-on-a-non-json-error-response-pass-7-handoff-swept) |
+| Release pipeline (gated mobile release, scoped overrides) | [P9-8](#p9-8--low--mobile-cicd-the-preview-workflow-has-never-succeeded-its-ota-step-is-inert-and-the-store-release-has-no-gates), [P8-12](#p8-12--low--unconfigured-store-builds-would-send-customer-tokens-to-a-placeholder-host-no-https-check), [P9-14](#p9-14--low-needs-confirmation--the-react-19-override-also-applies-to-the-next-14-web-app) |
+
+### Phase 4: test gaps
+
+All of these depend on [P9-1](#p9-1--medium--ci-never-runs-a-test-the-only-web-gates-are-typecheck-build-and-a-health-check-that-skips-the-db).
+
+| Area | Test-gap findings | Would have caught |
+|---|---|---|
+| Ticket liveness | [P3-13](#p3-13--low--test-gaps-on-the-payment-lifecycle), [P6-11](#p6-11--low--test-gaps-on-the-check-in-contract), [P7-12](#p7-12--low--test-gaps-on-the-admin-api), [P9-16](#p9-16--low--test-gaps-on-this-pass) | [P3-1](#p3-1--critical--unpaid-and-expired-holds-produce-boardable-tickets-and-their-fees-are-later-counted-as-earned), [P6-1](#p6-1--medium--scanning-a-voided-ticket-shows-nothing-at-all-the-mate-gets-no-rejected-signal), [P6-2](#p6-2--medium--the-scanner-also-accepts-the-bare-ticket-uuid-which-will-defeat-qr-signing-the-manifest-ships-every-tickets-credential), [P7-7](#p7-7--low--office-check-in-accepts-unpaid-bookings-and-undo-is-a-hard-delete), [P9-4](#p9-4--medium--the-office-manifest-doesnt-show-booking-status-unpaid-holds-and-cancelled-bookings-look-like-paid-passengers-and-paid-for-this-trip-counts-them) |
+| Money amounts | [P2-14](#p2-14--low--test-gaps-on-the-money-path), [P4-11](#p4-11--low--test-gaps-on-the-reversal-paths), [P8-17](#p8-17--low--test-gaps-on-the-clients) | [P2-2](#p2-2--high--tickets-store-the-list-price-not-the-price-paid-per-ticket-refunds-then-double-restore-seats-and-over-refund), [P2-4](#p2-4--medium--fee_bearer--fee_display-are-exposed-to-admins-but-have-no-effect-the-fee-always-comes-out-of-the-operators-price), [P4-2](#p4-2--high--partial-trip-cancel-refunds-ignore-tickets-already-refunded-individually-so-the-operator-over-refunds), [P4-4](#p4-4--medium--per-ticket-refund-has-no-lock-or-conditional-void-so-concurrent-submits-restore-the-seat-twice), [P4-5](#p4-5--medium--partial-trip-cancel-refunds-reverse-the-platform-fee-proportionally-but-the-db-reverses-it-per-ticket), [P8-3](#p8-3--medium-amount-mismatch-behavior-needs-confirmation--web-checkout-displays-and-pre-authorizes-client-side-list-prices-the-server-charges-a-different-totalcents) |
+| Payment lifecycle | [P3-13](#p3-13--low--test-gaps-on-the-payment-lifecycle), [P4-11](#p4-11--low--test-gaps-on-the-reversal-paths) | [P3-2](#p3-2--high-latent-exploitable-once-a-connect-webhook-endpoint-is-added--payment_intent-handlers-trust-metadatabookingid-without-binding-it-to-the-pi-amount-or-operator), [P3-4](#p3-4--medium--stripe-side-failures-are-logged-and-acknowledged-with-a-200-so-stripe-never-retries), [P3-5](#p3-5--medium--the-expiry-cron-can-starve-on-its-own-skips-never-reconciles-paid-but-unconfirmed-bookings-and-cancels-after-a-failed-pi-cancel), [P4-1](#p4-1--high--trip-cancellation-doesnt-stop-sales-or-cancel-pending-bookings-so-customers-get-charged-for-a-cancelled-trip), [P4-3](#p4-3--medium--refund-retry-safety-is-only-a-24-hour-idempotency-key-the-fixed-tracker-items-never-got-a-ledger) |
+| Tenant isolation | [P2-14](#p2-14--low--test-gaps-on-the-money-path), [P5-13](#p5-13--low--test-gaps-on-auth), middleware unit tests (area E has none) | [F1-1](#f1-1--medium--stripe-webhook-availability-depends-on-one-tenants-domains-row), [F1-2](#f1-2--medium-latent-high-once-operator_id-is-removed--crons-will-404-in-centralized-mode), [F1-3](#f1-3--low--client-supplied-x-operator-id-isnt-stripped-on-skipped-paths), [P5-10](#p5-10--low--token-to-host-binding-is-skipped-when-x-operator-id-is-absent) |
+| Auth | [P5-13](#p5-13--low--test-gaps-on-auth) | [P5-1](#p5-1--high--admin-and-platform-sessions-are-valid-for-14-days-and-are-never-re-checked-so-deactivating-an-admin-doesnt-remove-their-access), [P5-2](#p5-2--medium-confirmed-by-measurement--the-dummy-bcrypt-hash-is-malformed-so-the-staff-enumeration-timing-fix-does-nothing), [P5-5](#p5-5--medium--reconnecting-stripe-silently-replaces-the-payout-destination-state-isnt-bound-to-the-operator), [P5-6](#p5-6--low--rate-limit-buckets-count-every-request-and-both-buckets-are-charged-even-when-one-has-already-blocked), [P5-9](#p5-9--low--otp-verify-isnt-atomic-wrong-guesses-dont-burn-the-code-and-otp-rows-are-never-purged) |
+| Admin edits | [P7-12](#p7-12--low--test-gaps-on-the-admin-api) | [P7-1](#p7-1--high--editing-a-weekly-patterns-time-capacity-or-product-silently-skips-every-trip-already-on-the-calendar), [P7-2](#p7-2--high--pausing-or-narrowing-a-pattern-fails-with-an-fk-violation-once-any-affected-trip-has-booking-history-after-the-pattern-is-already-saved-as-paused), [P7-3](#p7-3--medium--admin-capacity-paths-skip-the-certificate-cap-and-the-audit-row-that-the-mate-path-enforces-the-greatest-clamp-hides-inventory-drift), [P7-4](#p7-4--medium--operator-settings-accept-unvalidated-values-on-fields-that-gate-customer-sign-in-and-email), [P7-5](#p7-5--low--vessel-group-discount-fields-are-stored-unvalidated-and-they-feed-the-charge-amount-directly), [P7-6](#p7-6--low--staff-crud-a-duplicate-email-returns-500-passwords-are-trimmed-on-write-but-not-at-login-the-last-admin-can-be-deactivated-and-credential-changes-dont-end-sessions) |
+| Check-in contract | [P6-11](#p6-11--low--test-gaps-on-the-check-in-contract) | [P6-3](#p6-3--medium--duplicate-check-ins-are-reported-as-success-and-the-manifest-screen-never-syncs-while-its-open-so-two-gangways-can-both-board-the-same-ticket), [P6-4](#p6-4--medium--the-local-queue-permanently-overrides-the-servers-check-in-state-office-undo-is-ignored-and-can-be-resurrected), [P6-5](#p6-5--medium--an-expired-mate-token-doesnt-lose-data-but-its-silent-and-the-only-way-out-locks-the-mate-out-of-the-cached-manifest), [P6-6](#p6-6--low--capacity-patch-sends-an-absolute-value-computed-from-a-possibly-stale-cache-so-it-can-silently-undo-an-office-change) |
+| Clients | [P8-17](#p8-17--low--test-gaps-on-the-clients) | [P8-1](#p8-1--high--confirmation-and-delivery-pages-accept-a-confirmation-code-alone-with-no-throttle-the-response-leads-to-every-boarding-pass-on-the-booking-and-redirect_status-is-trusted-as-proof-of-payment), [P8-2](#p8-2--high-confirmed-in-code-impact-depends-on-deploy-env--book-fetches-its-first-month-of-trips-over-http-from-next_public_base_url-which-defaults-to-localhost-and-ignores-the-requests-tenant), [P8-6](#p8-6--medium--mobile-wallet-refresh-never-learns-of-cancellations-and-refreshing-n-bookings-spends-n-wallet-limit-requests), [P8-8](#p8-8--medium--failed-or-abandoned-payments-land-on-a-payment-processing-screen-that-never-ends), [P2-3](#p2-3--medium--each-payment-retry-creates-a-new-booking-and-holds-seats-again-old-holds-persist-until-the-cron-runs) |
+| Time | [P9-16](#p9-16--low--test-gaps-on-this-pass), [P3-13](#p3-13--low--test-gaps-on-the-payment-lifecycle) | [P3-7](#p3-7--medium--trip-reminder-push-shows-the-departure-time-in-utc), [P9-3](#p9-3--medium--mobile-wallet-moves-tonights-trip-to-past-at-8-pm-edt-hiding-its-boarding-pass-other-today-calculations-use-the-utc-date-pass-8-date-handoff), [P9-6](#p9-6--low--etwallclocktoutc-uses-the-noon-offset-so-times-between-midnight-and-2-am-et-on-dst-change-dates-are-an-hour-off-pass-7-handoff-confirmed-at-runtime) |
+| Rendering and admin UI | [P9-16](#p9-16--low--test-gaps-on-this-pass) | [P9-2](#p9-2--medium--fishing-report-photos-are-rejected-by-the-image-optimizer-no-imagesremotepatterns-is-configured), [P9-11](#p9-11--low--public-reports-api-and-pages-the-pagination-cursor-repeats-a-report-on-every-page-and-bad-ids-return-500), [P9-5](#p9-5--medium--every-merchant-mutation-including-trip-cancel-and-ticket-refund-fails-silently-on-a-non-json-error-response-pass-7-handoff-swept) |
