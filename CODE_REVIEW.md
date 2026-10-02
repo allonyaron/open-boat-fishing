@@ -1234,6 +1234,29 @@ meaningful check. What matters is whether each event is **bound to the booking's
 - **Suggested fix:** Use the existing `fmtTimeET(meta.startTime)` from `lib/format.ts`. Add a test asserting
   the rendered time for a fixed UTC `startTime`, run with `TZ=UTC`.
 
+
+#### P3-7b · Medium · Seeded trip times are fixed UTC hours, and the demo has trips departing at 1 AM and 3 AM ET (found 2026-10-02, after the review)
+
+- **Where:** `packages/db/src/seed-trips-demo.ts:129, 165-166` and `seed-trips-dev.ts:130-131` build `startTime`/`endTime`
+  as `new Date(\`${date}T${depTime}Z\`)` from fixed UTC hours (`departureHourUtc: 11, // 7 AM ET`). The admin paths use
+  `etWallClockToUTC` (`lib/date-et.ts:38`), whose comment forbids exactly this literal-`Z` pattern.
+- **What's wrong:**
+  1. **DST drift (confirmed on the live demo).** `11:00Z` is 7 AM EDT but 6 AM EST. December trips on
+     openboatfishing.com are still `11:00Z`, so after DST ends they display as 6 AM.
+  2. **Mixed semantics in `schedules.departureTime`.** The seed stores UTC digits (`"11:00:00"`, `:142`), but the admin
+     UI and the schedule PATCH treat that column as ET wall-clock. Editing a seeded schedule and re-materializing would
+     move its trips to 11 AM ET.
+  3. **1 AM and 3 AM departures on the live demo (needs investigation).** October 2026 has two extra schedules for
+     product `6c1cbad0` ("Sea Bass Fishing express"): `f520aa4b` at `07:00Z` (3 AM ET) and `f5cf41f0` at `05:00Z`
+     (1 AM ET). They aren't from the seed. Either someone typed those times, or they were created before
+     `etWallClockToUTC` existed, by code that wrote typed digits with a literal `Z`. Check `schedules.departure_time`
+     and `created_at` for both.
+- **Why it matters:** A demo visitor sees a boat leaving at 3 AM, and a client deployment seeded the same way would
+  sell trips at the wrong hour for half the year. P3-7 is the same ET/UTC confusion, at the display layer.
+- **Suggested fix:** Have the seeds use ET wall-clock times through a shared `etWallClockToUTC`. Move it to
+  `packages/utils` so `packages/db` can import it. Re-seed or correct the demo's trips, and remove or fix the two stray
+  October schedules once item 3 above is understood. Add a test that a seeded trip renders 7 AM ET in both July and
+  December.
 #### P3-8 · Low · Out-of-order `charge.refunded` is dropped, and a later `succeeded` retry confirms a refunded booking
 
 - **Where:** `charge-refunded.ts:26-34` (no `payments` row → log and return 200);
