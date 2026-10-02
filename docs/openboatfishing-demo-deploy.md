@@ -89,14 +89,18 @@ Setup, one time. Do it in this order, so that no preview build is ever left with
    - Enable **preview branches**.
    - Enable **automatic deletion of obsolete branches**.
    - Do **not** let it overwrite the Production `DATABASE_URL`.
-2. Vercel → Settings → Environment Variables. Check that the integration added Preview-scoped DB variables.
+2. Vercel → Settings → Environment Variables. The integration may add Preview DB variables only when the first preview deploys, so don't treat an empty list here as failure. Step 5's host check is the real test.
 3. Edit the existing prod `DATABASE_URL` and **untick Preview**, so it is scoped to Production only.
-4. Scope `OPERATOR_ID` to **Preview** as well, with the same demo operator UUID. That UUID exists in every branch copied from prod. Without it, preview pages 404, because the per-deployment hostname isn't in `domains`.
+4. Scope `OPERATOR_ID` to **Preview** as well, with the same demo operator UUID. That UUID exists in every branch copied from prod. Without it, preview pages 404, because the per-deployment hostname isn't in `domains`. Also add a **separate Preview-scoped `SESSION_SECRET`**, generated fresh. The branch DB copies prod's staff and customers, and with a shared secret, a token minted on an (unreviewed) preview would be valid on prod.
 5. Push a throwaway branch. The build log should show `Running migrations (VERCEL_ENV=preview)`, and the Neon console should show a new `preview/<branch>` branch. The preview's `DATABASE_URL` host (`ep-…`) must differ from Production's.
 
 Lifecycle: push → Neon branch created. Further pushes to the same git branch reuse it. When the PR is merged, GitHub deletes the head branch automatically, and the Neon integration then deletes the Neon branch. Delete abandoned git branches so their Neon branches don't count against the plan's branch limit.
 
-Known preview limitation: the Stripe webhook is registered for `openboatfishing.com`, so a test payment made on a preview sends `payment_intent.succeeded` to prod, which doesn't have that booking. Preview bookings stay `pending`. Browsing, cart, admin and the payment form all work.
+Known preview limitations:
+
+- **Webhooks go to prod.** The Stripe webhook is registered for `openboatfishing.com`, so a test payment made on a preview sends `payment_intent.succeeded` to prod. Prod doesn't have that booking, so it logs `booking not found` and returns 200 (Stripe doesn't retry). Preview bookings stay `pending`.
+- **The Stripe account is shared.** Previews use the same test keys, and the branch DB holds copies of prod's bookings with their real PaymentIntent IDs. Refunding a ticket or cancelling a trip on a preview **refunds the real test PI**, and the resulting `charge.refunded` webhook cancels the booking **on prod**. Test refunds and cancellations only on bookings created on that preview. Full isolation would need a separate Stripe test account with Preview-scoped keys.
+- **`/book` until CODE_REVIEW item 3 (P8-2) lands.** The page fetches its first month from `NEXT_PUBLIC_BASE_URL`. If that variable is Production-only, preview `/book` fetches `localhost` and returns 500. If it's also scoped to Preview, preview `/book` shows prod's trips and seat counts while the cart writes to the branch DB. The smoke test only hits `/api/health`, so CI stays green either way.
 
 **Client deployments** (separate Vercel projects, e.g. captree.com) share this repo's `vercel.json`. They should build Production only. In each client project, set Settings → Git → Ignored Build Step to `[ "$VERCEL_ENV" != "production" ]` (exit 0 = skip), so no push to a branch ever builds against or migrates a client's DB.
 
