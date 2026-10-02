@@ -19,89 +19,72 @@ function loadFixtures(): Fixtures {
   }
 }
 
+test("/book server-renders this month's trips", async ({ request }) => {
+  // Raw HTML, no JS: the trip list must come from the server render, not a
+  // client fetch (P8-2 — the page loads its first month during SSR).
+  const res = await request.get("/book");
+  expect(res.status()).toBe(200);
+  const html = await res.text();
+  expect(html).toMatch(/aria-label="One more (adult )?seat/);
+});
+
 test("booking flow", async ({ page }, testInfo) => {
   const shot = screenshotter(testInfo);
 
-  // ── 01  Calendar / list view ───────────────────────────────────────────────
-  await page.goto("/");
-  await page.waitForLoadState("networkidle");
-  await page.screenshot({ path: shot("01-calendar") });
+  // ── 01  Trip list ──────────────────────────────────────────────────────────
+  await page.goto("/book");
+  const addAdult = page.getByRole("button", { name: "One more adult seat" }).first();
+  await expect(addAdult).toBeVisible();
+  await page.screenshot({ path: shot("01-trips") });
 
-  // On desktop, hydration flips to calendar view. Switch to list so trip rows
-  // are in the DOM on both viewports.
-  const listBtn = page.getByRole("button", { name: "list" });
-  if (await listBtn.isVisible().catch(() => false)) {
-    await listBtn.click();
-  }
+  // ── 02  Add a seat — the cart appears with a checkout button ──────────────
+  await addAdult.click();
+  const checkout = page.getByRole("button", { name: /check out/i });
+  await expect(checkout).toBeVisible();
+  await page.screenshot({ path: shot("02-cart") });
 
-  // Wait for at least one enabled trip row button to appear
-  const tripRow = page.getByRole("button", { disabled: false }).filter({
-    hasText: /AM|PM/,
-  });
-  await tripRow.first().waitFor({ timeout: 10_000 });
+  // ── 03  Checkout page (cart summary + contact form + payment) ─────────────
+  await Promise.all([page.waitForURL("**/checkout"), checkout.click()]);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByText(/1 adult ×/)).toBeVisible();
+  await page.screenshot({ path: shot("03-checkout") });
 
-  // ── 02  Trip detail sheet ──────────────────────────────────────────────────
-  await tripRow.first().click();
-  // Sheet opens — wait for the ticket quantity stepper to appear
-  await page.getByRole("button", { name: /Increase adult count/i }).waitFor({ timeout: 8_000 });
-  await page.screenshot({ path: shot("02-trip-sheet") });
+  // ── 04  Contact form ───────────────────────────────────────────────────────
+  await page.getByLabel("Name on the manifest").fill("Alex Angler");
+  await page.getByLabel(/^Mobile/).fill("(555) 123-4567");
+  await page.getByLabel(/^Email/).fill("alex@example.com");
+  await expect(page.getByRole("button", { name: /^Pay \$/i })).toBeVisible();
+  await page.screenshot({ path: shot("04-contact-form") });
 
-  // ── 03  Select adult tickets (1 or 2 depending on availability) ──────────
-  const increaseAdult = page.getByRole("button", { name: /Increase adult count/i });
-  await increaseAdult.click();
-  // Click again only if the trip has more than 1 seat
-  if (await increaseAdult.isEnabled().catch(() => false)) {
-    await increaseAdult.click();
-  }
-  await page.screenshot({ path: shot("03-qty-selected") });
-
-  // ── 04  Add to cart ────────────────────────────────────────────────────────
-  await page.getByRole("button", { name: "Add to cart" }).click();
-  // Either the mobile CartBar or the desktop sidebar "Checkout" button becomes visible
-  await page.getByRole("button", { name: /Checkout/i }).first().waitFor({ timeout: 8_000 });
-  await page.screenshot({ path: shot("04-cart-bar") });
-
-  // ── 05  Checkout page (cart + inline contact form) ─────────────────────────
-  // CartBar "Checkout" navigates directly to /checkout — there is no separate /cart page.
-  const checkoutBtn = page.getByRole("button", { name: /Checkout/i });
-  // On desktop the sidebar button comes first; on mobile the CartBar comes last.
-  const visibleCheckout = (await checkoutBtn.first().isVisible())
-    ? checkoutBtn.first()
-    : checkoutBtn.last();
-  await Promise.all([page.waitForURL("/checkout"), visibleCheckout.click()]);
-  await page.getByRole("heading", { name: "Checkout" }).waitFor();
-  await page.screenshot({ path: shot("05-checkout-summary") });
-
-  // ── 06  Contact form (inline on /checkout) ────────────────────────────────
-  await page.getByLabel("Email").fill("alex@example.com");
-  await page.getByLabel(/Mobile/i).fill("(555) 123-4567");
-  await page.screenshot({ path: shot("06-contact-form") });
-
-  // ── 07  Stripe Payment Element ────────────────────────────────────────────
-  // Clicking "Continue to payment" calls /api/bookings then renders the Stripe element
-  // on the same /checkout page (no navigation).
-  await page.getByRole("button", { name: "Continue to payment" }).click();
-  await page.waitForTimeout(5_000); // Give Stripe's iframe time to mount
-  await page.screenshot({ path: shot("07-payment") });
+  // Payment is not driven here: the booking POST only fires after Stripe's
+  // Payment Element validates, which needs real Stripe test keys, a connected
+  // account, and webhook delivery. The post-payment screens are covered below
+  // against a seeded confirmed booking.
 });
 
 test("post-payment screens", async ({ page }, testInfo) => {
   const { code, bookingId } = loadFixtures();
 
   if (!code || !bookingId) {
+    // Locally, skipping is a convenience when the seed hasn't been run. In CI
+    // the seed is part of the job, so a missing fixture is a failure.
+    if (process.env.CI) throw new Error("Seed booking not found — check the seed steps in CI");
     test.skip(true, "Seed booking not found. Run seed-test-customers.ts first, then re-run.");
     return;
   }
 
   const shot = screenshotter(testInfo);
 
-  // ── 08  Delivery / ticket delivery screen ─────────────────────────────────
+  // ── 05  Delivery screen ────────────────────────────────────────────────────
   await page.goto(`/booking/delivery?code=${code}&redirect_status=succeeded`);
-  await page.getByText("You're booked!").waitFor();
-  await page.screenshot({ path: shot("08-delivery") });
+  await expect(page.getByRole("heading", { name: /seats confirmed/i })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Boarding pass QR code" })).toBeVisible();
+  await expect(page.getByText(code, { exact: true })).toBeVisible();
+  await page.screenshot({ path: shot("05-delivery") });
 
-  // ── 09  Boarding pass (printable) ─────────────────────────────────────────
+  // ── 06  Boarding passes (printable) ───────────────────────────────────────
   await page.goto(`/boarding/${bookingId}`);
-  await page.locator(".ticket-page").first().waitFor();
-  await page.screenshot({ path: shot("09-boarding-pass"), fullPage: true });
+  await expect(page.getByRole("button", { name: "Print / Save PDF" })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^QR code for ticket / }).first()).toBeVisible();
+  await page.screenshot({ path: shot("06-boarding-pass"), fullPage: true });
 });

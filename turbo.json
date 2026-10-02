@@ -29,11 +29,13 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "outputs": ["coverage/**"],
+      "passThroughEnv": ["CI", "DATABASE_URL_TEST"]
     },
     "test:coverage": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "outputs": ["coverage/**"],
+      "passThroughEnv": ["CI", "DATABASE_URL_TEST"]
     },
     "typecheck": {
       "dependsOn": ["^build"]

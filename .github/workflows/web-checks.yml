@@ -10,18 +10,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # "Typecheck & Next.js Build" and "Smoke Test (Vercel Preview)" are required
-  # status checks on main's branch protection. Required checks that never run
-  # (e.g. because a path filter on the trigger skipped the whole workflow)
-  # show as permanently pending and block every PR that doesn't touch web
-  # code. Detecting the path change inside the workflow instead — as a
-  # job-level `if:` — keeps both job names always scheduled: they run for
-  # real on web/package changes, or report "skipped" (which GitHub counts as
-  # a pass) otherwise.
+  # "Typecheck & Next.js Build", "Tests", and "Smoke Test (Vercel Preview)"
+  # are required status checks on main's branch protection. Required checks
+  # that never run (e.g. because a path filter on the trigger skipped the whole
+  # workflow) show as permanently pending and block every PR that doesn't touch
+  # web code. Detecting the path change inside the workflow instead — as a
+  # job-level `if:` — keeps every job name always scheduled: they run for real
+  # on relevant changes, or report "skipped" (which GitHub counts as a pass)
+  # otherwise.
   changes:
     runs-on: ubuntu-latest
     outputs:
       web: ${{ steps.filter.outputs.web }}
+      tests: ${{ steps.filter.outputs.tests }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,11 +32,18 @@ jobs:
       - name: Check for web/package changes
         id: filter
         run: |
-          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" \
-             | grep -qE '^(apps/web/|packages/)'; then
+          CHANGED=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")
+          if echo "$CHANGED" | grep -qE '^(apps/web/|packages/)'; then
             echo "web=true" >> "$GITHUB_OUTPUT"
           else
             echo "web=false" >> "$GITHUB_OUTPUT"
+          fi
+          # `turbo test` also runs the mobile lib tests, and the e2e spec and
+          # this workflow define the job itself — so the test gate is wider.
+          if echo "$CHANGED" | grep -qE '^(apps/|packages/|e2e/|playwright\.config\.ts$|turbo\.json$|package\.json$|pnpm-lock\.yaml$|\.github/workflows/web-checks\.yml$)'; then
+            echo "tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tests=false" >> "$GITHUB_OUTPUT"
           fi
 
   typecheck-and-build:
@@ -72,6 +80,120 @@ jobs:
           STRIPE_WEBHOOK_SECRET: "whsec_ci_placeholder"
           CRON_SECRET: "ci_cron_placeholder"
           RESEND_API_KEY: "re_ci_placeholder"
+
+  # Runs every unit/integration suite (`turbo test`: web API routes against a
+  # real Postgres, db, utils, mobile lib) and the booking Playwright spec against
+  # a production build serving a seeded demo operator.
+  tests:
+    name: Tests
+    needs: changes
+    if: needs.changes.outputs.tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: openboat_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Two databases: the web vitest global-setup truncates every table, so the
+      # e2e seed lives in its own DB that the unit run can't wipe.
+      DATABASE_URL_TEST: postgres://ci:ci@localhost:5432/openboat_test
+      E2E_DATABASE_URL: postgres://ci:ci@localhost:5432/openboat_e2e
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create e2e database
+        run: psql "$DATABASE_URL_TEST" -c "CREATE DATABASE openboat_e2e"
+
+      # Explicit, so a migration that can't apply to a fresh database fails the
+      # job here rather than surfacing as unrelated test failures.
+      - name: Migrate test databases
+        run: |
+          DATABASE_URL="$DATABASE_URL_TEST" pnpm --filter @openboat/db migrate
+          DATABASE_URL="$E2E_DATABASE_URL" pnpm --filter @openboat/db migrate
+
+      - name: Unit and integration tests
+        run: pnpm turbo test
+
+      - name: Seed e2e database
+        working-directory: packages/db
+        env:
+          DATABASE_URL: ${{ env.E2E_DATABASE_URL }}
+        run: |
+          pnpm exec tsx src/seed-demo.ts > /dev/null  # prints a generated admin password
+          pnpm exec tsx src/seed-trips-demo.ts
+          pnpm exec tsx src/seed-test-trip.ts
+          pnpm exec tsx src/seed-test-customers.ts
+          OPERATOR_ID=$(psql "$DATABASE_URL" -tAc "SELECT id FROM operators WHERE slug = 'mv-open-boat'")
+          test -n "$OPERATOR_ID"
+          echo "OPERATOR_ID=$OPERATOR_ID" >> "$GITHUB_ENV"
+
+      - name: Build and start web app
+        env:
+          DATABASE_URL: ${{ env.E2E_DATABASE_URL }}
+          SESSION_SECRET: "ci-placeholder-secret-minimum-32-chars-long"
+          STRIPE_SECRET_KEY: "sk_test_ci_placeholder"
+          STRIPE_WEBHOOK_SECRET: "whsec_ci_placeholder"
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test_ci_placeholder"
+          CRON_SECRET: "ci_cron_placeholder"
+          RESEND_API_KEY: "re_ci_placeholder"
+          NEXT_PUBLIC_BASE_URL: "http://localhost:3000"
+        run: |
+          pnpm --filter @openboat/web build
+          nohup pnpm --filter @openboat/web start > "$RUNNER_TEMP/web-server.log" 2>&1 &
+          # /api/health runs `select 1`, so this also proves the app reaches the DB.
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/api/health; then exit 0; fi
+            sleep 1
+          done
+          echo "Web app didn't become healthy in 60s"
+          cat "$RUNNER_TEMP/web-server.log"
+          exit 1
+
+      - name: Install Playwright browsers
+        # The "mobile" project emulates an iPhone, which runs on WebKit.
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Booking flow (Playwright)
+        run: pnpm exec playwright test e2e/booking-flow.spec.ts
+
+      - name: Upload Playwright results and server log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            test-results/
+            screenshots/
+            ${{ runner.temp }}/web-server.log
+          retention-days: 7
+          if-no-files-found: ignore
 
   smoke-test:
     name: Smoke Test (Vercel Preview)
@@ -134,7 +256,7 @@ jobs:
             "$URL/api/health")
           echo "HTTP status: $STATUS"
           if [ "$STATUS" != "200" ]; then
-            echo "Health check failed — the deploy is broken (env vars missing or startup error)"
+            echo "Health check failed — the deploy is broken (env vars missing, startup error, or DB unreachable)"
             echo "Look up the digest in Vercel Logs to see the exact error"
             exit 1
           fi
