@@ -64,6 +64,19 @@ Captured before starting Step 11 / fishing-reports work. Goal: domain-driven str
 
 ---
 
+## 7. Lint Warnings — Clear the Build Log (low priority)
+
+`next build` prints ~70 ESLint warnings. None fail the build, but they bury real warnings in the Vercel log. Seen in the F1-15 preview build (2026-10-02):
+
+- **`@typescript-eslint/no-explicit-any` (~60), almost all in `apps/web/src/test/api/*.test.ts`.** Mostly mocked `db`/request objects cast to `any`. Fix with a typed test helper (e.g. `mockDb<T>()`), not per-line `unknown` casts.
+- **Unused vars/args:** `CartClient.tsx:193` (`operatorName`), `BookingCalendar/index.tsx:25` (`termsUrl`), and test imports in `admin-today`, `cron-reset-demo-data`, `stripe-connect-start-configured`. Check whether `termsUrl`/`operatorName` were meant to be rendered (terms link at checkout?) before deleting them.
+- **`charge-refunded.ts:41`** `any`. It's on the money path, so type it properly from `Stripe.Charge`.
+- **"Next.js plugin was not detected in your ESLint configuration".** Add `next/core-web-vitals` to the web ESLint config.
+
+**Done when:** `next build` lints with zero warnings, and CI fails on new ones (`next lint --max-warnings 0`).
+
+---
+
 ## Priority Order (updated)
 
 1. ~~**Item 5 (cleanup)**~~ ✅ Done
@@ -72,3 +85,4 @@ Captured before starting Step 11 / fishing-reports work. Goal: domain-driven str
 4. ~~**Item 2 (server-component operator helper)**~~ ✅ Done
 5. **Item 1 (booking creation extraction)** — test coverage now in place; ready to extract when the time is right
 6. **Item 6 (middleware caching)** — post-launch only
+7. **Item 7 (lint warnings)** — any time; small, independent
