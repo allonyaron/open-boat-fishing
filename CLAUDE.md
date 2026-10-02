@@ -150,7 +150,7 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 
 - **Never commit to `main` directly.** All work, including docs and one-line fixes, goes on its own branch, named for the work: `fix/p2-1-departed-trips`, `infra/f1-15-preview-db`, `docs/…`, `refactor/…`, `design/…`. Use one branch per piece of work. Don't pile unrelated changes onto one branch.
 - Push the branch, which creates a Vercel Preview with its own URL and its own Neon branch DB. Test there, then open a PR to `main`.
-- Merging the PR is the only way to deploy to production (`openboatfishing.com`). Required checks: "Typecheck & Next.js Build" and "Smoke Test (Vercel Preview)".
+- Merging the PR is the only way to deploy to production (`openboatfishing.com`). Required checks: "Typecheck & Next.js Build", "Tests" (every vitest suite against a Postgres service + the booking Playwright spec), and "Smoke Test (Vercel Preview)".
 - **Migrations must be backward-compatible with the currently deployed code (expand, then contract).** A production build runs migrations before `next build`, so the old code serves traffic on the new schema until the deploy switches over. Add columns and tables first. Remove or rename only in a later deploy, once nothing reads the old shape.
 
 ## Commands
