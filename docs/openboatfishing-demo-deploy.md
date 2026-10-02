@@ -85,12 +85,15 @@ Every pushed branch, other than `main`, gets a Vercel Preview with its own URL *
 
 Setup, one time. Do it in this order, so that no preview build is ever left without a DB, and none ever points at prod:
 
-1. Vercel → Integrations → **Neon** → Add, and link it to the existing Neon project and this Vercel project.
-   - Enable **preview branches**.
-   - Enable **automatic deletion of obsolete branches**.
-   - Do **not** let it overwrite the Production `DATABASE_URL`.
+1. Install the **Neon-managed** integration. Start from Neon Console → `open-boat-fishing-prod` → Integrations → Vercel → Add, which opens the Vercel Marketplace page.
+   - Click Install and choose **Link Existing Neon Account**. Do **not** use the "Vercel Native" create-database flow, which makes a new, empty DB.
+   - Under Specific Projects, pick only `open-boat-fishing-web`.
+   - Choose Neon project `open-boat-fishing-prod`, branch `production`, database `neondb`, role `neondb_owner`.
+   - **Uncheck** "Create a branch for the development environment" (local dev uses its own DB).
+   - **Check** "Automatically delete obsolete Neon branches".
+   - The integration writes `DATABASE_URL` (pooled, `-pooler` host) and `DATABASE_URL_UNPOOLED` (direct) for Production, and injects per-branch values for each preview. Migrations use `DATABASE_URL_UNPOOLED` (`packages/db/drizzle.config.ts`).
 2. Vercel → Settings → Environment Variables. The integration may add Preview DB variables only when the first preview deploys, so don't treat an empty list here as failure. Step 5's host check is the real test.
-3. Edit the existing prod `DATABASE_URL` and **untick Preview**, so it is scoped to Production only.
+3. Remove any manually added `DATABASE_URL` / `DIRECT_DATABASE_URL` that has Preview ticked, so the only Preview DB values are the integration's per-branch ones. `DIRECT_DATABASE_URL` is no longer read.
 4. Scope `OPERATOR_ID` to **Preview** as well, with the same demo operator UUID. That UUID exists in every branch copied from prod. Without it, preview pages 404, because the per-deployment hostname isn't in `domains`. Also add a **separate Preview-scoped `SESSION_SECRET`**, generated fresh. The branch DB copies prod's staff and customers, and with a shared secret, a token minted on an (unreviewed) preview would be valid on prod.
 5. Push a throwaway branch. The build log should show `Running migrations (VERCEL_ENV=preview)`, and the Neon console should show a new `preview/<branch>` branch. The preview's `DATABASE_URL` host (`ep-…`) must differ from Production's.
 
