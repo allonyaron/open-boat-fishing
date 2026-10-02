@@ -19,10 +19,20 @@ function loadFixtures(): Fixtures {
   }
 }
 
-test("/book server-renders this month's trips", async ({ request }) => {
+// /book lists one month. "This month" can run out of bookable trips (the last
+// days of a month, or a weekend with no adult/child product), so target the
+// 15th of next month: fully in the future, and the demo seed has weekday trips
+// with an adult ticket type in every month through 2035.
+function nextMonthBookUrl(): string {
+  const now = new Date();
+  const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 15));
+  return `/book?date=${target.toISOString().slice(0, 10)}`;
+}
+
+test("/book server-renders the requested month's trips", async ({ request }) => {
   // Raw HTML, no JS: the trip list must come from the server render, not a
   // client fetch (P8-2 — the page loads its first month during SSR).
-  const res = await request.get("/book");
+  const res = await request.get(nextMonthBookUrl());
   expect(res.status()).toBe(200);
   const html = await res.text();
   expect(html).toMatch(/aria-label="One more (adult )?seat/);
@@ -32,7 +42,7 @@ test("booking flow", async ({ page }, testInfo) => {
   const shot = screenshotter(testInfo);
 
   // ── 01  Trip list ──────────────────────────────────────────────────────────
-  await page.goto("/book");
+  await page.goto(nextMonthBookUrl());
   const addAdult = page.getByRole("button", { name: "One more adult seat" }).first();
   await expect(addAdult).toBeVisible();
   await page.screenshot({ path: shot("01-trips") });
