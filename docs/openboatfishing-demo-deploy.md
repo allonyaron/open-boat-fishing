@@ -77,6 +77,29 @@ All in the **Production** environment. Anything marked "generate" should be crea
 
 > **Config vs Secret in Vercel:** `NEXT_PUBLIC_*` variables must be added as **Config** type (not Secret). Secrets are write-only and not exposed during build, so `NEXT_PUBLIC_` substitution silently produces `undefined`. If you accidentally add one as Secret, you must delete it and re-add it as Config.
 
+> **`DATABASE_URL` is Production-only.** Never tick Preview on the prod `DATABASE_URL`. Previews get their own database from the Neon integration (see "Preview environment" below). If a preview build can't find a `DATABASE_URL`, it fails at env validation, which is the safe failure.
+
+### Preview environment (Neon ↔ Vercel integration)
+
+Every pushed branch, other than `main`, gets a Vercel Preview with its own URL **and its own Neon branch**. The Neon branch is a copy-on-write copy of prod made when the branch is first deployed. The preview build runs that git branch's migrations against its own copy, never against prod (`apps/web/vercel.json` migrates when `VERCEL_ENV` is `production` or `preview`, and skips otherwise).
+
+Setup, one time. Do it in this order, so that no preview build is ever left without a DB, and none ever points at prod:
+
+1. Vercel → Integrations → **Neon** → Add, and link it to the existing Neon project and this Vercel project.
+   - Enable **preview branches**.
+   - Enable **automatic deletion of obsolete branches**.
+   - Do **not** let it overwrite the Production `DATABASE_URL`.
+2. Vercel → Settings → Environment Variables. Check that the integration added Preview-scoped DB variables.
+3. Edit the existing prod `DATABASE_URL` and **untick Preview**, so it is scoped to Production only.
+4. Scope `OPERATOR_ID` to **Preview** as well, with the same demo operator UUID. That UUID exists in every branch copied from prod. Without it, preview pages 404, because the per-deployment hostname isn't in `domains`.
+5. Push a throwaway branch. The build log should show `Running migrations (VERCEL_ENV=preview)`, and the Neon console should show a new `preview/<branch>` branch. The preview's `DATABASE_URL` host (`ep-…`) must differ from Production's.
+
+Lifecycle: push → Neon branch created. Further pushes to the same git branch reuse it. When the PR is merged, GitHub deletes the head branch automatically, and the Neon integration then deletes the Neon branch. Delete abandoned git branches so their Neon branches don't count against the plan's branch limit.
+
+Known preview limitation: the Stripe webhook is registered for `openboatfishing.com`, so a test payment made on a preview sends `payment_intent.succeeded` to prod, which doesn't have that booking. Preview bookings stay `pending`. Browsing, cart, admin and the payment form all work.
+
+**Client deployments** (separate Vercel projects, e.g. captree.com) share this repo's `vercel.json`. They should build Production only. In each client project, set Settings → Git → Ignored Build Step to `[ "$VERCEL_ENV" != "production" ]` (exit 0 = skip), so no push to a branch ever builds against or migrates a client's DB.
+
 `DEMO_MODE=true` is the switch that identifies this as the demo deployment. It:
 
 - Renders the yellow "Live demo" banner at the top of every page

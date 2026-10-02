@@ -1,5 +1,5 @@
 {
-  "buildCommand": "(cd ../.. && pnpm --filter @openboat/db migrate) && next build",
+  "buildCommand": "case \"$VERCEL_ENV\" in production|preview) echo \"Running migrations (VERCEL_ENV=$VERCEL_ENV)\" && (cd ../.. && pnpm --filter @openboat/db migrate) ;; *) echo \"Skipping migrations (VERCEL_ENV=${VERCEL_ENV:-unset})\" ;; esac && next build",
   "crons": [
     { "path": "/api/cron/expire-pending-bookings", "schedule": "0 2 * * *" },
     { "path": "/api/cron/trip-reminders", "schedule": "0 9 * * *" }
