@@ -5,8 +5,10 @@ export default defineConfig({
   out: "./migrations",
   dialect: "postgresql",
   dbCredentials: {
-    // Prefer DIRECT_DATABASE_URL (non-pooler) for migrations — PgBouncer can
-    // interfere with migration transactions. Falls back to DATABASE_URL in local dev.
-    url: (process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL)!,
+    // Prefer a direct (non-pooler) URL for migrations — PgBouncer can interfere
+    // with migration transactions. DATABASE_URL_UNPOOLED is set per environment
+    // (including each preview branch) by the Neon ↔ Vercel integration. Falls
+    // back to DATABASE_URL in local dev.
+    url: (process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL)!,
   },
 });
