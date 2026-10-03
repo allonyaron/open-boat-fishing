@@ -16,6 +16,7 @@ vi.mock("@/lib/stripe", () => ({
 
 import { stripe } from "@/lib/stripe";
 import { POST, GET } from "@/app/api/bookings/route";
+import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
 
 let ctx: SeedResult;
 let ipCounter = 0;
@@ -249,6 +250,15 @@ describe("POST /api/bookings — success", () => {
     expect(body.groupDiscountCents).toBe(0);
     expect(body.holdExpiresAt).toBeDefined();
     createdBookingId = body.bookingId;
+  });
+
+  it("pins the PaymentIntent to the allowed payment-method types (P2-5)", () => {
+    // The PI created by the previous test.
+    const params = vi.mocked(stripe.paymentIntents.create).mock.lastCall![0]!;
+    expect(params.payment_method_types).toEqual(["card"]);
+    expect(params.payment_method_types).toEqual([...ALLOWED_PAYMENT_METHOD_TYPES]);
+    // Can't be combined with payment_method_types, and would hand the choice back to Dashboard settings.
+    expect(params).not.toHaveProperty("automatic_payment_methods");
   });
 
   it("decrements seatsRemaining on the trip", async () => {

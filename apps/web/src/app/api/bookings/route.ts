@@ -17,6 +17,7 @@ import { randomBytes, randomUUID } from "crypto";
 import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { getOperatorContext, getOperatorId } from "@/lib/operator";
 import { cancelPendingBooking } from "@/lib/bookings/cancel";
+import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
 import { z } from "zod";
 
 const PLATFORM_FEE_CENTS = 150; // $1.50 per ticket
@@ -333,7 +334,8 @@ export async function POST(req: NextRequest) {
     paymentIntent = await stripe.paymentIntents.create({
       amount: totalCents,
       currency: "usd",
-      automatic_payment_methods: { enabled: true },
+      // Pinned so Dashboard settings can't enable a delayed-settlement method (P2-5).
+      payment_method_types: [...ALLOWED_PAYMENT_METHOD_TYPES],
       transfer_data: { destination: operator.stripeAccountId },
       application_fee_amount: booking.platformFeeCents,
       metadata: {

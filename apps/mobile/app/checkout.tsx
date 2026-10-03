@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useStripe } from "@stripe/stripe-react-native";
+import { PaymentSheet, useStripe } from "@stripe/stripe-react-native";
 import { MMKV } from "react-native-mmkv";
 import { API_URL } from "@/lib/api";
 import { color, font, ls, space, tracking } from "@/constants/nativeTokens";
@@ -166,6 +166,9 @@ export default function CheckoutScreen() {
         paymentIntentClientSecret: clientSecret,
         defaultBillingDetails: { name: cleanName, email: cleanEmail, phone: cleanPhone },
         allowsDelayedPaymentMethods: false,
+        // Card only (P2-5): the PI is pinned to ["card"], but PaymentSheet would
+        // still offer Link as a wallet.
+        link: { display: PaymentSheet.LinkDisplay.NEVER },
       });
 
       if (initError) {
