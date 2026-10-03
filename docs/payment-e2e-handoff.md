@@ -9,10 +9,37 @@ This doc covers what you and Claude each need to do to close that gap properly.
 ## Order of work
 
 1. **Launch blockers #3 (P8-2) and #4 (P2-1)**: in progress, independent of this.
-2. **Launch blocker #5 (P2-5)**, in its own session. It pins the allowed payment methods on the PaymentIntent
-   and in `Elements`. That decides which tabs the Payment Element shows, so the spec below must be written
-   against the result.
+2. **Launch blocker #5 (P2-5)**: done on `fix/p2-5-pin-payment-methods`. See "Allowed payment methods" below.
 3. **This work**, in its own session, once P2-5 is merged.
+
+## Allowed payment methods (set by P2-5)
+
+**`["card"]` only.** The list is `ALLOWED_PAYMENT_METHOD_TYPES` in `apps/web/src/lib/payment-methods.ts`.
+Import it in the spec; don't hardcode the list.
+
+- **PaymentIntent** (`POST /api/bookings`): `payment_method_types: ["card"]`, with no `automatic_payment_methods`.
+  This applies to mobile too, which confirms the same PI.
+- **Web Elements** (`CheckoutClient.tsx`): `paymentMethodTypes: ["card"]`.
+- **Link is off** (product decision, 2026-10-02). A card-only intent still shows Link as a *card wallet*.
+  On the platform's test account, Link's funding sources then add **Bank** (Instant Bank Payments, with a
+  "$5 back" promo) and **Klarna** tabs. So `PaymentElement` passes `wallets: { link: "never" }`, and mobile
+  PaymentSheet passes `link: { display: NEVER }`.
+- **Apple Pay / Google Pay** still appear where the browser supports them. They're card wallets, and the
+  resulting PaymentMethod is a `card`. Headless Chromium shows neither.
+- **What the Payment Element renders:** card fields only. No tabs, no Link email or OTP step. The fields
+  are Card number, Expiration date, Security code, Country, and ZIP code.
+
+**Verified 2026-10-03** with a real test-mode payment (4242, local dev server, scratch DB, demo operator's
+test connected account). It redirected to `/booking/delivery?…&redirect_status=succeeded`. The PI came back
+`succeeded`, with `payment_method_types: ["card"]`, `automatic_payment_methods: null`,
+`application_fee_amount: 150`, and `transfer_data.destination` set to the connected account.
+
+Selector notes from that run, for the iframe helper:
+- **Two iframes match the title.** There are two `iframe[title="Secure payment input frame"]`. The first
+  is the one with the card inputs, but select by content (`getByLabel(/card number/i)`), not by index.
+- **CVC needs a role selector.** `getByLabel(/security code|cvc/i)` matches both the input and a CVC icon
+  `<svg aria-label>`. Use `getByRole("textbox", { name: "Security code" })`.
+- **ZIP code is shown** (Country defaults to United States). Fill it.
 
 ## You: before the session
 
@@ -71,7 +98,7 @@ New test: **"pays with a test card and gets confirmed tickets"**.
   3. Retrieve the PaymentIntent with the `stripe` SDK (already a web dependency) and check:
      - `transfer_data.destination` is the connected account;
      - `application_fee_amount` is `150 × tickets` (CLAUDE.md invariants);
-     - `payment_method_types` matches what P2-5 pinned.
+     - `payment_method_types` equals `[...ALLOWED_PAYMENT_METHOD_TYPES]` (`["card"]`).
   4. `/boarding/{bookingId}` shows one `QR code for ticket …` image per ticket.
 - **Also cover a decline:** card `4000 0000 0000 0002` shows the error inline, stays on `/checkout`, and
   leaves the booking `pending`. Restoring the seats is the expiry cron's job, which is already unit-tested.
@@ -88,9 +115,8 @@ New test: **"pays with a test card and gets confirmed tickets"**.
 
 ## Known risks
 
-- **Stripe Link.** If P2-5 keeps `link` in the allowed methods, the Payment Element may show a Link email or
-  OTP step. Use a fresh email (as above), which shouldn't match a Link account. If the step still appears,
-  handle it explicitly rather than with a timeout.
+- **Stripe Link.** It's off (see "Allowed payment methods"), so no Link step should appear. If one does,
+  `wallets: { link: "never" }` has regressed. Fail the test; don't add handling for the step.
 - **Payment Element labels.** They're Stripe's, not ours, and can change between Stripe.js versions. Keep the
   iframe selectors in one helper.
 - **Test-mode clutter.** Every CI run leaves PaymentIntents and customers in the platform's test account.
@@ -100,4 +126,4 @@ New test: **"pays with a test card and gets confirmed tickets"**.
 
 ## Status
 
-Not started. Blocked on P2-5 and on U1–U4.
+Not started. Blocked on P2-5 merging and on U1–U4.
