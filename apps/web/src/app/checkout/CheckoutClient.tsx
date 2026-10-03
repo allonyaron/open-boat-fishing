@@ -7,6 +7,7 @@ import { CheckoutForm } from "./CheckoutForm";
 import posthog from "posthog-js";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
 import { BookingNav } from "@/components/BookingCalendar";
+import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -98,6 +99,8 @@ function CheckoutInner({
           mode: "payment",
           amount: totalCents,
           currency: "usd",
+          // Must match the PaymentIntent's payment_method_types (P2-5).
+          paymentMethodTypes: [...ALLOWED_PAYMENT_METHOD_TYPES],
           appearance: {
             theme: "flat",
             variables: {

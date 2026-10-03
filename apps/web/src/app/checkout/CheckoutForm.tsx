@@ -362,7 +362,9 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
         PAYMENT
       </div>
       <div style={{ background: "#fff", border: "1px solid #cdd6da", padding: 20 }}>
-        <PaymentElement options={{ layout: "tabs" }} />
+        {/* Link is off (P2-5). Without this, a card-only intent still shows Link as a
+            wallet, and Link's funding sources add "Bank" and "Klarna" tabs. */}
+        <PaymentElement options={{ layout: "tabs", wallets: { link: "never" } }} />
       </div>
 
       <div style={{ minHeight: 52, marginTop: 16 }}>
