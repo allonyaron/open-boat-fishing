@@ -30,7 +30,8 @@ trips                                                       ✅ in schema
   duration_day        int not null default 0   -- multi-day trips: duration on the trip,
   duration_hr         int                      -- NOT a spanning calendar entity
   duration_min        int
-  online_cutoff       timestamptz null   -- online booking closes
+  online_cutoff       timestamptz null   -- DEPRECATED, never read; drop in a follow-up deploy
+  online_cutoff_minutes int null         -- per-trip override of operators.online_cutoff_minutes; null = default
   deposit_percentage  int null           -- null = pay in full
 
 tickets                                                     ✅ in schema
@@ -42,6 +43,7 @@ operators                                                   ✅ in schema
   fee_display         enum('itemized','folded')    not null default 'itemized'
   cancel_window_hrs   int not null default 48   -- customer self-cancel cutoff
   settle_grace_hrs    int not null default 48   -- departure → earned; absorbs late cancellations
+  online_cutoff_minutes int not null default 30 -- online sales close this long before start_time (0 = at departure)
 ```
 
 ---

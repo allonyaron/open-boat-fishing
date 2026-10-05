@@ -212,7 +212,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
     }
   }
 
-  async function saveOperatorField(field: keyof Operator, value: string | number | null) {
+  async function saveOperatorField(field: keyof Operator, value: string | number | null): Promise<boolean> {
     const res = await fetch("/api/admin/settings/operator", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -220,9 +220,10 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
     });
     if (!res.ok) {
       showToast("Couldn't save that change.");
-      return;
+      return false;
     }
     setOperator((prev) => (prev ? { ...prev, [field]: value } : prev));
+    return true;
   }
 
   if (error) {
@@ -444,7 +445,7 @@ function BusinessCard({
   onSaveField,
 }: {
   operator: Operator;
-  onSaveField: (field: keyof Operator, value: string | number | null) => Promise<void>;
+  onSaveField: (field: keyof Operator, value: string | number | null) => Promise<boolean>;
 }) {
   return (
     <Card>
@@ -508,7 +509,7 @@ function AutoSaveField({
   value: string | number;
   type?: string;
   placeholder?: string;
-  onSave: (field: keyof Operator, value: string | number | null) => Promise<void>;
+  onSave: (field: keyof Operator, value: string | number | null) => Promise<boolean>;
 }) {
   const [local, setLocal] = useState(String(value));
   const [saved, setSaved] = useState(false);
@@ -519,7 +520,10 @@ function AutoSaveField({
     if (local === String(value)) return;
     const out: string | number | null =
       type === "number" ? (local === "" ? null : Number(local)) : local === "" ? null : local;
-    await onSave(field, out);
+    if (!(await onSave(field, out))) {
+      setLocal(String(value)); // rejected: show the value that's still saved
+      return;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   }
