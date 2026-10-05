@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
+import { seedOperator, setTripDeparture, cleanupOperator, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { operators, trips, bookings, bookingItems, tickets } from "@openboat/db";
 import { eq, inArray } from "drizzle-orm";
@@ -59,6 +59,8 @@ beforeAll(async () => {
     .update(operators)
     .set({ stripeAccountId: "acct_test_fake", stripeOnboardingComplete: true })
     .where(eq(operators.id, ctx.operatorId));
+  // The seeded trip left at 7 AM ET; move it out of the past (P2-1).
+  await setTripDeparture(ctx.tripId, 3 * 3_600_000);
 });
 
 afterAll(async () => {

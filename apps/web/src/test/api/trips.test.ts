@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { NextRequest } from "next/server";
 import { GET } from "@/app/api/trips/route";
-import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
+import { seedOperator, setTripDeparture, cleanupOperator, testDb } from "../db-helpers";
 import { trips } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
@@ -10,6 +10,8 @@ const month = new Date().toISOString().slice(0, 7); // current YYYY-MM
 
 beforeAll(async () => {
   ctx = await seedOperator();
+  // The seeded trip left at 7 AM ET; move it out of the past (P2-1).
+  await setTripDeparture(ctx.tripId, 3 * 3_600_000);
 });
 
 afterAll(async () => {

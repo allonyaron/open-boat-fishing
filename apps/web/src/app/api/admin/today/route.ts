@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
       startTime: trips.startTime,
       endTime: trips.endTime,
       capacity: trips.capacity,
+      onlineCutoffMinutes: trips.onlineCutoffMinutes,
       status: trips.status,
       vessel: { name: vessels.name, color: vessels.color },
       product: { displayName: products.displayName },

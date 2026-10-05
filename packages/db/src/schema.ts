@@ -11,8 +11,9 @@ import {
   jsonb,
   unique,
   index,
+  check,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -63,9 +64,14 @@ export const operators = pgTable("operators", {
   feeDisplay: feeDisplayEnum("fee_display").notNull().default("itemized"),
   cancelWindowHrs: integer("cancel_window_hrs").notNull().default(48),
   settleGraceHrs: integer("settle_grace_hrs").notNull().default(48),
+  // Online sales stop this many minutes before departure. A trip can override
+  // it with trips.online_cutoff_minutes. 0 = sales run right up to departure.
+  onlineCutoffMinutes: integer("online_cutoff_minutes").notNull().default(30),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (t) => [
+  check("operators_online_cutoff_minutes_check", sql`${t.onlineCutoffMinutes} >= 0`),
+]);
 
 // ─── Vessels ──────────────────────────────────────────────────────────────────
 
@@ -197,13 +203,17 @@ export const trips = pgTable("trips", {
   durationDay: integer("duration_day").notNull().default(0),
   durationHr: integer("duration_hr"),
   durationMin: integer("duration_min"),
+  // Deprecated: never read or written. Superseded by onlineCutoffMinutes; drop
+  // in a follow-up deploy once no running code selects it (expand, then contract).
   onlineCutoff: timestamp("online_cutoff", { withTimezone: true }),
+  onlineCutoffMinutes: integer("online_cutoff_minutes"), // null = operator default
   depositPercentage: integer("deposit_percentage"), // null = pay in full
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [
   unique().on(t.scheduleId, t.departureDate),
   index("trips_operator_date_idx").on(t.operatorId, t.departureDate),
+  check("trips_online_cutoff_minutes_check", sql`${t.onlineCutoffMinutes} >= 0`),
 ]);
 
 // ─── Trip Overrides ───────────────────────────────────────────────────────────

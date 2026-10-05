@@ -276,3 +276,52 @@ describe("PATCH /api/admin/trips/[tripId] — capacity", () => {
     expect(body.seatsRemaining).toBe(before.seatsRemaining + 5);
   });
 });
+
+describe("PATCH /api/admin/trips/[tripId] — online sales cutoff override (P2-1)", () => {
+  async function patch(body: object) {
+    const { PATCH } = await import("@/app/api/admin/trips/[tripId]/route");
+    return PATCH(patchReq(`/api/admin/trips/${ctx.tripId}`, body), { params: { tripId: ctx.tripId } });
+  }
+  async function stored() {
+    const [row] = await testDb
+      .select({ capacity: trips.capacity, onlineCutoffMinutes: trips.onlineCutoffMinutes })
+      .from(trips)
+      .where(eq(trips.id, ctx.tripId));
+    return row;
+  }
+
+  it("returns 400 when neither capacity nor onlineCutoffMinutes is sent", async () => {
+    expect((await patch({})).status).toBe(400);
+  });
+
+  it("returns 400 for a negative or non-integer override", async () => {
+    expect((await patch({ onlineCutoffMinutes: -5 })).status).toBe(400);
+    expect((await patch({ onlineCutoffMinutes: 2.5 })).status).toBe(400);
+    expect((await patch({ onlineCutoffMinutes: "" })).status).toBe(400);
+  });
+
+  it("sets the override alone without touching capacity", async () => {
+    const before = await stored();
+    const res = await patch({ onlineCutoffMinutes: 90 });
+    expect(res.status).toBe(200);
+    expect((await res.json()).onlineCutoffMinutes).toBe(90);
+    expect(await stored()).toEqual({ capacity: before.capacity, onlineCutoffMinutes: 90 });
+  });
+
+  it("accepts 0 (sell until departure) as an override", async () => {
+    expect((await patch({ onlineCutoffMinutes: 0 })).status).toBe(200);
+    expect((await stored()).onlineCutoffMinutes).toBe(0);
+  });
+
+  it("clears the override with null", async () => {
+    expect((await patch({ onlineCutoffMinutes: null })).status).toBe(200);
+    expect((await stored()).onlineCutoffMinutes).toBeNull();
+  });
+
+  it("updates capacity and the override together", async () => {
+    const before = await stored();
+    const res = await patch({ capacity: before.capacity + 1, onlineCutoffMinutes: 45 });
+    expect(res.status).toBe(200);
+    expect(await stored()).toEqual({ capacity: before.capacity + 1, onlineCutoffMinutes: 45 });
+  });
+});

@@ -156,6 +156,21 @@ export async function seedOperator(): Promise<SeedResult> {
   };
 }
 
+/**
+ * Move a trip's departure to `msFromNow` from now (an 8-hour trip). The seeded
+ * trip leaves at 7 AM ET today, which is already past for most of the day, and
+ * departed trips can't be listed or booked (P2-1). departureDate is left alone
+ * so month/day-scoped queries still find the trip.
+ */
+export async function setTripDeparture(tripId: string, msFromNow: number) {
+  const startTime = new Date(Date.now() + msFromNow);
+  await testDb
+    .update(trips)
+    .set({ startTime, endTime: new Date(startTime.getTime() + 8 * 3_600_000) })
+    .where(eq(trips.id, tripId));
+  return startTime;
+}
+
 export type BookingSeedResult = {
   bookingId: string;
   bookingItemId: string;

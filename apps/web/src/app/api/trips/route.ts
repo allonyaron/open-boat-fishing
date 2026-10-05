@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getOperatorId } from "@/lib/operator";
+import { onlineSalesOpenSql } from "@/lib/trips/online-sales";
 
 export async function GET(req: NextRequest) {
   const month = req.nextUrl.searchParams.get("month");
@@ -26,6 +27,8 @@ export async function GET(req: NextRequest) {
         gte(t.departureDate, startDate),
         lte(t.departureDate, endDate),
         eq(t.status, "scheduled"),
+        // Departed trips, and trips past their online-sales cutoff, aren't bookable.
+        onlineSalesOpenSql(t),
       ),
     with: {
       vessel: true,

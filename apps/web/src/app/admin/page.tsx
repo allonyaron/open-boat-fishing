@@ -13,6 +13,7 @@ import {
   useToast,
   CancelDialog,
   SeatsDialog,
+  type TripSettings,
   AddDepartureDialog,
   type TripRowData,
   type ProductOption,
@@ -30,7 +31,7 @@ type TodayResponse = {
 
 type DialogState =
   | { type: "cancel"; tripId: string }
-  | { type: "seats"; tripId: string; currentCapacity: number }
+  | { type: "seats"; tripId: string; currentCapacity: number; currentCutoffMinutes: number | null }
   | { type: "addDeparture" }
   | null;
 
@@ -117,20 +118,20 @@ export default function TodayPage() {
     }
   }
 
-  async function submitSeats(tripId: string, capacity: number) {
+  async function submitSeats(tripId: string, settings: TripSettings) {
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/trips/${tripId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ capacity }),
+        body: JSON.stringify(settings),
       });
       const body = await res.json();
       if (!res.ok) {
         showToast(body.error ?? "Couldn't update seats.");
         return;
       }
-      showToast(`Seats updated — ${capacity} total.`);
+      showToast(`Trip updated — ${settings.capacity} seats.`);
       setDialog(null);
       await refreshAfterAction();
     } finally {
@@ -184,7 +185,12 @@ export default function TodayPage() {
     onWhosComing: (tripId: string) => router.push(`/admin/trips/${tripId}/passengers`),
     onSeats: (tripId: string) => {
       const trip = todayTrips.find((t) => t.id === tripId);
-      if (trip) setDialog({ type: "seats", tripId, currentCapacity: trip.capacity });
+      if (trip) setDialog({
+          type: "seats",
+          tripId,
+          currentCapacity: trip.capacity,
+          currentCutoffMinutes: trip.onlineCutoffMinutes,
+        });
     },
     onCancel: (tripId: string) => setDialog({ type: "cancel", tripId }),
   };
@@ -282,8 +288,9 @@ export default function TodayPage() {
         open={dialog?.type === "seats"}
         busy={busy}
         currentCapacity={dialog?.type === "seats" ? dialog.currentCapacity : 0}
+        currentCutoffMinutes={dialog?.type === "seats" ? dialog.currentCutoffMinutes : null}
         onClose={() => setDialog(null)}
-        onConfirm={(capacity) => dialog?.type === "seats" && submitSeats(dialog.tripId, capacity)}
+        onConfirm={(settings) => dialog?.type === "seats" && submitSeats(dialog.tripId, settings)}
       />
       <AddDepartureDialog
         open={dialog?.type === "addDeparture"}

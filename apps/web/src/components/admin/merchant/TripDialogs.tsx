@@ -57,21 +57,32 @@ export function CancelDialog({
   );
 }
 
+export type TripSettings = { capacity: number; onlineCutoffMinutes: number | null };
+
 export function SeatsDialog({
   open,
   busy,
   currentCapacity,
+  currentCutoffMinutes,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   busy: boolean;
   currentCapacity: number;
+  currentCutoffMinutes: number | null;
   onClose: () => void;
-  onConfirm: (capacity: number) => void;
+  onConfirm: (settings: TripSettings) => void;
 }) {
   const [value, setValue] = useState(currentCapacity);
+  // Blank = no override; the trip follows the default set in Settings.
+  const [cutoff, setCutoff] = useState(currentCutoffMinutes === null ? "" : String(currentCutoffMinutes));
   useEffect(() => setValue(currentCapacity), [currentCapacity, open]);
+  useEffect(
+    () => setCutoff(currentCutoffMinutes === null ? "" : String(currentCutoffMinutes)),
+    [currentCutoffMinutes, open],
+  );
+  const cutoffValid = cutoff === "" || (Number.isInteger(Number(cutoff)) && Number(cutoff) >= 0);
   return (
     <Dialog
       open={open}
@@ -82,15 +93,35 @@ export function SeatsDialog({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={() => onConfirm(value)} disabled={busy || value < 1}>
-            Save seats
+          <Button
+            variant="primary"
+            onClick={() =>
+              onConfirm({ capacity: value, onlineCutoffMinutes: cutoff === "" ? null : Number(cutoff) })
+            }
+            disabled={busy || value < 1 || !cutoffValid}
+          >
+            Save
           </Button>
         </>
       }
     >
       <Label htmlFor="seats">Seats</Label>
       <Input id="seats" type="number" min={1} value={value} onChange={(e) => setValue(Number(e.target.value))} />
-      <p className="mt-2 text-13 text-merchant-muted">Just this one trip. Your weekly schedule stays as it is.</p>
+      <div className="mt-4">
+        <Label htmlFor="online-cutoff">Stop online sales (minutes before departure)</Label>
+        <Input
+          id="online-cutoff"
+          type="number"
+          min={0}
+          value={cutoff}
+          placeholder="Use my default"
+          onChange={(e) => setCutoff(e.target.value)}
+        />
+      </div>
+      <p className="mt-2 text-13 text-merchant-muted">
+        Just this one trip. Your weekly schedule stays as it is. Leave online sales blank to use the default from
+        Settings.
+      </p>
     </Dialog>
   );
 }

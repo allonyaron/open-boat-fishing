@@ -28,7 +28,7 @@ export async function PATCH(req: NextRequest) {
   const allowed = [
     "name", "emailFrom", "emailDomain", "phone", "dockAddress", "dockMapsUrl",
     "arriveMinutesBefore", "termsUrl", "twilioFromNumber", "feeBearer", "feeDisplay",
-    "cancelWindowHrs", "settleGraceHrs",
+    "cancelWindowHrs", "settleGraceHrs", "onlineCutoffMinutes",
   ] as const;
 
   const patch: Record<string, unknown> = { updatedAt: new Date() };
@@ -58,6 +58,16 @@ export async function PATCH(req: NextRequest) {
     if (!Number.isInteger(v) || v < 0)
       return NextResponse.json({ error: "settleGraceHrs must be a non-negative integer" }, { status: 400 });
     patch.settleGraceHrs = v;
+  }
+
+  if ("onlineCutoffMinutes" in patch) {
+    // A cleared field arrives as null; Number(null) is 0, which would silently
+    // switch the operator to "sell until departure".
+    const raw = patch.onlineCutoffMinutes;
+    const v = raw === null || raw === "" ? NaN : Number(raw);
+    if (!Number.isInteger(v) || v < 0)
+      return NextResponse.json({ error: "onlineCutoffMinutes must be a non-negative integer" }, { status: 400 });
+    patch.onlineCutoffMinutes = v;
   }
 
   const [updated] = await db

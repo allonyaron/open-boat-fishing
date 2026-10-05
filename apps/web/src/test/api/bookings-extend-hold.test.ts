@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { NextRequest } from "next/server";
-import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
+import { seedOperator, setTripDeparture, cleanupOperator, seedBooking, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { bookings, rateLimits } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -9,6 +9,8 @@ let ctx: SeedResult;
 
 beforeAll(async () => {
   ctx = await seedOperator();
+  // The seeded trip left at 7 AM ET; move it out of the past (P2-1).
+  await setTripDeparture(ctx.tripId, 3 * 3_600_000);
 });
 
 afterAll(async () => {
@@ -99,6 +101,36 @@ describe("PATCH /api/bookings/[bookingId]/extend-hold", () => {
     const diffMin = (newExpiry - Date.now()) / 60_000;
     expect(diffMin).toBeGreaterThan(2.5);
     expect(diffMin).toBeLessThan(3.5);
+  });
+
+  it("caps the extension at the trip's departure (P2-1)", async () => {
+    const departure = await setTripDeparture(ctx.tripId, 2 * 60 * 1000);
+    try {
+      const { bookingId } = await seedBooking(ctx, {
+        status: "pending",
+        holdExpiresAt: new Date(Date.now() + 30_000),
+      });
+      const res = await call(bookingId, { ip: "10.3.0.9" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(new Date(body.holdExpiresAt).getTime()).toBe(departure.getTime());
+    } finally {
+      await setTripDeparture(ctx.tripId, 3 * 3_600_000);
+    }
+  });
+
+  it("returns 409 once the trip has departed (P2-1)", async () => {
+    await setTripDeparture(ctx.tripId, -60 * 1000);
+    try {
+      const { bookingId } = await seedBooking(ctx, {
+        status: "pending",
+        holdExpiresAt: new Date(Date.now() + 30_000),
+      });
+      const res = await call(bookingId, { ip: "10.3.0.10" });
+      expect(res.status).toBe(409);
+    } finally {
+      await setTripDeparture(ctx.tripId, 3 * 3_600_000);
+    }
   });
 
   it("returns 429 on the 11th request from the same IP within 15 minutes", async () => {

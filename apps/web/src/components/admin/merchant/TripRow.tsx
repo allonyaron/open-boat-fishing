@@ -9,6 +9,8 @@ export type TripRowData = {
   startTime: string;
   endTime: string;
   capacity: number;
+  /** Per-trip online-sales cutoff; null = the operator's default applies. */
+  onlineCutoffMinutes: number | null;
   ticketsSold: number;
   status: string;
   scheduleId: string | null;

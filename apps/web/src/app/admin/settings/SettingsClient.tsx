@@ -60,6 +60,7 @@ type Operator = {
   dockAddress: string | null;
   arriveMinutesBefore: number | null;
   cancelWindowHrs: number;
+  onlineCutoffMinutes: number;
   termsUrl: string | null;
 };
 
@@ -467,6 +468,18 @@ function BusinessCard({
           value={operator.cancelWindowHrs}
           onSave={onSaveField}
         />
+        <div>
+          <AutoSaveField
+            label="Stop online sales (minutes before departure)"
+            field="onlineCutoffMinutes"
+            type="number"
+            value={operator.onlineCutoffMinutes}
+            onSave={onSaveField}
+          />
+          <p className="mt-1 text-12 text-merchant-faint">
+            Applies to every trip unless the trip sets its own. 0 = sell until departure.
+          </p>
+        </div>
         <div className="sm:col-span-2">
           <AutoSaveField
             label="Refund & cancellation policy link"
