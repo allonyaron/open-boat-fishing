@@ -18,6 +18,7 @@ import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib
 import { getOperatorContext, getOperatorId } from "@/lib/operator";
 import { cancelPendingBooking } from "@/lib/bookings/cancel";
 import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
+import { isOnlineSalesOpen } from "@/lib/trips/online-sales";
 import { z } from "zod";
 
 const PLATFORM_FEE_CENTS = 150; // $1.50 per ticket
@@ -123,9 +124,16 @@ export async function POST(req: NextRequest) {
           throw Object.assign(new Error("One or more trips not found"), { httpStatus: 404 });
         }
 
+        // One clock for every check in this request, read after the locks are held.
+        const now = new Date();
         for (const trip of tripRows) {
           if (trip.status !== "scheduled") {
             throw Object.assign(new Error("Trip is no longer available for booking"), {
+              httpStatus: 409,
+            });
+          }
+          if (!isOnlineSalesOpen(trip, operator.onlineCutoffMinutes, now)) {
+            throw Object.assign(new Error("Online sales for this trip have closed"), {
               httpStatus: 409,
             });
           }
@@ -233,7 +241,12 @@ export async function POST(req: NextRequest) {
           return afterDecrement < 4 || afterDecrement / trip.capacity < 0.15;
         });
         const holdMinutes = nearFull ? 10 : 60;
-        const holdExpiresAt = new Date(Date.now() + holdMinutes * 60 * 1000);
+        // A booking started before the cutoff may finish paying, but never after
+        // the boat leaves: cap the hold at the cart's earliest departure.
+        const earliestDepartureMs = Math.min(...tripRows.map((t) => t.startTime.getTime()));
+        const holdExpiresAt = new Date(
+          Math.min(now.getTime() + holdMinutes * 60 * 1000, earliestDepartureMs),
+        );
 
         const [booking] = await tx
           .insert(bookings)

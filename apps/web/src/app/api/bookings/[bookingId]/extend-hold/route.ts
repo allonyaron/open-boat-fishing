@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { bookings } from "@openboat/db";
-import { and, eq } from "drizzle-orm";
+import { bookings, bookingItems, trips } from "@openboat/db";
+import { and, eq, min } from "drizzle-orm";
 import { getOperatorId } from "@/lib/operator";
 import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
@@ -42,10 +42,23 @@ export async function PATCH(
     return NextResponse.json({ error: "Hold lifetime limit reached" }, { status: 409 });
   }
 
+  // Never extend past the boat leaving (P2-1): cap at the earliest departure.
+  const [{ earliestDeparture }] = await db
+    .select({ earliestDeparture: min(trips.startTime) })
+    .from(bookingItems)
+    .innerJoin(trips, eq(bookingItems.tripId, trips.id))
+    .where(and(eq(bookingItems.bookingId, bookingId), eq(trips.operatorId, operatorId)));
+  const departureMs = earliestDeparture ? earliestDeparture.getTime() : Infinity;
+  if (Date.now() >= departureMs) {
+    return NextResponse.json({ error: "Trip has already departed" }, { status: 409 });
+  }
+
   // Extend from whichever is later — current expiry or now — so a nearly-expired
   // hold still gets a full 5-minute window to complete the payment flow.
   const base = Math.max(booking.holdExpiresAt?.getTime() ?? Date.now(), Date.now());
-  const newExpiresAt = new Date(Math.min(base + EXTEND_MS, maxExpiresAt.getTime()));
+  const newExpiresAt = new Date(
+    Math.min(base + EXTEND_MS, maxExpiresAt.getTime(), departureMs),
+  );
 
   await db
     .update(bookings)

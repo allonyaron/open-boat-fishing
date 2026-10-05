@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
       endTime: trips.endTime,
       boardingTime: trips.boardingTime,
       capacity: trips.capacity,
+      onlineCutoffMinutes: trips.onlineCutoffMinutes,
       seatsRemaining: trips.seatsRemaining,
       status: trips.status,
       sailedAt: trips.sailedAt,

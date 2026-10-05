@@ -35,6 +35,7 @@ export type OperatorContext = Pick<
   | "feeDisplay"
   | "cancelWindowHrs"
   | "settleGraceHrs"
+  | "onlineCutoffMinutes"
   | "phone"
   | "dockAddress"
   | "dockMapsUrl"
@@ -54,6 +55,7 @@ const operatorContextFields = {
   feeDisplay: operators.feeDisplay,
   cancelWindowHrs: operators.cancelWindowHrs,
   settleGraceHrs: operators.settleGraceHrs,
+  onlineCutoffMinutes: operators.onlineCutoffMinutes,
   phone: operators.phone,
   dockAddress: operators.dockAddress,
   dockMapsUrl: operators.dockMapsUrl,

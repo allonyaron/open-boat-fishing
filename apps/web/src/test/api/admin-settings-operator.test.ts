@@ -90,6 +90,24 @@ describe("PATCH /api/admin/settings/operator", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 400 for a negative or cleared onlineCutoffMinutes", async () => {
+    const { PATCH } = await import("@/app/api/admin/settings/operator/route");
+    for (const v of [-1, 2.5, null, ""]) {
+      const res = await PATCH(patchReq("/api/admin/settings/operator", { onlineCutoffMinutes: v }));
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("returns 200 and updates onlineCutoffMinutes, including 0", async () => {
+    const { PATCH } = await import("@/app/api/admin/settings/operator/route");
+    for (const v of [45, 0]) {
+      const res = await PATCH(patchReq("/api/admin/settings/operator", { onlineCutoffMinutes: v }));
+      expect(res.status).toBe(200);
+      const [row] = await testDb.select().from(operators).where(eq(operators.id, ctx.operatorId));
+      expect(row.onlineCutoffMinutes).toBe(v);
+    }
+  });
+
   it("returns 200 and updates contact fields", async () => {
     const { PATCH } = await import("@/app/api/admin/settings/operator/route");
     const res = await PATCH(

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { trips, vessels, products, bookingItems, bookings, tickets, checkIns } from "@openboat/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 
 export async function GET(req: NextRequest, { params }: { params: { tripId: string } }) {
   const auth = await requireAdmin(req);
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: { tripId: stri
       status: trips.status,
       cancellationReason: trips.cancellationReason,
       cancelledAt: trips.cancelledAt,
+      onlineCutoffMinutes: trips.onlineCutoffMinutes,
       vessel: { id: vessels.id, name: vessels.name, color: vessels.color },
       product: { id: products.id, displayName: products.displayName, category: products.category },
     })
@@ -99,14 +101,41 @@ export async function PATCH(req: NextRequest, { params }: { params: { tripId: st
   const { session } = auth;
 
   const { tripId } = params;
-  const body = (await req.json().catch(() => ({}))) as { capacity?: unknown };
+  const body = (await req.json().catch(() => ({}))) as {
+    capacity?: unknown;
+    onlineCutoffMinutes?: unknown;
+  };
+
+  // Either field may be sent alone. onlineCutoffMinutes: null clears the
+  // override so the trip follows the operator default again.
+  const hasCapacity = "capacity" in body;
+  const hasCutoff = "onlineCutoffMinutes" in body;
+  if (!hasCapacity && !hasCutoff) {
+    return NextResponse.json({ error: "capacity or onlineCutoffMinutes is required" }, { status: 400 });
+  }
 
   const newCapacity = Number(body.capacity);
-  if (!Number.isInteger(newCapacity) || newCapacity < 1) {
+  if (hasCapacity && (!Number.isInteger(newCapacity) || newCapacity < 1)) {
     return NextResponse.json({ error: "capacity must be a positive integer" }, { status: 400 });
   }
 
-  let result = {} as { capacity: number; seatsRemaining: number; sold: number };
+  let newCutoff: number | null = null;
+  if (hasCutoff && body.onlineCutoffMinutes !== null) {
+    newCutoff = Number(body.onlineCutoffMinutes);
+    if (body.onlineCutoffMinutes === "" || !Number.isInteger(newCutoff) || newCutoff < 0) {
+      return NextResponse.json(
+        { error: "onlineCutoffMinutes must be a non-negative integer or null" },
+        { status: 400 },
+      );
+    }
+  }
+
+  let result = {} as {
+    capacity: number;
+    seatsRemaining: number;
+    sold?: number;
+    onlineCutoffMinutes: number | null;
+  };
 
   try {
     await db.transaction(async (tx) => {
@@ -120,29 +149,38 @@ export async function PATCH(req: NextRequest, { params }: { params: { tripId: st
       if (trip.status === "cancelled")
         throw Object.assign(new Error("Cannot edit a cancelled trip"), { status: 409 });
 
-      const [{ sold }] = await tx
-        .select({ sold: sql<number>`cast(count(*) as int)` })
-        .from(tickets)
-        .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
-        .where(and(eq(bookingItems.tripId, tripId), eq(tickets.voided, false)));
+      const set: PgUpdateSetSource<typeof trips> = { updatedAt: new Date() };
+      let sold: number | undefined;
 
-      if (newCapacity < sold)
-        throw Object.assign(
-          new Error(`Cannot set capacity below tickets already sold (${sold})`),
-          { status: 422 },
-        );
+      if (hasCapacity) {
+        [{ sold }] = await tx
+          .select({ sold: sql<number>`cast(count(*) as int)` })
+          .from(tickets)
+          .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
+          .where(and(eq(bookingItems.tripId, tripId), eq(tickets.voided, false)));
+
+        if (newCapacity < sold)
+          throw Object.assign(
+            new Error(`Cannot set capacity below tickets already sold (${sold})`),
+            { status: 422 },
+          );
+
+        set.capacity = newCapacity;
+        set.seatsRemaining = sql<number>`GREATEST(0, ${trips.seatsRemaining} + ${newCapacity - trip.capacity})`;
+      }
+      if (hasCutoff) set.onlineCutoffMinutes = newCutoff;
 
       const [updated] = await tx
         .update(trips)
-        .set({
-          capacity: newCapacity,
-          seatsRemaining: sql<number>`GREATEST(0, ${trips.seatsRemaining} + ${newCapacity - trip.capacity})`,
-          updatedAt: new Date(),
-        })
-        .where(eq(trips.id, tripId))
-        .returning({ seatsRemaining: trips.seatsRemaining });
+        .set(set)
+        .where(and(eq(trips.id, tripId), eq(trips.operatorId, session.operatorId)))
+        .returning({
+          capacity: trips.capacity,
+          seatsRemaining: trips.seatsRemaining,
+          onlineCutoffMinutes: trips.onlineCutoffMinutes,
+        });
 
-      result = { capacity: newCapacity, seatsRemaining: updated.seatsRemaining, sold };
+      result = { ...updated, sold };
     });
   } catch (err: unknown) {
     const e = err as { message?: string; status?: number };
