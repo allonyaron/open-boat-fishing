@@ -2,10 +2,26 @@ export const dynamic = "force-dynamic";
 
 import { BookingCalendar, type Trip } from "@/components/BookingCalendar";
 import { getOperatorRecord } from "@/lib/operator";
+import { currentMonthET, getTripsForMonth, isValidMonth, type MonthTrip } from "@/lib/trips/month";
 
-function currentMonth() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+// The calendar's Trip is the /api/trips JSON shape (ISO strings for times);
+// month navigation fetches that route, so the first month must match it.
+function toCalendarTrip(t: MonthTrip): Trip {
+  return {
+    id: t.id,
+    departureDate: t.departureDate,
+    startTime: t.startTime.toISOString(),
+    endTime: t.endTime.toISOString(),
+    capacity: t.capacity,
+    seatsRemaining: t.seatsRemaining,
+    vessel: { name: t.vessel.name, color: t.vessel.color, code: t.vessel.code },
+    product: {
+      category: t.product.category,
+      displayName: t.product.displayName,
+      showRemaining: t.product.showRemaining,
+      prices: t.product.prices.map((p) => ({ ticketType: p.ticketType, priceCents: p.priceCents })),
+    },
+  };
 }
 
 export default async function BookPage({
@@ -13,25 +29,25 @@ export default async function BookPage({
 }: {
   searchParams: { date?: string; trip?: string };
 }) {
+  const operator = await getOperatorRecord();
+  if (!operator) return null;
+
   const { date, trip } = searchParams;
-  // If a specific date is requested, fetch that month's trips
-  const month = date?.match(/^\d{4}-\d{2}-\d{2}$/) ? date.slice(0, 7) : currentMonth();
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
-  const [res, operator] = await Promise.all([
-    fetch(`${baseUrl}/api/trips?month=${month}`, { cache: "no-store" }),
-    getOperatorRecord(),
-  ]);
-  const trips: Trip[] = await res.json();
+  const initialDate =
+    date && /^\d{4}-\d{2}-\d{2}$/.test(date) && isValidMonth(date.slice(0, 7)) ? date : undefined;
+  // If a specific date is requested, open that date's month.
+  const month = initialDate?.slice(0, 7) ?? currentMonthET();
+  const trips = (await getTripsForMonth(operator.id, month)).map(toCalendarTrip);
 
   return (
     <BookingCalendar
       initialTrips={trips}
       initialMonth={month}
-      operatorName={operator?.name ?? "Fishing Charter"}
-      phone={operator?.phone ?? null}
-      dockAddress={operator?.dockAddress ?? null}
-      termsUrl={operator?.termsUrl ?? null}
-      initialDate={date?.match(/^\d{4}-\d{2}-\d{2}$/) ? date : undefined}
+      operatorName={operator.name}
+      phone={operator.phone}
+      dockAddress={operator.dockAddress}
+      termsUrl={operator.termsUrl}
+      initialDate={initialDate}
       initialTripId={trip}
     />
   );

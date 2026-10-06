@@ -3,6 +3,10 @@ import path from "path";
 
 export const FIXTURE_PATH = path.join("e2e", ".fixtures.json");
 
+// CI serves the app on a port other than 3000, so nothing can work only
+// because it happens to reach localhost:3000 (P8-2).
+export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+
 type Fixtures = { code: string | null; bookingId: string | null };
 
 export default async function globalSetup(): Promise<void> {
@@ -18,11 +22,11 @@ export default async function globalSetup(): Promise<void> {
   let res: Response;
   try {
     res = await fetch(
-      `http://localhost:3000/api/bookings?email=${encodeURIComponent(email)}&code=${code}`,
+      `${BASE_URL}/api/bookings?email=${encodeURIComponent(email)}&code=${code}`,
     );
   } catch {
     console.warn(
-      "\n[global-setup] Could not reach http://localhost:3000 — is the dev server running?" +
+      `\n[global-setup] Could not reach ${BASE_URL} — is the dev server running?` +
         "\n               Steps 08-delivery and 09-boarding will be skipped.\n",
     );
     write({ code: null, bookingId: null });
