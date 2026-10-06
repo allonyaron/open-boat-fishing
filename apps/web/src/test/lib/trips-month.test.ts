@@ -32,6 +32,9 @@ describe("getTripsForMonth", () => {
     const ids = (await getTripsForMonth(ctx.operatorId, month)).map((t) => t.id);
     expect(ids).toContain(ctx.tripId);
     expect(ids).not.toContain(other.tripId);
+    // ...and that trip is listable for its own operator.
+    const otherIds = (await getTripsForMonth(other.operatorId, month)).map((t) => t.id);
+    expect(otherIds).toContain(other.tripId);
   });
 
   it("includes vessel and active prices", async () => {
