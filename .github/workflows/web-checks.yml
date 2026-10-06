@@ -163,13 +163,12 @@ jobs:
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test_ci_placeholder"
           CRON_SECRET: "ci_cron_placeholder"
           RESEND_API_KEY: "re_ci_placeholder"
-          NEXT_PUBLIC_BASE_URL: "http://localhost:3000"
         run: |
           pnpm --filter @openboat/web build
-          nohup pnpm --filter @openboat/web start > "$RUNNER_TEMP/web-server.log" 2>&1 &
+          nohup pnpm --filter @openboat/web start -p 3100 > "$RUNNER_TEMP/web-server.log" 2>&1 &
           # /api/health runs `select 1`, so this also proves the app reaches the DB.
           for i in $(seq 1 60); do
-            if curl -sf http://localhost:3000/api/health; then exit 0; fi
+            if curl -sf http://localhost:3100/api/health; then exit 0; fi
             sleep 1
           done
           echo "Web app didn't become healthy in 60s"
@@ -181,6 +180,8 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium webkit
 
       - name: Booking flow (Playwright)
+        env:
+          E2E_BASE_URL: "http://localhost:3100"
         run: pnpm exec playwright test e2e/booking-flow.spec.ts
 
       - name: Upload Playwright results and server log

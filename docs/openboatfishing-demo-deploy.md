@@ -103,7 +103,6 @@ Known preview limitations:
 
 - **Webhooks go to prod.** The Stripe webhook is registered for `openboatfishing.com`, so a test payment made on a preview sends `payment_intent.succeeded` to prod. Prod doesn't have that booking, so it logs `booking not found` and returns 200 (Stripe doesn't retry). Preview bookings stay `pending`.
 - **The Stripe account is shared.** Previews use the same test keys, and the branch DB holds copies of prod's bookings with their real PaymentIntent IDs. Refunding a ticket or cancelling a trip on a preview **refunds the real test PI**, and the resulting `charge.refunded` webhook cancels the booking **on prod**. Test refunds and cancellations only on bookings created on that preview. Full isolation would need a separate Stripe test account with Preview-scoped keys.
-- **`/book` until CODE_REVIEW item 3 (P8-2) lands.** The page fetches its first month from `NEXT_PUBLIC_BASE_URL`. If that variable is Production-only, preview `/book` fetches `localhost` and returns 500. If it's also scoped to Preview, preview `/book` shows prod's trips and seat counts while the cart writes to the branch DB. The smoke test only hits `/api/health`, so CI stays green either way.
 
 **Client deployments** (separate Vercel projects, e.g. captree.com) share this repo's `vercel.json`. They should build Production only. In each client project, set Settings → Git → Ignored Build Step to `[ "$VERCEL_ENV" != "production" ]` (exit 0 = skip), so no push to a branch ever builds against or migrates a client's DB.
 

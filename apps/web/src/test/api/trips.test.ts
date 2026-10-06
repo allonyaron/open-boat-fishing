@@ -35,6 +35,11 @@ describe("GET /api/trips", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 400 for a month out of range", async () => {
+    const res = await GET(req({ month: "2026-13" }));
+    expect(res.status).toBe(400);
+  });
+
   it("returns trips for the seeded month", async () => {
     const res = await GET(req({ month }));
     expect(res.status).toBe(200);
