@@ -26,7 +26,12 @@ vi.mock("@/lib/stripe", () => ({
   },
 }));
 
+vi.mock("@/lib/push", () => ({
+  sendPushToEmails: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { stripe } from "@/lib/stripe";
+import { sendPushToEmails } from "@/lib/push";
 import { POST } from "@/app/api/bookings/route";
 
 let ctx: SeedResult;
@@ -98,6 +103,7 @@ beforeEach(async () => {
     status: "requires_payment_method",
   } as never);
   vi.mocked(stripe.paymentIntents.cancel).mockReset().mockResolvedValue({ status: "canceled" } as never);
+  vi.mocked(sendPushToEmails).mockClear();
 });
 
 /** Seeds a pending booking with one ticket, and takes its seat off the trip. */
@@ -130,6 +136,39 @@ describe("POST /api/bookings — reclaiming expired holds (P2-3)", () => {
     expect(await status(old.bookingId)).toBe("cancelled");
     expect(await seats(ctx.tripId)).toBe(0); // +1 reclaimed, -1 booked
     expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith("pi_old_expired");
+  });
+
+  it("tells the reclaimed hold's customer it expired (M10)", async () => {
+    await testDb.update(trips).set({ seatsRemaining: 1 }).where(eq(trips.id, ctx.tripId));
+    const old = await seedHold({ holdExpiresAt: EXPIRED() });
+    const [b] = await testDb.select().from(bookings).where(eq(bookings.id, old.bookingId));
+
+    const res = await POST(postReq(ctx.tripId));
+
+    expect(res.status).toBe(200);
+    expect(sendPushToEmails).toHaveBeenCalledTimes(1);
+    expect(sendPushToEmails).toHaveBeenCalledWith(
+      ctx.operatorId,
+      [b.customerEmail],
+      expect.objectContaining({
+        title: "Booking Expired",
+        data: { type: "booking_expired", bookingId: old.bookingId },
+      }),
+      "cancellations",
+    );
+  });
+
+  it("sends no push when the request fails after reclaiming, since the reclaim rolls back", async () => {
+    // One seat comes back, but the request wants two.
+    await testDb.update(trips).set({ seatsRemaining: 1 }).where(eq(trips.id, ctx.tripId));
+    const old = await seedHold({ holdExpiresAt: EXPIRED() });
+
+    const res = await POST(postReq(ctx.tripId, 2));
+
+    expect(res.status).toBe(409);
+    expect(await status(old.bookingId)).toBe("pending");
+    expect(await seats(ctx.tripId)).toBe(0);
+    expect(sendPushToEmails).not.toHaveBeenCalled();
   });
 
   it("reclaims an expired hold that never got a PaymentIntent, without calling Stripe", async () => {
