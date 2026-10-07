@@ -8,7 +8,7 @@ This doc covers what you and Claude each need to do to close that gap properly.
 
 ## Order of work
 
-1. **Launch blockers #3 (P8-2) and #4 (P2-1)**: in progress, independent of this.
+1. **Launch blockers #3 (P8-2) and #4 (P2-1)**: done (PRs #33 and #30).
 2. **Launch blocker #5 (P2-5)**: done on `fix/p2-5-pin-payment-methods`. See "Allowed payment methods" below.
 3. **This work**, in its own session, once P2-5 is merged.
 
