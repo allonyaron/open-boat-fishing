@@ -67,6 +67,7 @@ report-*.html
 # Local session logs
 *.txt
 !apps/web/public/robots.txt
+!apps/web/src/app/fonts/*/OFL.txt
 
 # Claude Code local state (personal overrides, transcript memory, etc.)
 .claude/settings.local.json
