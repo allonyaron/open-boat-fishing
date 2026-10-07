@@ -1,41 +1,48 @@
 export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
-import { Space_Grotesk, Plus_Jakarta_Sans, Manrope, Archivo, IBM_Plex_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { getOperatorRecord } from "@/lib/operator";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import { DemoBanner } from "@/components/DemoBanner";
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
+// Self-hosted latin-subset woff2s (see fonts/README.md for their source), so
+// the build never downloads from Google Fonts.
+const spaceGrotesk = localFont({
+  src: "./fonts/space-grotesk/space-grotesk-latin-wght-normal.woff2",
+  weight: "300 700",
   variable: "--font-space-grotesk",
   display: "swap",
 });
 
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
+const plusJakarta = localFont({
+  src: "./fonts/plus-jakarta-sans/plus-jakarta-sans-latin-wght-normal.woff2",
+  weight: "200 800",
   variable: "--font-plus-jakarta",
   display: "swap",
 });
 
-const manrope = Manrope({
-  subsets: ["latin"],
-  weight: ["700", "800"],
+const manrope = localFont({
+  src: "./fonts/manrope/manrope-latin-wght-normal.woff2",
+  weight: "700 800",
   variable: "--font-manrope",
   display: "swap",
 });
 
-const archivo = Archivo({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+const archivo = localFont({
+  src: "./fonts/archivo/archivo-latin-wght-normal.woff2",
+  weight: "400 800",
   variable: "--font-archivo",
   display: "swap",
 });
 
-const ibmPlexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+const ibmPlexMono = localFont({
+  src: [
+    { path: "./fonts/ibm-plex-mono/ibm-plex-mono-latin-400-normal.woff2", weight: "400" },
+    { path: "./fonts/ibm-plex-mono/ibm-plex-mono-latin-500-normal.woff2", weight: "500" },
+    { path: "./fonts/ibm-plex-mono/ibm-plex-mono-latin-600-normal.woff2", weight: "600" },
+  ],
   variable: "--font-ibm-plex-mono",
   display: "swap",
 });
