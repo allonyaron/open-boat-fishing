@@ -44,12 +44,6 @@ export function fmtMonthDay(dateStr: string) {
   const dt = new Date(dateStr + "T12:00:00Z");
   return `${MONTHS_SHORT[dt.getUTCMonth()]} ${dt.getUTCDate()}`;
 }
-export function fmtHoldTime(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 export function getDisplayPrices(prices: Trip["product"]["prices"]) {
   const active = prices.filter((p) => p.priceCents > 0);
   if (active.length === 0) return [];

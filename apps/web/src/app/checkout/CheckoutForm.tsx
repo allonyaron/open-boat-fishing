@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import type { Stripe, StripeElements } from "@stripe/stripe-js";
 import posthog from "posthog-js";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
 import { fmtTimeET } from "@/lib/format";
@@ -154,7 +155,7 @@ function OrderCard({ items, totalCents }: { items: EnrichedCartItem[]; totalCent
 
 // ─── Seat hold countdown banner ───────────────────────────────────────────────
 
-function HoldBanner({ holdExpiresAt }: { holdExpiresAt: string }) {
+function HoldBanner({ holdExpiresAt, onExpire }: { holdExpiresAt: string; onExpire: () => void }) {
   const [msLeft, setMsLeft] = useState(() => new Date(holdExpiresAt).getTime() - Date.now());
 
   useEffect(() => {
@@ -165,6 +166,12 @@ function HoldBanner({ holdExpiresAt }: { holdExpiresAt: string }) {
   }, [holdExpiresAt]);
 
   const expired = msLeft <= 0;
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
+  useEffect(() => {
+    if (expired) onExpireRef.current();
+  }, [expired]);
+
   const low = msLeft <= 120_000;
   const color = expired || low ? "#8c3b12" : "#41565f";
 
@@ -176,13 +183,33 @@ function HoldBanner({ holdExpiresAt }: { holdExpiresAt: string }) {
         SEATS HELD FOR YOU
       </span>
       <span style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 17, fontWeight: 600, color }}>
-        {expired ? "HOLD EXPIRED — SEATS RELEASED" : fmtCountdown(msLeft)}
+        {expired ? "HOLD EXPIRED" : fmtCountdown(msLeft)}
       </span>
     </div>
   );
 }
 
 // ─── Checkout form — one page, one button, one commitment ─────────────────────
+
+type HeldBooking = {
+  bookingId: string;
+  clientSecret: string;
+  confirmationCode: string;
+  holdExpiresAt: string;
+};
+
+type Attempt = HeldBooking & {
+  /** Where Stripe sends the customer after paying; reused if the booking turns out paid. */
+  returnUrl: string;
+};
+
+type Prepared =
+  | { kind: "ready"; booking: HeldBooking }
+  | { kind: "error"; message: string }
+  | { kind: "paid" };
+
+const SOMETHING_WRONG = "Something went wrong. Please try again.";
+const HOLD_RAN_OUT = "Your seat hold ran out and the seats were released. Pay again to check they're still free.";
 
 export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
   const stripe = useStripe();
@@ -194,7 +221,11 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
   const [touched, setTouched] = useState({ name: false, mobile: false, email: false });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [meta, setMeta] = useState<{ holdExpiresAt: string } | null>(null);
+  // The booking from the first Pay press. A retry after a decline or a closed
+  // 3DS window confirms the same PI again instead of holding the seats twice (P2-3).
+  const [attempt, setAttempt] = useState<Attempt | null>(null);
+  const [releasing, setReleasing] = useState(false);
+  const submittingRef = useRef(false);
 
   const nameError = touched.name && !name.trim() ? "Name is required" : null;
   const mobileError = touched.mobile && mobile && !validatePhone(mobile) ? "Enter a 10-digit US number" : null;
@@ -205,28 +236,56 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
     0,
   );
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setTouched({ name: true, mobile: true, email: true });
-    if (!name.trim() || !validateEmail(email) || (mobile && !validatePhone(mobile))) return;
-    if (!stripe || !elements || submitting) return;
+  function contactBody() {
+    return {
+      customerName: name.trim(),
+      customerEmail: email.trim(),
+      customerPhone: mobile.trim() || null,
+    };
+  }
 
-    setSubmitting(true);
-    setSubmitError(null);
+  // Gives the held seats back and returns the page to "no booking yet": the
+  // cart goes back into storage, and the next Pay press books afresh.
+  async function releaseAttempt(a: Attempt): Promise<"released" | "paid"> {
+    setAttempt(null);
+    try {
+      const res = await fetch(`/api/bookings/${a.bookingId}/release`, { method: "POST" });
+      if (res.status === 409) return "paid";
+    } catch {
+      // Carry on: once the hold expires, the next booking request reclaims it.
+    }
+    localStorage.setItem("openboat_cart", JSON.stringify(items));
+    localStorage.removeItem("openboat_pending_payment");
+    return "released";
+  }
 
-    const { error: elementsError } = await elements.submit();
-    if (elementsError) {
-      setSubmitError(elementsError.message ?? "Check the payment details above.");
-      setSubmitting(false);
+  async function handleHoldExpired() {
+    // A payment in flight owns the attempt; its result decides what happens next.
+    if (!attempt || submittingRef.current) return;
+    setReleasing(true);
+    const result = await releaseAttempt(attempt);
+    setReleasing(false);
+    if (result === "paid") {
+      window.location.href = attempt.returnUrl;
       return;
     }
+    setSubmitError(HOLD_RAN_OUT);
+  }
 
+  // Going back to change the cart gives the held seats back first.
+  async function handleBackToTrips(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (!attempt || submittingRef.current) return;
+    e.preventDefault();
+    const href = e.currentTarget.href;
+    const result = await releaseAttempt(attempt);
+    window.location.href = result === "paid" ? attempt.returnUrl : href;
+  }
+
+  async function createBooking(): Promise<Prepared> {
     const cart = items.map((item) => ({
       tripId: item.tripId,
       tickets: item.tickets.map((t) => ({ ticketType: t.ticketType, quantity: t.quantity })),
     }));
-
-    posthog.capture("payment_attempt", { total_cents: totalCents });
 
     let data: {
       error?: string;
@@ -239,41 +298,107 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
       const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cart,
-          customerName: name.trim(),
-          customerEmail: email.trim(),
-          customerPhone: mobile.trim() || null,
-          notes: null,
-        }),
+        body: JSON.stringify({ cart, ...contactBody(), notes: null }),
       });
       data = await res.json();
     } catch {
-      setSubmitError("Something went wrong. Please try again.");
-      setSubmitting(false);
-      return;
+      return { kind: "error", message: SOMETHING_WRONG };
     }
 
-    if (data.error || !data.clientSecret || !data.confirmationCode || !data.bookingId) {
-      setSubmitError(data.error ?? "Something went wrong. Please try again.");
-      setSubmitting(false);
-      return;
+    if (data.error || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt) {
+      return { kind: "error", message: data.error ?? SOMETHING_WRONG };
     }
 
-    setMeta({ holdExpiresAt: data.holdExpiresAt! });
     localStorage.setItem("openboat_pending_payment", JSON.stringify({ confirmationCode: data.confirmationCode }));
     localStorage.removeItem("openboat_cart");
+    return {
+      kind: "ready",
+      booking: {
+        bookingId: data.bookingId,
+        clientSecret: data.clientSecret,
+        confirmationCode: data.confirmationCode,
+        holdExpiresAt: data.holdExpiresAt,
+      },
+    };
+  }
 
-    // Extend the hold once more before handing off to Stripe so a 3DS challenge
-    // or wallet sheet doesn't race against the expiry cron.
-    fetch(`/api/bookings/${data.bookingId}/extend-hold`, { method: "PATCH" }).catch(() => {});
+  // Reuses the current attempt when its hold is still live, after saving the
+  // contact details as they are now. Otherwise releases it and books afresh.
+  async function prepareAttempt(): Promise<Prepared> {
+    if (attempt && new Date(attempt.holdExpiresAt).getTime() > Date.now()) {
+      // Awaited: the confirmation email goes to whatever address the booking has.
+      const res = await fetch(`/api/bookings/${attempt.bookingId}/contact`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(contactBody()),
+      }).catch(() => null);
+      if (!res) return { kind: "error", message: SOMETHING_WRONG };
+      if (res.ok) return { kind: "ready", booking: attempt };
+      if (res.status !== 404) {
+        const data = await res.json().catch(() => ({}));
+        return { kind: "error", message: data.error ?? SOMETHING_WRONG };
+      }
+      // 404: the booking stopped being a live hold. Release it below.
+    }
+    if (attempt && (await releaseAttempt(attempt)) === "paid") return { kind: "paid" };
+    return createBooking();
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setTouched({ name: true, mobile: true, email: true });
+    if (!name.trim() || !validateEmail(email) || (mobile && !validatePhone(mobile))) return;
+    if (!stripe || !elements || submitting || releasing) return;
+
+    setSubmitting(true);
+    submittingRef.current = true;
+    setSubmitError(null);
+    try {
+      await pay(stripe, elements);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  async function pay(stripe: Stripe, elements: StripeElements) {
+    // Runs before every confirm, retries included (deferred-intent Elements).
+    const { error: elementsError } = await elements.submit();
+    if (elementsError) {
+      setSubmitError(elementsError.message ?? "Check the payment details above.");
+      return;
+    }
+
+    posthog.capture("payment_attempt", { total_cents: totalCents, retry: attempt !== null });
+
+    const prepared = await prepareAttempt();
+    if (prepared.kind === "paid") {
+      window.location.href = attempt!.returnUrl;
+      return;
+    }
+    if (prepared.kind === "error") {
+      setSubmitError(prepared.message);
+      return;
+    }
+    const { booking } = prepared;
+    const returnUrl = `${window.location.origin}/booking/delivery?code=${booking.confirmationCode}&email=${encodeURIComponent(email.trim())}&phone=${encodeURIComponent(mobile.trim())}`;
+    const current: Attempt = { ...booking, returnUrl };
+    setAttempt(current);
+
+    // Extend the hold before handing off to Stripe so a 3DS challenge or wallet
+    // sheet doesn't race the expiry. The banner shows the extended time.
+    fetch(`/api/bookings/${current.bookingId}/extend-hold`, { method: "PATCH" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { holdExpiresAt?: string } | null) => {
+        if (!data?.holdExpiresAt) return;
+        setAttempt((a) => (a?.bookingId === current.bookingId ? { ...a, holdExpiresAt: data.holdExpiresAt! } : a));
+      })
+      .catch(() => {});
 
     const { error: payError } = await stripe.confirmPayment({
       elements,
-      clientSecret: data.clientSecret,
-      confirmParams: {
-        return_url: `${window.location.origin}/booking/delivery?code=${data.confirmationCode}&email=${encodeURIComponent(email.trim())}&phone=${encodeURIComponent(mobile.trim())}`,
-      },
+      clientSecret: current.clientSecret,
+      confirmParams: { return_url: returnUrl },
     });
 
     if (payError) {
@@ -283,12 +408,14 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
         error_type: payError.type,
         error_message: payError.message,
       });
-      setSubmitError(
-        payError.code === "payment_intent_unexpected_state"
-          ? "Your reservation timed out and seats were released. Refresh to check availability."
-          : payError.message ?? "Payment failed. Please try again.",
-      );
-      setSubmitting(false);
+      if (payError.code === "payment_intent_unexpected_state") {
+        // The PI was canceled (the hold expired and its seats were reclaimed).
+        // Drop it so the next press books afresh.
+        await releaseAttempt(current);
+        setSubmitError(HOLD_RAN_OUT);
+      } else {
+        setSubmitError(payError.message ?? "Payment failed. Please try again.");
+      }
     }
     // On success Stripe redirects to return_url — no further handling needed here
   }
@@ -297,6 +424,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
     <form onSubmit={handleSubmit} style={{ maxWidth: 760, margin: "0 auto", padding: "16px 16px 60px" }} className="lg:px-[34px] lg:pt-[34px]">
       <a
         href="/book"
+        onClick={handleBackToTrips}
         className="hidden lg:inline"
         style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".1em", color: "#8c3b12", textDecoration: "underline" }}
       >
@@ -309,7 +437,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
         ONE PAGE.<br />THEN YOU&apos;RE FISHING.
       </h1>
 
-      {meta && <HoldBanner holdExpiresAt={meta.holdExpiresAt} />}
+      {attempt && <HoldBanner holdExpiresAt={attempt.holdExpiresAt} onExpire={handleHoldExpired} />}
 
       <OrderCard items={items} totalCents={totalCents} />
 
@@ -379,7 +507,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
 
       <button
         type="submit"
-        disabled={!stripe || !elements || submitting}
+        disabled={!stripe || !elements || submitting || releasing}
         style={{
           width: "100%",
           minHeight: 72,
