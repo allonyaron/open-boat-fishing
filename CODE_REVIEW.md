@@ -24,12 +24,13 @@ I re-read each Critical and High against the later passes. Nothing was downgrade
 - **[P3-1](#p3-1--critical--unpaid-and-expired-holds-produce-boardable-tickets-and-their-fees-are-later-counted-as-earned): Critical, holds and widened.** Pass 6 runtime-confirmed that a pending booking's ticket scans
   green. Passes 7 and 9 found the same gap on the office check-in (P7-7) and the office manifest (P9-4).
 - **[P8-1](#p8-1--high--confirmation-and-delivery-pages-accept-a-confirmation-code-alone-with-no-throttle-the-response-leads-to-every-boarding-pass-on-the-booking-and-redirect_status-is-trusted-as-proof-of-payment): High, unchanged.** Pass 8 asks for it to be treated as launch-blocking alongside P3-1.
+- **[F1-15](#f1-15--high-confirmed--preview-builds-run-migrations-against-and-write-to-the-production-database): High, fixed (PR #23, 2026-10-02).** Each preview gets its own Neon branch, and Preview has no prod `DATABASE_URL`; see blocker row 1.
 - **[P2-5](#p2-5--medium-needs-confirmation--web-checkout-may-accept-delayed-settlement-payment-methods): Medium, fixed (PR #28, 2026-10-03).** Payment methods are now pinned
   to card in code, so the Dashboard configuration (live or test) no longer decides what checkout offers.
 - **[P2-1](#p2-1--high--departed-trips-can-be-booked-and-paid-for): High, fixed (PR #30, 2026-10-06).** Sales stop at a per-operator cutoff (default 30 min) with a per-trip override; see blocker row 4.
 - **[P8-2](#p8-2--high-confirmed-in-code-impact-depends-on-deploy-env--book-fetches-its-first-month-of-trips-over-http-from-next_public_base_url-which-defaults-to-localhost-and-ignores-the-requests-tenant): High, fixed (PR #33, 2026-10-06).** `/book` loads its first month from the DB for the request's operator; see blocker row 3.
 - **[P4-1](#p4-1--high--trip-cancellation-doesnt-stop-sales-or-cancel-pending-bookings-so-customers-get-charged-for-a-cancelled-trip): High, unchanged.** Pass 9 (P9-5) adds that a cancel that times out fails silently in the UI.
-- [F1-15](#f1-15--high-confirmed--preview-builds-run-migrations-against-and-write-to-the-production-database), [P2-1](#p2-1--high--departed-trips-can-be-booked-and-paid-for), [P3-2](#p3-2--high-latent-exploitable-once-a-connect-webhook-endpoint-is-added--payment_intent-handlers-trust-metadatabookingid-without-binding-it-to-the-pi-amount-or-operator) (latent), [P3-3](#p3-3--high-stripe-behavior-needs-confirmation--disputes-and-dashboard-refunds-on-destination-charges-never-recover-funds-from-the-operator-lost-or-won-disputes-arent-handled) (⚠), [P4-2](#p4-2--high--partial-trip-cancel-refunds-ignore-tickets-already-refunded-individually-so-the-operator-over-refunds), [P5-1](#p5-1--high--admin-and-platform-sessions-are-valid-for-14-days-and-are-never-re-checked-so-deactivating-an-admin-doesnt-remove-their-access),
+- [P3-2](#p3-2--high-latent-exploitable-once-a-connect-webhook-endpoint-is-added--payment_intent-handlers-trust-metadatabookingid-without-binding-it-to-the-pi-amount-or-operator) (latent), [P3-3](#p3-3--high-stripe-behavior-needs-confirmation--disputes-and-dashboard-refunds-on-destination-charges-never-recover-funds-from-the-operator-lost-or-won-disputes-arent-handled) (⚠), [P4-2](#p4-2--high--partial-trip-cancel-refunds-ignore-tickets-already-refunded-individually-so-the-operator-over-refunds), [P5-1](#p5-1--high--admin-and-platform-sessions-are-valid-for-14-days-and-are-never-re-checked-so-deactivating-an-admin-doesnt-remove-their-access),
   [P7-1](#p7-1--high--editing-a-weekly-patterns-time-capacity-or-product-silently-skips-every-trip-already-on-the-calendar) and [P7-2](#p7-2--high--pausing-or-narrowing-a-pattern-fails-with-an-fk-violation-once-any-affected-trip-has-booking-history-after-the-pattern-is-already-saved-as-paused): unchanged.
 - Not severity changes, recorded so they aren't re-checked: [F1-13](#f1-13--low--product_prices-has-no-operator_id) was closed as safe in Pass 2;
   P9-2 corrected P6-9's premise that an image allow-list exists.
@@ -597,6 +598,8 @@ the plan says. Each pass checks the routes it owns.
   (`ALTER … TYPE timestamptz USING col AT TIME ZONE 'UTC'`). Do the rest opportunistically.
 
 #### F1-15 · High (confirmed) · Preview builds run migrations against, and write to, the production database
+
+> ✅ **Fixed 2026-10-02 (PR #23).** Per-preview Neon branches through the Neon ↔ Vercel integration; see blocker row 1.
 
 - **Where:** `apps/web/vercel.json:2`: `(cd ../.. && pnpm --filter @openboat/db migrate) && next build`.
 - **Evidence (2026-09-28):** In Vercel, one `DATABASE_URL` variable is scoped to **both Production and
