@@ -77,6 +77,8 @@ TICKETS section: types with –/+ steppers, price, age range, live subtotal. **A
 
 **Inventory hold on add-to-cart** _(restored from v2, now conditional)_:
 
+> **Superseded 2026-10-06 (CODE_REVIEW.md blocker 4b):** nothing is held before checkout. Seats are held when checkout posts the booking (10 or 60 minutes), the cart shows no countdown, and expired holds are reclaimed when the next booking for the trip comes in. The points below are kept for history.
+
 - Adding tickets decrements live seat inventory, not just cart-local state, and starts a hold.
 - **Duration: 10 minutes.**
 - **Engaged only when remaining inventory is below 4 seats or 15% of capacity**, whichever is greater. A boat with 29 of 40 seats open has no double-booking problem, and an unconditional hold adds a countdown, a background job, and customer anxiety to solve a problem that isn't occurring.

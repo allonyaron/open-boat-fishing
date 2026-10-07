@@ -1,7 +1,9 @@
+import { waitUntil } from "@vercel/functions";
 import { db } from "@/lib/db";
+import { sendPushToEmails } from "@/lib/push";
 import { bookings, bookingItems, payments } from "@openboat/db";
 import { and, eq, inArray, isNull, isNotNull, lt } from "drizzle-orm";
-import { cancelPendingBookingInTx } from "./cancel";
+import { cancelPendingBookingInTx, type CancelledBooking } from "./cancel";
 import { cancelPaymentIntentForRelease } from "./release";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -69,12 +71,38 @@ export async function prepareExpiredHolds(
  * Phase 2: cancel the prepared bookings and restore their seats. The caller
  * must already hold FOR UPDATE locks on every trip in `ReclaimableHolds.tripIds`.
  * Bookings locked by another process are skipped (see cancelPendingBookingInTx).
- * Returns how many bookings were cancelled.
+ * Returns the bookings it cancelled; once the transaction commits, pass them to
+ * notifyHoldsExpired.
  */
-export async function reclaimExpiredHoldsInTx(tx: Tx, bookingIds: string[]): Promise<number> {
-  let reclaimed = 0;
+export async function reclaimExpiredHoldsInTx(tx: Tx, bookingIds: string[]): Promise<CancelledBooking[]> {
+  const reclaimed: CancelledBooking[] = [];
   for (const id of bookingIds) {
-    if (await cancelPendingBookingInTx(tx, id, { skipLocked: true })) reclaimed++;
+    const cancelled = await cancelPendingBookingInTx(tx, id, { skipLocked: true });
+    if (cancelled) reclaimed.push(cancelled);
   }
   return reclaimed;
+}
+
+/**
+ * Tells each customer their unpaid hold was released (M10). Used by the expiry
+ * cron and by the booking route's reclaim. Whoever cancels the booking sends
+ * this: the payment_intent.canceled webhook that follows finds the booking
+ * already cancelled and stays silent.
+ */
+export function notifyHoldsExpired(cancelled: CancelledBooking[]) {
+  for (const booking of cancelled) {
+    if (!booking.customerEmail) continue;
+    waitUntil(
+      sendPushToEmails(
+        booking.operatorId,
+        [booking.customerEmail],
+        {
+          title: "Booking Expired",
+          body: `Your reservation (${booking.confirmationCode}) was released because payment wasn't completed.`,
+          data: { type: "booking_expired", bookingId: booking.id },
+        },
+        "cancellations",
+      ).catch((err) => console.error("Push error on booking expiry:", err)),
+    );
+  }
 }

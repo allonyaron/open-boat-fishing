@@ -16,9 +16,13 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { randomBytes, randomUUID } from "crypto";
 import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { getOperatorContext, getOperatorId } from "@/lib/operator";
-import { cancelPendingBooking } from "@/lib/bookings/cancel";
+import { cancelPendingBooking, type CancelledBooking } from "@/lib/bookings/cancel";
 import { customerContactSchema } from "@/lib/bookings/contact";
-import { prepareExpiredHolds, reclaimExpiredHoldsInTx } from "@/lib/bookings/reclaim-expired-holds";
+import {
+  notifyHoldsExpired,
+  prepareExpiredHolds,
+  reclaimExpiredHoldsInTx,
+} from "@/lib/bookings/reclaim-expired-holds";
 import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
 import { isOnlineSalesOpen } from "@/lib/trips/online-sales";
 import { z } from "zod";
@@ -114,9 +118,10 @@ export async function POST(req: NextRequest) {
   let ticketCount: number;
   let groupDiscountCents: number;
   let holdExpiresAt: Date;
+  let reclaimed: CancelledBooking[];
 
   try {
-    ({ booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt } = await db.transaction(
+    ({ booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt, reclaimed } = await db.transaction(
       async (tx) => {
         // Lock the cart's trips and every trip a reclaimed hold restores seats
         // to, in id order, so concurrent requests can't deadlock on each other.
@@ -128,7 +133,7 @@ export async function POST(req: NextRequest) {
           .orderBy(trips.id)
           .for("update");
 
-        await reclaimExpiredHoldsInTx(tx, reclaim.bookingIds);
+        const reclaimed = await reclaimExpiredHoldsInTx(tx, reclaim.bookingIds);
 
         // Read the cart's trips after the reclaim, so the seat counts include
         // what it gave back.
@@ -346,7 +351,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        return { booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt };
+        return { booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt, reclaimed };
       },
     ));
   } catch (err: unknown) {
@@ -356,6 +361,10 @@ export async function POST(req: NextRequest) {
     }
     throw err;
   }
+
+  // Only now: a rolled-back reclaim cancelled nothing. Those bookings' PIs are
+  // canceled, so the payment_intent.canceled webhook cancels and notifies them.
+  notifyHoldsExpired(reclaimed);
 
   // Stripe PI creation is outside the transaction. If it fails, restore seats
   // and cancel the booking so no ghost holds accumulate.

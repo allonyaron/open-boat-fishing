@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { waitUntil } from "@vercel/functions";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { sendPushToEmails } from "@/lib/push";
 import { cancelPendingBooking } from "@/lib/bookings/cancel";
+import { notifyHoldsExpired } from "@/lib/bookings/reclaim-expired-holds";
 import { verifyCronAuth } from "@/lib/cron-auth";
 import { bookings, payments, rateLimits } from "@openboat/db";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
@@ -103,21 +102,7 @@ export async function GET(req: NextRequest) {
 
       console.log(`Expired stale pending booking ${booking.confirmationCode} (${booking.id})`);
       cancelled++;
-
-      if (booking.customerEmail) {
-        waitUntil(
-          sendPushToEmails(
-            booking.operatorId,
-            [booking.customerEmail],
-            {
-              title: "Booking Expired",
-              body: `Your reservation (${booking.confirmationCode}) was released because payment wasn't completed.`,
-              data: { type: "booking_expired", bookingId: booking.id },
-            },
-            "cancellations",
-          ).catch((err) => console.error("Push error on booking expiry:", err)),
-        );
-      }
+      notifyHoldsExpired([result]);
     } catch (err) {
       console.error(`Failed to expire booking ${booking.id}:`, err);
       errors.push(booking.id);
