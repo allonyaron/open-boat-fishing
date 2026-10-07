@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -27,6 +27,30 @@ import { upsertBooking } from "@/lib/wallet";
 const checkoutStorage = new MMKV();
 
 type PendingCheckout = { cart: Cart; cartTrips: Trip[] };
+
+// The booking from the first Pay press. A retry after a decline or a dismissed
+// sheet presents the same PI again instead of holding the seats twice (P2-3).
+type Attempt = {
+  bookingId: string;
+  clientSecret: string;
+  confirmationCode: string;
+  holdExpiresAt: string;
+  /** The email the booking holds, which the wallet lookup needs. */
+  email: string;
+};
+
+const HOLD_RAN_OUT = "Your seat hold ran out and the seats were released. Tap Pay to check they're still free.";
+
+// Gives an unpaid hold's seats back. Best effort: once the hold expires, the
+// next booking request reclaims it anyway. Returns false if it turned out paid.
+async function releaseAttempt(a: Attempt): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/api/bookings/${a.bookingId}/release`, { method: "POST" });
+    return res.status !== 409;
+  } catch {
+    return true;
+  }
+}
 
 function ticketLabel(type: string): string {
   return type.charAt(0).toUpperCase() + type.slice(1);
@@ -70,6 +94,14 @@ export default function CheckoutScreen() {
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState<{ code: string; email: string } | null>(null);
+  const attemptRef = useRef<Attempt | null>(null);
+
+  // Leaving checkout (back to change the cart) gives the held seats back.
+  useEffect(() => {
+    return () => {
+      if (attemptRef.current) void releaseAttempt(attemptRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const raw = checkoutStorage.getString("pending_checkout");
@@ -126,40 +158,88 @@ export default function CheckoutScreen() {
     setPaying(true);
 
     try {
-      const cartByTrip = new Map<string, { ticketType: string; quantity: number }[]>();
-      for (const line of cartLines) {
-        if (!cartByTrip.has(line.trip.id)) cartByTrip.set(line.trip.id, []);
-        cartByTrip.get(line.trip.id)!.push({ ticketType: line.ticketType, quantity: line.qty });
+      const contact = { customerName: cleanName, customerEmail: cleanEmail, customerPhone: cleanPhone };
+
+      // Reuse the live hold from an earlier attempt, after saving the contact
+      // details as they are now (the confirmation goes to the stored email).
+      let attempt = attemptRef.current;
+      if (attempt && new Date(attempt.holdExpiresAt).getTime() > Date.now()) {
+        const res = await fetch(`${API_URL}/api/bookings/${attempt.bookingId}/contact`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(contact),
+        });
+        if (!res.ok && res.status !== 404) {
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          setError(data.error ?? "Unable to update your booking. Please try again.");
+          return;
+        }
+        if (res.ok) attemptRef.current = attempt = { ...attempt, email: cleanEmail };
+        else attempt = null; // no longer a live hold
+      } else {
+        attempt = null;
       }
-      const cartPayload = [...cartByTrip.entries()].map(([tripId, tickets]) => ({ tripId, tickets }));
-
-      const res = await fetch(`${API_URL}/api/bookings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cart: cartPayload,
-          customerName: cleanName,
-          customerEmail: cleanEmail,
-          customerPhone: cleanPhone,
-          notes: null,
-        }),
-      });
-
-      type BookingResponse = {
-        clientSecret?: string;
-        bookingId?: string;
-        confirmationCode?: string;
-        totalCents?: number;
-        error?: string;
-      };
-      const data = (await res.json()) as BookingResponse;
-
-      if (!res.ok || !data.clientSecret || !data.confirmationCode) {
-        setError(data.error ?? "Unable to create booking. Please try again.");
-        return;
+      if (!attempt && attemptRef.current) {
+        const prev = attemptRef.current;
+        attemptRef.current = null;
+        if (!(await releaseAttempt(prev))) {
+          // It was paid after all (the sheet reported a failure it shouldn't have).
+          checkoutStorage.set("cart_paid", true);
+          checkoutStorage.delete("pending_checkout");
+          setConfirmed({ code: prev.confirmationCode, email: prev.email });
+          return;
+        }
       }
 
-      const { clientSecret, confirmationCode } = data;
+      if (!attempt) {
+        const cartByTrip = new Map<string, { ticketType: string; quantity: number }[]>();
+        for (const line of cartLines) {
+          if (!cartByTrip.has(line.trip.id)) cartByTrip.set(line.trip.id, []);
+          cartByTrip.get(line.trip.id)!.push({ ticketType: line.ticketType, quantity: line.qty });
+        }
+        const cartPayload = [...cartByTrip.entries()].map(([tripId, tickets]) => ({ tripId, tickets }));
+
+        const res = await fetch(`${API_URL}/api/bookings`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cart: cartPayload, ...contact, notes: null }),
+        });
+
+        type BookingResponse = {
+          clientSecret?: string;
+          bookingId?: string;
+          confirmationCode?: string;
+          holdExpiresAt?: string;
+          error?: string;
+        };
+        const data = (await res.json()) as BookingResponse;
+
+        if (!res.ok || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt) {
+          setError(data.error ?? "Unable to create booking. Please try again.");
+          return;
+        }
+        attempt = {
+          bookingId: data.bookingId,
+          clientSecret: data.clientSecret,
+          confirmationCode: data.confirmationCode,
+          holdExpiresAt: data.holdExpiresAt,
+          email: cleanEmail,
+        };
+        attemptRef.current = attempt;
+      }
+
+      const { bookingId, clientSecret, confirmationCode } = attempt;
+
+      // Extend the hold so the sheet (and any 3DS step) doesn't race the expiry.
+      fetch(`${API_URL}/api/bookings/${bookingId}/extend-hold`, { method: "PATCH" })
+        .then((r) => (r.ok ? (r.json() as Promise<{ holdExpiresAt?: string }>) : null))
+        .then((d) => {
+          const current = attemptRef.current;
+          if (d?.holdExpiresAt && current?.bookingId === bookingId) {
+            attemptRef.current = { ...current, holdExpiresAt: d.holdExpiresAt };
+          }
+        })
+        .catch(() => {});
 
       const { error: initError } = await initPaymentSheet({
         merchantDisplayName: process.env.EXPO_PUBLIC_MERCHANT_NAME ?? "Fishing Tickets",
@@ -172,7 +252,11 @@ export default function CheckoutScreen() {
       });
 
       if (initError) {
-        setError(initError.message ?? "Payment setup failed. Please try again.");
+        // Most likely the PI was canceled because the hold ran out. Drop it so
+        // the next tap books afresh.
+        attemptRef.current = null;
+        void releaseAttempt(attempt);
+        setError(HOLD_RAN_OUT);
         return;
       }
 
@@ -185,6 +269,7 @@ export default function CheckoutScreen() {
         return;
       }
 
+      attemptRef.current = null;
       checkoutStorage.set("cart_paid", true);
       checkoutStorage.delete("pending_checkout");
       setConfirmed({ code: confirmationCode, email: cleanEmail });

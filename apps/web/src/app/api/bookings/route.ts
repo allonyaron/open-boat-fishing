@@ -17,6 +17,8 @@ import { randomBytes, randomUUID } from "crypto";
 import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { getOperatorContext, getOperatorId } from "@/lib/operator";
 import { cancelPendingBooking } from "@/lib/bookings/cancel";
+import { customerContactSchema } from "@/lib/bookings/contact";
+import { prepareExpiredHolds, reclaimExpiredHoldsInTx } from "@/lib/bookings/reclaim-expired-holds";
 import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
 import { isOnlineSalesOpen } from "@/lib/trips/online-sales";
 import { z } from "zod";
@@ -30,10 +32,7 @@ const MIN_RESPONSE_MS = 150; // floor prevents email-existence timing oracle
 const BOOKING_RATE_WINDOW_MS = 15 * 60 * 1000;
 const BOOKING_RATE_MAX = 20; // per IP per 15 min
 
-const bookingBodySchema = z.object({
-  customerEmail: z.string().email().max(254).transform((s) => s.toLowerCase().trim()),
-  customerName: z.string().max(100).nullish(),
-  customerPhone: z.string().max(20).nullish(),
+const bookingBodySchema = customerContactSchema.extend({
   notes: z.string().max(500).nullish(),
   cart: z
     .array(
@@ -102,6 +101,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Expired holds on these trips give their seats back before we count seats,
+  // so availability doesn't wait for the expiry cron (P2-3). Their PIs are
+  // canceled here, outside the transaction, because that calls Stripe.
+  const reclaim = await prepareExpiredHolds(operator.id, tripIds);
+
   // All seat-sensitive work runs in one transaction. FOR UPDATE on trip rows
   // serializes concurrent bookings — the second request waits here until the
   // first commits, then reads the already-decremented seat count.
@@ -114,11 +118,24 @@ export async function POST(req: NextRequest) {
   try {
     ({ booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt } = await db.transaction(
       async (tx) => {
+        // Lock the cart's trips and every trip a reclaimed hold restores seats
+        // to, in id order, so concurrent requests can't deadlock on each other.
+        const lockIds = [...new Set([...tripIds, ...reclaim.tripIds])];
+        await tx
+          .select({ id: trips.id })
+          .from(trips)
+          .where(and(inArray(trips.id, lockIds), eq(trips.operatorId, operator.id)))
+          .orderBy(trips.id)
+          .for("update");
+
+        await reclaimExpiredHoldsInTx(tx, reclaim.bookingIds);
+
+        // Read the cart's trips after the reclaim, so the seat counts include
+        // what it gave back.
         const tripRows = await tx
           .select()
           .from(trips)
-          .where(and(inArray(trips.id, tripIds), eq(trips.operatorId, operator.id)))
-          .for("update");
+          .where(and(inArray(trips.id, tripIds), eq(trips.operatorId, operator.id)));
 
         if (tripRows.length !== tripIds.length) {
           throw Object.assign(new Error("One or more trips not found"), { httpStatus: 404 });

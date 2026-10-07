@@ -1,13 +1,12 @@
 import { fmtTimeET } from "@/lib/format";
 import { RailCalendar } from "./RailCalendar";
-import { dollars, fmtHoldTime } from "./format";
+import { dollars } from "./format";
 import type { EnrichedCartItem, Trip } from "./types";
 
 export function CartRail({
   cartItems,
   totalCents,
   totalSeats,
-  holdSecs,
   month,
   byDate,
   selectedDay,
@@ -22,7 +21,6 @@ export function CartRail({
   cartItems: EnrichedCartItem[];
   totalCents: number;
   totalSeats: number;
-  holdSecs: number | null;
   month: string;
   byDate: Record<string, Trip[]>;
   selectedDay: string | null;
@@ -35,8 +33,6 @@ export function CartRail({
   onNextMonth: () => void;
 }) {
   const hasSeats = totalSeats > 0;
-  const isExpired = holdSecs !== null && holdSecs <= 0;
-  const isWarning = holdSecs !== null && holdSecs > 0 && holdSecs < 120;
 
   return (
     <div
@@ -66,7 +62,7 @@ export function CartRail({
 
         {/* 2. Cart body — flex:1, scrolls with the page */}
         <div style={{ flex: 1, padding: "18px 22px 24px" }}>
-          {/* YOUR SEATS header + hold countdown */}
+          {/* YOUR SEATS header */}
           <div className="flex items-baseline justify-between gap-2 mb-3" style={{ flexWrap: "wrap" }}>
             <span
               className="font-plex-mono text-[12px] font-semibold tracking-[.16em]"
@@ -74,16 +70,6 @@ export function CartRail({
             >
               YOUR SEATS{totalSeats > 0 ? ` · ${totalSeats}` : ""}
             </span>
-            {holdSecs !== null && (
-              <span
-                className="font-plex-mono text-[12px] font-semibold tracking-[.08em]"
-                style={{ color: isWarning || isExpired ? "#8c3b12" : "#41565f" }}
-              >
-                {isExpired
-                  ? "HOLD EXPIRED — SEATS RELEASED"
-                  : `SEATS HELD ${fmtHoldTime(holdSecs)}`}
-              </span>
-            )}
           </div>
 
           {/* Empty state */}

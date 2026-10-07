@@ -9,6 +9,8 @@ export type CancelledBooking = {
   operatorId: string;
 };
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 /**
  * Atomically cancels a pending (unpaid) booking: restores trip seats from
  * ticket counts and sets status to "cancelled".
@@ -20,49 +22,64 @@ export type CancelledBooking = {
  * cannot both restore seats for the same booking.
  */
 export async function cancelPendingBooking(bookingId: string): Promise<CancelledBooking | null> {
-  return db.transaction(async (tx) => {
-    const [booking] = await tx
-      .select({
-        id: bookings.id,
-        status: bookings.status,
-        confirmationCode: bookings.confirmationCode,
-        customerEmail: bookings.customerEmail,
-        operatorId: bookings.operatorId,
-      })
-      .from(bookings)
-      .where(eq(bookings.id, bookingId))
-      .for("update");
+  return db.transaction((tx) => cancelPendingBookingInTx(tx, bookingId));
+}
 
-    if (!booking || booking.status === "confirmed" || booking.status === "cancelled") {
-      return null;
+/**
+ * The body of cancelPendingBooking, for a caller that already holds a
+ * transaction (the booking route reclaims expired holds under its trip locks).
+ *
+ * With skipLocked, a booking another process has locked is left alone and
+ * null is returned: that process is already cancelling or confirming it, and
+ * the caller holds trip locks, so waiting on the booking row could deadlock
+ * against cancelPendingBooking, which locks the booking first, then the trips.
+ */
+export async function cancelPendingBookingInTx(
+  tx: Tx,
+  bookingId: string,
+  opts: { skipLocked?: boolean } = {},
+): Promise<CancelledBooking | null> {
+  const [booking] = await tx
+    .select({
+      id: bookings.id,
+      status: bookings.status,
+      confirmationCode: bookings.confirmationCode,
+      customerEmail: bookings.customerEmail,
+      operatorId: bookings.operatorId,
+    })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId))
+    .for("update", opts.skipLocked ? { skipLocked: true } : {});
+
+  if (!booking || booking.status === "confirmed" || booking.status === "cancelled") {
+    return null;
+  }
+
+  const itemRows = await tx
+    .select({ id: bookingItems.id, tripId: bookingItems.tripId })
+    .from(bookingItems)
+    .where(eq(bookingItems.bookingId, bookingId));
+
+  for (const item of itemRows) {
+    const [{ ticketCount }] = await tx
+      .select({ ticketCount: sql<number>`cast(count(*) as int)` })
+      .from(tickets)
+      .where(eq(tickets.bookingItemId, item.id));
+
+    if (ticketCount > 0) {
+      await tx
+        .update(trips)
+        .set({ seatsRemaining: sql`${trips.seatsRemaining} + ${ticketCount}` })
+        .where(eq(trips.id, item.tripId));
     }
+  }
 
-    const itemRows = await tx
-      .select({ id: bookingItems.id, tripId: bookingItems.tripId })
-      .from(bookingItems)
-      .where(eq(bookingItems.bookingId, bookingId));
+  await tx
+    .update(bookings)
+    .set({ status: "cancelled", updatedAt: new Date() })
+    .where(eq(bookings.id, bookingId));
 
-    for (const item of itemRows) {
-      const [{ ticketCount }] = await tx
-        .select({ ticketCount: sql<number>`cast(count(*) as int)` })
-        .from(tickets)
-        .where(eq(tickets.bookingItemId, item.id));
-
-      if (ticketCount > 0) {
-        await tx
-          .update(trips)
-          .set({ seatsRemaining: sql`${trips.seatsRemaining} + ${ticketCount}` })
-          .where(eq(trips.id, item.tripId));
-      }
-    }
-
-    await tx
-      .update(bookings)
-      .set({ status: "cancelled", updatedAt: new Date() })
-      .where(eq(bookings.id, bookingId));
-
-    return booking;
-  });
+  return booking;
 }
 
 /**

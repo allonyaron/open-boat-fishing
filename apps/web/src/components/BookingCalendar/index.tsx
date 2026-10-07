@@ -51,7 +51,6 @@ export function BookingCalendar({
 
   const {
     cartItems,
-    holdSecs,
     getQty,
     adjustQty,
     removeFromCart,
@@ -216,7 +215,6 @@ export function BookingCalendar({
           cartItems={cartItems}
           totalCents={totalCents}
           totalSeats={totalSeats}
-          holdSecs={holdSecs}
           month={month}
           byDate={byDate}
           selectedDay={selectedDay}
@@ -233,7 +231,6 @@ export function BookingCalendar({
       <MobileCartBar
         totalCents={totalCents}
         totalSeats={totalSeats}
-        holdSecs={holdSecs}
         cartItems={cartItems}
         onCheckout={goToCheckout}
         onRemove={handleRemove}

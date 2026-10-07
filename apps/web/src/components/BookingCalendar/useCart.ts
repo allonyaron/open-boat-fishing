@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getDisplayPrices } from "./format";
 import type { EnrichedCartItem, Trip } from "./types";
 
@@ -20,13 +20,7 @@ export function useCart({
   // enriched cart items (written to localStorage for checkout page)
   const [cartItems, setCartItems] = useState<EnrichedCartItem[]>([]);
 
-  // Seat hold timer
-  const [holdExpiresAt, setHoldExpiresAt] = useState<number | null>(null);
-  const [holdSecs, setHoldSecs] = useState<number | null>(null);
-  const holdStartedRef = useRef(false);
-  const cartRestoredRef = useRef(false);
-
-  // Restore cart + hold from localStorage on mount, then pre-add initialTripId
+  // Restore cart from localStorage on mount, then pre-add initialTripId
   // if provided. Both steps live in one effect so the pre-add's dedupe check
   // can read the just-restored items (not stale state).
   useEffect(() => {
@@ -55,23 +49,9 @@ export function useCart({
       }
     } catch { /* ignore corrupt data */ }
 
-    // Restore hold timer if still valid and cart is non-empty
-    if (restoredItems.length > 0) {
-      try {
-        const storedHold = localStorage.getItem("openboat_hold_expires");
-        if (storedHold) {
-          const expiresAt = parseInt(storedHold);
-          if (expiresAt > Date.now()) {
-            setHoldExpiresAt(expiresAt);
-            holdStartedRef.current = true;
-          } else {
-            localStorage.removeItem("openboat_hold_expires");
-          }
-        }
-      } catch { /* ignore */ }
-    }
-
-    cartRestoredRef.current = true;
+    // Seats are held only once checkout posts the booking (P8-10). Drop the
+    // key the old cart countdown left behind.
+    try { localStorage.removeItem("openboat_hold_expires"); } catch { /* ignore */ }
 
     // Pre-add 1 adult ticket when navigating from homepage BOOK button
     if (initialTripId && !restoredItems.some((i) => i.tripId === initialTripId)) {
@@ -106,15 +86,6 @@ export function useCart({
             },
           ]);
           onInitialTripPreAdded?.(trip.departureDate);
-          // Start hold for this initial seat
-          if (!holdStartedRef.current) {
-            const expiresAt = Date.now() + 10 * 60 * 1000;
-            holdStartedRef.current = true;
-            setHoldExpiresAt(expiresAt);
-            try {
-              localStorage.setItem("openboat_hold_expires", String(expiresAt));
-            } catch { /* ignore */ }
-          }
         }
       }
     }
@@ -128,16 +99,6 @@ export function useCart({
       localStorage.setItem("openboat_cart", JSON.stringify(cartItems));
     }
   }, [cartItems]);
-
-  // Hold timer tick
-  useEffect(() => {
-    if (holdExpiresAt === null) return;
-    const tick = () =>
-      setHoldSecs(Math.max(0, Math.round((holdExpiresAt - Date.now()) / 1000)));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [holdExpiresAt]);
 
   const getQty = useCallback(
     (tripId: string, ticketType: string) => cart.get(`${tripId}:${ticketType}`) ?? 0,
@@ -211,16 +172,6 @@ export function useCart({
           },
         ];
       });
-
-      // Start hold timer on first seat added
-      if (delta === 1 && cartRestoredRef.current && !holdStartedRef.current) {
-        const expiresAt = Date.now() + 10 * 60 * 1000;
-        holdStartedRef.current = true;
-        setHoldExpiresAt(expiresAt);
-        try {
-          localStorage.setItem("openboat_hold_expires", String(expiresAt));
-        } catch { /* ignore */ }
-      }
     },
     [trips],
   );
@@ -240,13 +191,6 @@ export function useCart({
       });
       const newItems = cartItems.filter((i) => i.tripId !== tripId);
       setCartItems(newItems);
-      // Clear hold when cart becomes empty
-      if (newItems.length === 0) {
-        setHoldExpiresAt(null);
-        setHoldSecs(null);
-        holdStartedRef.current = false;
-        try { localStorage.removeItem("openboat_hold_expires"); } catch { /* ignore */ }
-      }
       return item;
     },
     [cart, cartItems, trips],
@@ -260,7 +204,6 @@ export function useCart({
 
   return {
     cartItems,
-    holdSecs,
     getQty,
     adjustQty,
     removeFromCart,

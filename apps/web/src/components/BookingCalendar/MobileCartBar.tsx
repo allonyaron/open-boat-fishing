@@ -6,14 +6,12 @@ import type { EnrichedCartItem } from "./types";
 export function MobileCartBar({
   totalCents,
   totalSeats,
-  holdSecs,
   cartItems,
   onCheckout,
   onRemove,
 }: {
   totalCents: number;
   totalSeats: number;
-  holdSecs: number | null;
   cartItems: EnrichedCartItem[];
   onCheckout: () => void;
   onRemove: (tripId: string) => void;
@@ -21,12 +19,6 @@ export function MobileCartBar({
   const [open, setOpen] = useState(false);
 
   const hasSeats = totalSeats > 0;
-  const isExpired = holdSecs !== null && holdSecs <= 0;
-  const isWarning = holdSecs !== null && holdSecs > 0 && holdSecs < 120;
-  const holdLabel = hasSeats && holdSecs !== null
-    ? isExpired ? "HOLD EXPIRED" : `${Math.floor(holdSecs / 60)}:${String(holdSecs % 60).padStart(2,"0")}`
-    : "—";
-  const chipUrgent = isExpired || isWarning;
 
   return (
     <div
@@ -108,27 +100,9 @@ export function MobileCartBar({
           <span className="font-archivo font-bold text-white uppercase" style={{ fontSize: 14 }}>
             YOUR SEATS{totalSeats > 0 ? ` · ${totalSeats} ${totalSeats === 1 ? "TICKET" : "TICKETS"}` : ""}
           </span>
-          {/* Hold chip */}
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "5px 9px",
-              background: chipUrgent ? "#c94510" : "transparent",
-              boxShadow: chipUrgent ? "none" : `inset 0 0 0 1px ${hasSeats ? "#c94510" : "#3c5867"}`,
-              fontSize: 10,
-              fontFamily: "var(--font-ibm-plex-mono)",
-              letterSpacing: ".14em",
-              color: chipUrgent ? "#fff" : hasSeats ? "#c9d6dd" : "#c9d6dd",
-            }}
-          >
-            <span style={{ fontSize: 10, letterSpacing: ".14em", color: chipUrgent ? "#ffe3d6" : hasSeats ? "#c9d6dd" : "#c9d6dd" }}>
-              {hasSeats ? "SEATS HELD" : "NO SEATS HELD"}
-            </span>
-            <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: ".04em", color: chipUrgent ? "#fff" : "#ff8a5c" }}>
-              {holdLabel}
-            </span>
+          {/* Seats are held only once checkout posts the booking (P8-10). */}
+          <span className="font-plex-mono" style={{ fontSize: 10, letterSpacing: ".14em", color: "#c9d6dd", whiteSpace: "nowrap" }}>
+            NOT HELD UNTIL YOU PAY
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -169,16 +143,16 @@ export function MobileCartBar({
         </div>
         <button
           type="button"
-          onClick={hasSeats && !isExpired ? onCheckout : undefined}
-          disabled={!hasSeats || isExpired}
+          onClick={hasSeats ? onCheckout : undefined}
+          disabled={!hasSeats}
           className="font-archivo font-bold uppercase"
           style={{
             height: 58,
             minWidth: 170,
-            background: hasSeats && !isExpired ? "#c94510" : "#b9c3c7",
-            color: hasSeats && !isExpired ? "#fff" : "#41565f",
+            background: hasSeats ? "#c94510" : "#b9c3c7",
+            color: hasSeats ? "#fff" : "#41565f",
             border: "none",
-            cursor: hasSeats && !isExpired ? "pointer" : "default",
+            cursor: hasSeats ? "pointer" : "default",
             fontSize: 15,
             letterSpacing: ".08em",
           }}
