@@ -204,7 +204,8 @@ function HoldBanner({ holdExpiresAt, onExpire }: { holdExpiresAt: string; onExpi
 
 type Prepared =
   | { kind: "ready"; hold: StoredHold }
-  | { kind: "error"; message: string }
+  // answered: the server responded, so it has dealt with any `replaces`.
+  | { kind: "error"; message: string; answered: boolean }
   | { kind: "paid"; hold: StoredHold };
 
 const SOMETHING_WRONG = "Something went wrong. Please try again.";
@@ -231,6 +232,18 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
   useEffect(() => {
     if (attempt) saveHold(attempt);
   }, [attempt]);
+
+  // A page restored from the back-forward cache runs no effects, and another
+  // page may have released the saved booking meanwhile: re-read it.
+  useEffect(() => {
+    function onPageShow(e: PageTransitionEvent) {
+      if (!e.persisted) return;
+      const stored = loadHold();
+      setAttempt(stored && stored.cartKey === key ? stored : null);
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [key]);
 
   // On load: resume this tab's booking if it is still a live hold for this
   // cart; otherwise give its seats back before anything else happens.
@@ -323,12 +336,14 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
       });
       data = await res.json();
     } catch {
-      return { kind: "error", message: SOMETHING_WRONG };
+      // No answer (offline, or a non-JSON error page): the previous booking
+      // may be untouched, so keep it and replace it on the next press.
+      return { kind: "error", message: SOMETHING_WRONG, answered: false };
     }
 
     if (data.code === "replaced_booking_paid" && replaces) return { kind: "paid", hold: replaces };
     if (data.error || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt || !data.holdToken) {
-      return { kind: "error", message: data.error ?? SOMETHING_WRONG };
+      return { kind: "error", message: data.error ?? SOMETHING_WRONG, answered: true };
     }
     return {
       kind: "ready",
@@ -353,17 +368,18 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
         headers: { "Content-Type": "application/json", ...holdHeaders(attempt) },
         body: JSON.stringify(contactBody()),
       }).catch(() => null);
-      if (!res) return { kind: "error", message: SOMETHING_WRONG };
+      if (!res) return { kind: "error", message: SOMETHING_WRONG, answered: false };
       if (res.ok) return { kind: "ready", hold: attempt };
       if (res.status !== 404) {
         const data = await res.json().catch(() => ({}));
-        return { kind: "error", message: data.error ?? SOMETHING_WRONG };
+        return { kind: "error", message: data.error ?? SOMETHING_WRONG, answered: false };
       }
       // 404: the booking stopped being a live hold. Replace it below.
     }
     const prepared = await createBooking(attempt);
-    // Whatever happened, the server has dealt with the previous booking.
-    if (prepared.kind === "error" && attempt) {
+    // Once the server has answered, it has released the previous booking (or
+    // found it paid), so drop it.
+    if (prepared.kind === "error" && prepared.answered && attempt) {
       setAttempt(null);
       clearHold();
     }

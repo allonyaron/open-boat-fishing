@@ -2,8 +2,11 @@
 // page: a reload resumes it, and leaving checkout by any route (Back, a nav
 // link, the home page) releases it on the next page load (P2-3).
 //
-// sessionStorage is per tab, so a second tab browsing trips can't release a
-// checkout that is mid-payment in the first.
+// sessionStorage is per tab, so another tab browsing trips usually can't
+// release this checkout. A duplicated tab copies it, though; if that copy
+// releases the hold, this checkout's confirm fails with
+// payment_intent_unexpected_state and the customer books again. No charge
+// can land on a released booking: its PI is canceled first.
 
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
 

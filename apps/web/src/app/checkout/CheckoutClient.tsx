@@ -8,6 +8,7 @@ import posthog from "posthog-js";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
 import { BookingNav } from "@/components/BookingCalendar";
 import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
+import { clearHold, loadHold, releaseHold } from "@/lib/checkout/stored-hold";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -50,7 +51,17 @@ function CheckoutInner({
       // The cart stays here until the payment succeeds (the confirmed-booking
       // view clears it), so a reload or a retry still has it.
       const raw = localStorage.getItem("openboat_cart");
-      if (raw) setItems(JSON.parse(raw));
+      if (raw) {
+        setItems(JSON.parse(raw));
+      } else {
+        // Nothing to check out, so a booking saved by this tab is abandoned.
+        // (With a cart, CheckoutForm resumes or releases it.)
+        const hold = loadHold();
+        if (hold) {
+          clearHold();
+          void releaseHold(hold);
+        }
+      }
     } catch { /* ignore */ }
     setInitialized(true); // safe to render now
     posthog.capture("checkout_view");

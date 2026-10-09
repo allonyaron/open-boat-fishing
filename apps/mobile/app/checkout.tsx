@@ -167,11 +167,12 @@ export default function CheckoutScreen() {
 
       // Reuse the live hold from an earlier attempt, after saving the contact
       // details as they are now (the confirmation goes to the stored email).
-      let attempt = attemptRef.current;
-      if (attempt && new Date(attempt.holdExpiresAt).getTime() > Date.now()) {
-        const res = await fetch(`${API_URL}/api/bookings/${attempt.bookingId}/contact`, {
+      const previous = attemptRef.current;
+      let attempt: Attempt | null = null;
+      if (previous && new Date(previous.holdExpiresAt).getTime() > Date.now()) {
+        const res = await fetch(`${API_URL}/api/bookings/${previous.bookingId}/contact`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json", "X-Hold-Token": attempt.holdToken },
+          headers: { "Content-Type": "application/json", "X-Hold-Token": previous.holdToken },
           body: JSON.stringify(contact),
         });
         if (!res.ok && res.status !== 404) {
@@ -179,21 +180,8 @@ export default function CheckoutScreen() {
           setError(data.error ?? "Unable to update your booking. Please try again.");
           return;
         }
-        if (res.ok) attemptRef.current = attempt = { ...attempt, email: cleanEmail };
-        else attempt = null; // no longer a live hold
-      } else {
-        attempt = null;
-      }
-      if (!attempt && attemptRef.current) {
-        const prev = attemptRef.current;
-        attemptRef.current = null;
-        if (!(await releaseAttempt(prev))) {
-          // It was paid after all (the sheet reported a failure it shouldn't have).
-          checkoutStorage.set("cart_paid", true);
-          checkoutStorage.delete("pending_checkout");
-          setConfirmed({ code: prev.confirmationCode, email: prev.email });
-          return;
-        }
+        // 404: no longer a live hold; it is replaced below.
+        if (res.ok) attemptRef.current = attempt = { ...previous, email: cleanEmail };
       }
 
       if (!attempt) {
@@ -204,10 +192,17 @@ export default function CheckoutScreen() {
         }
         const cartPayload = [...cartByTrip.entries()].map(([tripId, tickets]) => ({ tripId, tickets }));
 
+        // The server releases the previous booking in the same request. If the
+        // request never gets an answer, attemptRef keeps it for the next tap.
         const res = await fetch(`${API_URL}/api/bookings`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cart: cartPayload, ...contact, notes: null }),
+          body: JSON.stringify({
+            cart: cartPayload,
+            ...contact,
+            notes: null,
+            replaces: previous && { bookingId: previous.bookingId, holdToken: previous.holdToken },
+          }),
         });
 
         type BookingResponse = {
@@ -217,9 +212,19 @@ export default function CheckoutScreen() {
           holdExpiresAt?: string;
           holdToken?: string;
           error?: string;
+          code?: string;
         };
         const data = (await res.json()) as BookingResponse;
+        // Answered: the server has released the previous booking, or found it paid.
+        attemptRef.current = null;
 
+        if (data.code === "replaced_booking_paid" && previous) {
+          // It was paid after all (the sheet reported a failure it shouldn't have).
+          checkoutStorage.set("cart_paid", true);
+          checkoutStorage.delete("pending_checkout");
+          setConfirmed({ code: previous.confirmationCode, email: previous.email });
+          return;
+        }
         if (!res.ok || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt || !data.holdToken) {
           setError(data.error ?? "Unable to create booking. Please try again.");
           return;
