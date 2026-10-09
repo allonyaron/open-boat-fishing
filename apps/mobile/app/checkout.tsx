@@ -215,8 +215,10 @@ export default function CheckoutScreen() {
           code?: string;
         };
         const data = (await res.json()) as BookingResponse;
-        // Answered: the server has released the previous booking, or found it paid.
-        attemptRef.current = null;
+        // The server releases `replaces` (or finds it paid) before it books.
+        // A rate limit, validation or server error can come back before that,
+        // so keep the previous booking for the next tap.
+        if (res.ok || res.status === 404 || res.status === 409) attemptRef.current = null;
 
         if (data.code === "replaced_booking_paid" && previous) {
           // It was paid after all (the sheet reported a failure it shouldn't have).
