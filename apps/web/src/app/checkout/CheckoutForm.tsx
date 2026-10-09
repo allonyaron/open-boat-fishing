@@ -204,11 +204,19 @@ function HoldBanner({ holdExpiresAt, onExpire }: { holdExpiresAt: string; onExpi
 
 type Prepared =
   | { kind: "ready"; hold: StoredHold }
-  // answered: the server responded, so it has dealt with any `replaces`.
+  // answered: the server got as far as releasing any `replaces` (see
+  // reachedReclaim), so the previous booking can be dropped.
   | { kind: "error"; message: string; answered: boolean }
   | { kind: "paid"; hold: StoredHold };
 
 const SOMETHING_WRONG = "Something went wrong. Please try again.";
+
+// POST /api/bookings releases `replaces` before it books. A rate limit (429),
+// a validation error (400) or a server error can come back before that step,
+// leaving the previous booking holding seats: keep it for the next press.
+function reachedReclaim(status: number): boolean {
+  return (status >= 200 && status < 300) || status === 404 || status === 409;
+}
 const HOLD_RAN_OUT = "Your seat hold ran out and the seats were released. Pay again to check they're still free.";
 
 export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
@@ -319,6 +327,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
       tickets: item.tickets.map((t) => ({ ticketType: t.ticketType, quantity: t.quantity })),
     }));
 
+    let status: number;
     let data: {
       error?: string;
       code?: string;
@@ -339,6 +348,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
           replaces: replaces && { bookingId: replaces.bookingId, holdToken: replaces.holdToken },
         }),
       });
+      status = res.status;
       data = await res.json();
     } catch {
       // No answer (offline, or a non-JSON error page): the previous booking
@@ -348,7 +358,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
 
     if (data.code === "replaced_booking_paid" && replaces) return { kind: "paid", hold: replaces };
     if (data.error || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt || !data.holdToken) {
-      return { kind: "error", message: data.error ?? SOMETHING_WRONG, answered: true };
+      return { kind: "error", message: data.error ?? SOMETHING_WRONG, answered: reachedReclaim(status) };
     }
     return {
       kind: "ready",
