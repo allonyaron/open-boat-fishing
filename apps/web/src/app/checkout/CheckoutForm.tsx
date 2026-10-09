@@ -227,6 +227,9 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
   const [attempt, setAttempt] = useState<StoredHold | null>(null);
   const [releasing, setReleasing] = useState(false);
   const submittingRef = useRef(false);
+  // A previous booking whose release got no answer. It isn't shown or reused,
+  // but the next booking request names it in replaces, so the server frees it.
+  const unreleasedRef = useRef<StoredHold | null>(null);
   const key = cartKey(items);
 
   useEffect(() => {
@@ -260,7 +263,8 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
         window.location.href = confirmationUrl(stored);
         return;
       }
-      clearHold();
+      if (result === "released") clearHold();
+      else unreleasedRef.current = stored;
       setReleasing(false);
     });
     // Once, on load: later cart changes happen on other pages.
@@ -285,11 +289,12 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
 
   // Gives the held seats back; the next Pay press books afresh. If the booking
   // turns out to be paid, it stays saved so the confirmation page can clear
-  // the cart.
-  async function releaseAttempt(a: StoredHold): Promise<"released" | "paid"> {
+  // the cart; if the release failed, the next booking replaces it.
+  async function releaseAttempt(a: StoredHold): Promise<"released" | "paid" | "failed"> {
     setAttempt(null);
     const result = await releaseHold(a);
     if (result === "released") clearHold();
+    if (result === "failed") unreleasedRef.current = a;
     return result;
   }
 
@@ -376,10 +381,12 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
       }
       // 404: the booking stopped being a live hold. Replace it below.
     }
-    const prepared = await createBooking(attempt);
+    const previous = attempt ?? unreleasedRef.current;
+    const prepared = await createBooking(previous);
     // Once the server has answered, it has released the previous booking (or
-    // found it paid), so drop it.
-    if (prepared.kind === "error" && prepared.answered && attempt) {
+    // found it paid), so drop it. With no answer, keep it for the next press.
+    if (prepared.kind !== "error" || prepared.answered) unreleasedRef.current = null;
+    if (prepared.kind === "error" && prepared.answered && previous) {
       setAttempt(null);
       clearHold();
     }

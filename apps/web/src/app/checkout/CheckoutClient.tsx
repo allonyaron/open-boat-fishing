@@ -58,8 +58,9 @@ function CheckoutInner({
         // (With a cart, CheckoutForm resumes or releases it.)
         const hold = loadHold();
         if (hold) {
-          clearHold();
-          void releaseHold(hold);
+          void releaseHold(hold).then((result) => {
+            if (result !== "failed") clearHold();
+          });
         }
       }
     } catch { /* ignore */ }
