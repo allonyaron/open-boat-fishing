@@ -158,17 +158,18 @@ describe("POST /api/bookings — reclaiming expired holds (P2-3)", () => {
     );
   });
 
-  it("sends no push when the request fails after reclaiming, since the reclaim rolls back", async () => {
-    // One seat comes back, but the request wants two.
+  it("keeps the reclaim when the booking that triggered it fails", async () => {
+    // One seat comes back, but the request wants two. The expired hold's PI is
+    // already canceled, so it must not go back to pending.
     await testDb.update(trips).set({ seatsRemaining: 1 }).where(eq(trips.id, ctx.tripId));
     const old = await seedHold({ holdExpiresAt: EXPIRED() });
 
     const res = await POST(postReq(ctx.tripId, 2));
 
     expect(res.status).toBe(409);
-    expect(await status(old.bookingId)).toBe("pending");
-    expect(await seats(ctx.tripId)).toBe(0);
-    expect(sendPushToEmails).not.toHaveBeenCalled();
+    expect(await status(old.bookingId)).toBe("cancelled");
+    expect(await seats(ctx.tripId)).toBe(1);
+    expect(sendPushToEmails).toHaveBeenCalledTimes(1);
   });
 
   it("reclaims an expired hold that never got a PaymentIntent, without calling Stripe", async () => {

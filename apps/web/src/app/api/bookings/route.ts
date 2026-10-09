@@ -16,14 +16,10 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { randomBytes, randomUUID } from "crypto";
 import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { getOperatorContext, getOperatorId } from "@/lib/operator";
-import { cancelPendingBooking, type CancelledBooking } from "@/lib/bookings/cancel";
+import { cancelPendingBooking } from "@/lib/bookings/cancel";
 import { customerContactSchema } from "@/lib/bookings/contact";
 import { signHoldToken } from "@/lib/bookings/hold-token";
-import {
-  notifyHoldsExpired,
-  prepareExpiredHolds,
-  reclaimExpiredHoldsInTx,
-} from "@/lib/bookings/reclaim-expired-holds";
+import { reclaimExpiredHolds } from "@/lib/bookings/reclaim-expired-holds";
 import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
 import { isOnlineSalesOpen } from "@/lib/trips/online-sales";
 import { z } from "zod";
@@ -107,9 +103,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Expired holds on these trips give their seats back before we count seats,
-  // so availability doesn't wait for the expiry cron (P2-3). Their PIs are
-  // canceled here, outside the transaction, because that calls Stripe.
-  const reclaim = await prepareExpiredHolds(operator.id, tripIds);
+  // so availability doesn't wait for the expiry cron (P2-3). This commits on
+  // its own, before the booking transaction below.
+  await reclaimExpiredHolds(operator.id, tripIds);
 
   // All seat-sensitive work runs in one transaction. FOR UPDATE on trip rows
   // serializes concurrent bookings — the second request waits here until the
@@ -119,29 +115,17 @@ export async function POST(req: NextRequest) {
   let ticketCount: number;
   let groupDiscountCents: number;
   let holdExpiresAt: Date;
-  let reclaimed: CancelledBooking[];
 
   try {
-    ({ booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt, reclaimed } = await db.transaction(
+    ({ booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt } = await db.transaction(
       async (tx) => {
-        // Lock the cart's trips and every trip a reclaimed hold restores seats
-        // to, in id order, so concurrent requests can't deadlock on each other.
-        const lockIds = [...new Set([...tripIds, ...reclaim.tripIds])];
-        await tx
-          .select({ id: trips.id })
-          .from(trips)
-          .where(and(inArray(trips.id, lockIds), eq(trips.operatorId, operator.id)))
-          .orderBy(trips.id)
-          .for("update");
-
-        const reclaimed = await reclaimExpiredHoldsInTx(tx, reclaim.bookingIds);
-
-        // Read the cart's trips after the reclaim, so the seat counts include
-        // what it gave back.
+        // Locked in id order, so concurrent multi-trip carts can't deadlock.
         const tripRows = await tx
           .select()
           .from(trips)
-          .where(and(inArray(trips.id, tripIds), eq(trips.operatorId, operator.id)));
+          .where(and(inArray(trips.id, tripIds), eq(trips.operatorId, operator.id)))
+          .orderBy(trips.id)
+          .for("update");
 
         if (tripRows.length !== tripIds.length) {
           throw Object.assign(new Error("One or more trips not found"), { httpStatus: 404 });
@@ -352,7 +336,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        return { booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt, reclaimed };
+        return { booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt };
       },
     ));
   } catch (err: unknown) {
@@ -362,10 +346,6 @@ export async function POST(req: NextRequest) {
     }
     throw err;
   }
-
-  // Only now: a rolled-back reclaim cancelled nothing. Those bookings' PIs are
-  // canceled, so the payment_intent.canceled webhook cancels and notifies them.
-  notifyHoldsExpired(reclaimed);
 
   // Stripe PI creation is outside the transaction. If it fails, restore seats
   // and cancel the booking so no ghost holds accumulate.
