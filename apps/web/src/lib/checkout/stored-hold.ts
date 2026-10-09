@@ -65,12 +65,15 @@ export function holdHeaders(hold: StoredHold): Record<string, string> {
 }
 
 /**
- * Gives the booking's seats back. "paid" means its payment went through after
- * all, and nothing was released. A network failure counts as released: the
- * hold expires on its own, and the next booking on the trip reclaims it.
+ * Gives the booking's seats back.
+ * - "released": done, or nothing left to release (gone, or the token expired
+ *   with the hold).
+ * - "paid": its payment went through after all; nothing was released.
+ * - "failed": no answer, or the server couldn't reach Stripe. Keep the hold
+ *   saved: the next page retries, and the next booking sends it as replaces.
  * keepalive lets the request finish if the page is navigating away.
  */
-export async function releaseHold(hold: StoredHold): Promise<"released" | "paid"> {
+export async function releaseHold(hold: StoredHold): Promise<"released" | "paid" | "failed"> {
   try {
     const res = await fetch(`/api/bookings/${hold.bookingId}/release`, {
       method: "POST",
@@ -78,10 +81,11 @@ export async function releaseHold(hold: StoredHold): Promise<"released" | "paid"
       keepalive: true,
     });
     if (res.status === 409) return "paid";
+    if (res.status === 429 || res.status >= 500) return "failed";
+    return "released";
   } catch {
-    /* see above */
+    return "failed";
   }
-  return "released";
 }
 
 /** Where to send a customer whose booking turns out to be paid. */

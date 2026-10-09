@@ -16,8 +16,10 @@ export function ReleaseAbandonedHold() {
       if (pathname === "/checkout" || pathname.startsWith("/booking/")) return;
       const hold = loadHold();
       if (!hold) return;
-      clearHold();
-      void releaseHold(hold);
+      // Kept on failure, so the next page (or checkout's replaces) tries again.
+      void releaseHold(hold).then((result) => {
+        if (result !== "failed") clearHold();
+      });
     }
     release();
     // Back to a page restored from the back-forward cache (Safari keeps more
