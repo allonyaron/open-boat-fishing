@@ -18,6 +18,7 @@ import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib
 import { getOperatorContext, getOperatorId } from "@/lib/operator";
 import { cancelPendingBooking, type CancelledBooking } from "@/lib/bookings/cancel";
 import { customerContactSchema } from "@/lib/bookings/contact";
+import { signHoldToken } from "@/lib/bookings/hold-token";
 import {
   notifyHoldsExpired,
   prepareExpiredHolds,
@@ -402,6 +403,8 @@ export async function POST(req: NextRequest) {
     ticketCount,
     groupDiscountCents,
     holdExpiresAt: holdExpiresAt.toISOString(),
+    // Required by extend-hold, contact and release on this booking.
+    holdToken: signHoldToken({ bookingId: booking.id, operatorId: operator.id }, booking.createdAt),
   });
 }
 

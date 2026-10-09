@@ -5,6 +5,7 @@ import type { SeedResult } from "../db-helpers";
 import { bookings } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { PATCH } from "@/app/api/bookings/[bookingId]/contact/route";
+import { signHoldToken } from "@/lib/bookings/hold-token";
 
 // A payment retry reuses the first attempt's booking (P2-3), so contact
 // details fixed after a decline are saved onto the pending booking.
@@ -14,13 +15,16 @@ let ipCounter = 0;
 
 const contact = { customerName: "Sal Marino", customerEmail: "Sal@Example.com", customerPhone: "(631) 555-0100" };
 
-function call(bookingId: string, body: unknown = contact, operatorId?: string) {
+// Carries a valid hold token for ctx's operator unless token is null.
+function call(bookingId: string, body: unknown = contact, token?: string | null) {
+  const holdToken = token === undefined ? signHoldToken({ bookingId, operatorId: ctx.operatorId }) : token;
   const req = new NextRequest(`http://localhost/api/bookings/${bookingId}/contact`, {
     method: "PATCH",
     body: JSON.stringify(body),
     headers: {
       "Content-Type": "application/json",
-      "x-operator-id": operatorId ?? ctx.operatorId,
+      "x-operator-id": ctx.operatorId,
+      ...(holdToken ? { "x-hold-token": holdToken } : {}),
       "x-forwarded-for": `10.42.0.${++ipCounter}`,
     },
   });
@@ -54,6 +58,27 @@ describe("PATCH /api/bookings/:id/contact (P2-3)", () => {
     expect(b.customerEmail).toBe("sal@example.com");
     expect(b.customerName).toBe("Sal Marino");
     expect(b.customerPhone).toBe("(631) 555-0100");
+  });
+
+  it("returns 401 without a hold token, and changes nothing", async () => {
+    const { bookingId } = await seedBooking(ctx, { status: "pending", holdExpiresAt: LIVE() });
+    const before = await row(bookingId);
+
+    const res = await call(bookingId, contact, null);
+
+    expect(res.status).toBe(401);
+    expect((await row(bookingId)).customerEmail).toBe(before.customerEmail);
+  });
+
+  it("returns 401 with a token for another booking", async () => {
+    const { bookingId } = await seedBooking(ctx, { status: "pending", holdExpiresAt: LIVE() });
+    const other = await seedBooking(ctx, { status: "pending", holdExpiresAt: LIVE() });
+    const before = await row(bookingId);
+
+    const res = await call(bookingId, contact, signHoldToken({ bookingId: other.bookingId, operatorId: ctx.operatorId }));
+
+    expect(res.status).toBe(401);
+    expect((await row(bookingId)).customerEmail).toBe(before.customerEmail);
   });
 
   it("returns 404 once the hold has expired", async () => {

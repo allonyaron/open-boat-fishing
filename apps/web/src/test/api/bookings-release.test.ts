@@ -16,16 +16,20 @@ vi.mock("@/lib/stripe", () => ({
 
 import { stripe } from "@/lib/stripe";
 import { POST } from "@/app/api/bookings/[bookingId]/release/route";
+import { signHoldToken } from "@/lib/bookings/hold-token";
 
 let ctx: SeedResult;
 let ipCounter = 0;
 
-function call(bookingId: string, opts: { operatorId?: string; ip?: string } = {}) {
+// Carries a valid hold token for ctx's operator unless token is null.
+function call(bookingId: string, opts: { operatorId?: string; ip?: string; token?: string | null } = {}) {
+  const token = opts.token === undefined ? signHoldToken({ bookingId, operatorId: ctx.operatorId }) : opts.token;
   const req = new NextRequest(`http://localhost/api/bookings/${bookingId}/release`, {
     method: "POST",
     headers: {
       "x-operator-id": opts.operatorId ?? ctx.operatorId,
       "x-forwarded-for": opts.ip ?? `10.41.0.${++ipCounter}`,
+      ...(token ? { "x-hold-token": token } : {}),
     },
   });
   return POST(req, { params: Promise.resolve({ bookingId }) });
@@ -92,6 +96,14 @@ describe("POST /api/bookings/:id/release (P2-3)", () => {
       await cleanupBookings(other.tripId);
       await cleanupOperator(other.operatorId);
     }
+  });
+
+  it("returns 401 without a hold token, and leaves the hold alone", async () => {
+    const { bookingId } = await seedHold();
+    const res = await call(bookingId, { token: null });
+    expect(res.status).toBe(401);
+    expect(stripe.paymentIntents.retrieve).not.toHaveBeenCalled();
+    expect(await status(bookingId)).toBe("pending");
   });
 
   it("cancels the PI, then the booking, and restores the seat", async () => {

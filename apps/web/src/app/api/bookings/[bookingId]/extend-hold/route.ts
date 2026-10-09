@@ -4,6 +4,7 @@ import { bookings, bookingItems, trips } from "@openboat/db";
 import { and, eq, min } from "drizzle-orm";
 import { getOperatorId } from "@/lib/operator";
 import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
+import { requireHoldToken } from "@/lib/bookings/hold-token";
 
 const EXTEND_MS = 5 * 60 * 1000; // 5 extra minutes on payment attempt
 const MAX_HOLD_MS = 90 * 60 * 1000; // hard cap: hold cannot exceed 90 min from creation
@@ -21,6 +22,8 @@ export async function PATCH(
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
   const { bookingId } = await params;
+  const denied = requireHoldToken(req, bookingId, operatorId);
+  if (denied) return denied;
 
   const [booking] = await db
     .select({

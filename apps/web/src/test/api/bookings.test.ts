@@ -17,6 +17,7 @@ vi.mock("@/lib/stripe", () => ({
 import { stripe } from "@/lib/stripe";
 import { POST, GET } from "@/app/api/bookings/route";
 import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
+import { verifyHoldToken } from "@/lib/bookings/hold-token";
 
 let ctx: SeedResult;
 let ipCounter = 0;
@@ -251,6 +252,8 @@ describe("POST /api/bookings — success", () => {
     expect(body.ticketCount).toBe(2);
     expect(body.groupDiscountCents).toBe(0);
     expect(body.holdExpiresAt).toBeDefined();
+    // The checkout needs it for extend-hold, contact and release.
+    expect(verifyHoldToken(body.holdToken, body.bookingId, ctx.operatorId)).toBe(true);
     createdBookingId = body.bookingId;
   });
 
