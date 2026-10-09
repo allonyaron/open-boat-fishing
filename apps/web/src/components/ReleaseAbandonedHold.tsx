@@ -12,11 +12,21 @@ import { clearHold, loadHold, releaseHold } from "@/lib/checkout/stored-hold";
 export function ReleaseAbandonedHold() {
   const pathname = usePathname();
   useEffect(() => {
-    if (pathname === "/checkout" || pathname.startsWith("/booking/")) return;
-    const hold = loadHold();
-    if (!hold) return;
-    clearHold();
-    void releaseHold(hold);
+    function release() {
+      if (pathname === "/checkout" || pathname.startsWith("/booking/")) return;
+      const hold = loadHold();
+      if (!hold) return;
+      clearHold();
+      void releaseHold(hold);
+    }
+    release();
+    // Back to a page restored from the back-forward cache (Safari keeps more
+    // pages there) runs no effects, so check again when it is shown.
+    function onPageShow(e: PageTransitionEvent) {
+      if (e.persisted) release();
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
   }, [pathname]);
   return null;
 }
