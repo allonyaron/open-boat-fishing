@@ -25,7 +25,7 @@ export function ConfirmedBookingView({
 
   return (
     <div className="min-h-screen bg-deck font-archivo">
-      <ClearPendingPayment />
+      <ClearPendingPayment confirmationCode={booking.confirmationCode} />
       <BookingNav
         operatorName={operatorName}
         dockAddress={dockAddress}

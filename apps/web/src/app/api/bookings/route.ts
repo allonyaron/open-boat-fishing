@@ -18,7 +18,7 @@ import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib
 import { getOperatorContext, getOperatorId } from "@/lib/operator";
 import { cancelPendingBooking } from "@/lib/bookings/cancel";
 import { customerContactSchema } from "@/lib/bookings/contact";
-import { signHoldToken } from "@/lib/bookings/hold-token";
+import { signHoldToken, verifyHoldToken } from "@/lib/bookings/hold-token";
 import { reclaimExpiredHolds } from "@/lib/bookings/reclaim-expired-holds";
 import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
 import { isOnlineSalesOpen } from "@/lib/trips/online-sales";
@@ -34,6 +34,10 @@ const BOOKING_RATE_WINDOW_MS = 15 * 60 * 1000;
 const BOOKING_RATE_MAX = 20; // per IP per 15 min
 
 const bookingBodySchema = customerContactSchema.extend({
+  // The checkout's previous booking, which this one supersedes: the cart
+  // changed, or its hold ran out. Released here, so a lost release call
+  // can't leave it holding seats (P2-3).
+  replaces: z.object({ bookingId: z.string().uuid(), holdToken: z.string().max(1000) }).nullish(),
   notes: z.string().max(500).nullish(),
   cart: z
     .array(
@@ -83,7 +87,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const { cart, customerName, customerEmail, customerPhone, notes } = parsed.data;
+  const { cart, customerName, customerEmail, customerPhone, notes, replaces } = parsed.data;
 
   const operator = await getOperatorContext(req);
   if (!operator) {
@@ -103,9 +107,21 @@ export async function POST(req: NextRequest) {
   }
 
   // Expired holds on these trips give their seats back before we count seats,
-  // so availability doesn't wait for the expiry cron (P2-3). This commits on
-  // its own, before the booking transaction below.
-  await reclaimExpiredHolds(operator.id, tripIds);
+  // so availability doesn't wait for the expiry cron (P2-3), and so does the
+  // booking this one replaces. This commits on its own, before the booking
+  // transaction below. A replaces entry without a valid hold token is ignored:
+  // only the checkout that made a booking may release it.
+  const replacing =
+    replaces && verifyHoldToken(replaces.holdToken, replaces.bookingId, operator.id)
+      ? replaces.bookingId
+      : undefined;
+  const { replacedPaid } = await reclaimExpiredHolds(operator.id, tripIds, { replacing });
+  if (replacedPaid) {
+    return NextResponse.json(
+      { error: "Your earlier payment for these seats went through.", code: "replaced_booking_paid" },
+      { status: 409 },
+    );
+  }
 
   // All seat-sensitive work runs in one transaction. FOR UPDATE on trip rows
   // serializes concurrent bookings — the second request waits here until the
