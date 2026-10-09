@@ -6,6 +6,7 @@ import "./globals.css";
 import { getOperatorRecord } from "@/lib/operator";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import { DemoBanner } from "@/components/DemoBanner";
+import { ReleaseAbandonedHold } from "@/components/ReleaseAbandonedHold";
 
 // Self-hosted latin-subset woff2s (see fonts/README.md for their source), so
 // the build never downloads from Google Fonts.
@@ -61,6 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${spaceGrotesk.variable} ${plusJakarta.variable} ${manrope.variable} ${archivo.variable} ${ibmPlexMono.variable}`}>
       <body className="font-jakarta">
         <DemoBanner />
+        <ReleaseAbandonedHold />
         <PostHogProvider>{children}</PostHogProvider>
       </body>
     </html>

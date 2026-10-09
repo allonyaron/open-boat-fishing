@@ -15,6 +15,18 @@ type ReclaimableHolds = {
   bookingIds: string[];
   /** Every trip those bookings hold seats on, including trips outside the cart. */
   tripIds: string[];
+  /** The booking being replaced turned out to be paid (see reclaimExpiredHolds). */
+  replacedPaid: boolean;
+};
+
+export type ReclaimResult = {
+  /** Bookings cancelled; the replaced one, if any, included. */
+  reclaimed: CancelledBooking[];
+  /**
+   * The checkout's previous booking is paid or paying. The caller must not
+   * create a second booking: the customer has already bought these seats.
+   */
+  replacedPaid: boolean;
 };
 
 /**
@@ -27,14 +39,19 @@ type ReclaimableHolds = {
  * triggered it: once a hold's PI is canceled, the hold can never be paid, so
  * cancelling it is right even if that booking then fails (P2-3 follow-up).
  * The freed seats are first come, first served under the trip locks.
+ *
+ * `replacing` is the checkout's own previous booking, live or not, which the
+ * new booking supersedes (the caller has checked its hold token). It is
+ * released along with the expired holds, without the expiry push, unless it
+ * turns out to be paid: then nothing happens to it and replacedPaid is set.
  */
 export async function reclaimExpiredHolds(
   operatorId: string,
   tripIds: string[],
-  now: Date = new Date(),
-): Promise<CancelledBooking[]> {
-  const holds = await cancelExpiredHoldPayments(operatorId, tripIds, now);
-  if (holds.bookingIds.length === 0) return [];
+  opts: { replacing?: string; now?: Date } = {},
+): Promise<ReclaimResult> {
+  const holds = await cancelExpiredHoldPayments(operatorId, tripIds, opts.now ?? new Date(), opts.replacing);
+  if (holds.bookingIds.length === 0) return { reclaimed: [], replacedPaid: holds.replacedPaid };
 
   const reclaimed = await db.transaction(async (tx) => {
     // Every trip these bookings restore seats to, locked in id order, so two
@@ -57,21 +74,22 @@ export async function reclaimExpiredHolds(
     return cancelled;
   });
 
-  notifyHoldsExpired(reclaimed);
-  return reclaimed;
+  notifyHoldsExpired(reclaimed.filter((b) => b.id !== opts.replacing));
+  return { reclaimed, replacedPaid: holds.replacedPaid };
 }
 
 /**
- * Finds the expired, unpaid pending bookings on the requested trips and
- * cancels their PaymentIntents, outside any transaction because it calls
- * Stripe. Only bookings whose PI is now certainly canceled (or never existed)
- * are returned; a PI that succeeded, is processing, or errored is left to the
- * webhook and cron.
+ * Finds the expired, unpaid pending bookings on the requested trips, plus the
+ * booking being replaced, and cancels their PaymentIntents, outside any
+ * transaction because it calls Stripe. Only bookings whose PI is now certainly
+ * canceled (or never existed) are returned; a PI that succeeded, is
+ * processing, or errored is left to the webhook and cron.
  */
 async function cancelExpiredHoldPayments(
   operatorId: string,
   tripIds: string[],
-  now: Date = new Date(),
+  now: Date,
+  replacing: string | undefined,
 ): Promise<ReclaimableHolds> {
   const expired = await db
     .selectDistinct({
@@ -93,20 +111,43 @@ async function cancelExpiredHoldPayments(
     )
     .limit(RECLAIM_BATCH_LIMIT);
 
-  if (expired.length === 0) return { bookingIds: [], tripIds: [] };
+  const candidates = [...expired];
+  let replacedPaid = false;
+  if (replacing) {
+    const [replaced] = await db
+      .select({
+        id: bookings.id,
+        status: bookings.status,
+        stripePaymentIntentId: bookings.stripePaymentIntentId,
+        paymentId: payments.id,
+      })
+      .from(bookings)
+      .leftJoin(payments, eq(payments.bookingId, bookings.id))
+      .where(and(eq(bookings.id, replacing), eq(bookings.operatorId, operatorId)));
+    if (replaced?.status === "confirmed" || replaced?.paymentId) {
+      replacedPaid = true;
+    } else if (replaced?.status === "pending" && !candidates.some((b) => b.id === replacing)) {
+      candidates.push({ id: replaced.id, stripePaymentIntentId: replaced.stripePaymentIntentId });
+    }
+  }
+
+  if (candidates.length === 0) return { bookingIds: [], tripIds: [], replacedPaid };
 
   const results = await Promise.all(
-    expired.map((b) => cancelPaymentIntentForRelease(b.stripePaymentIntentId)),
+    candidates.map((b) => cancelPaymentIntentForRelease(b.stripePaymentIntentId)),
   );
-  const bookingIds = expired.filter((_, i) => results[i] === "canceled").map((b) => b.id);
-  if (bookingIds.length === 0) return { bookingIds: [], tripIds: [] };
+  if (replacing && results[candidates.findIndex((b) => b.id === replacing)] === "paid") {
+    replacedPaid = true;
+  }
+  const bookingIds = candidates.filter((_, i) => results[i] === "canceled").map((b) => b.id);
+  if (bookingIds.length === 0) return { bookingIds: [], tripIds: [], replacedPaid };
 
   const items = await db
     .selectDistinct({ tripId: bookingItems.tripId })
     .from(bookingItems)
     .where(and(inArray(bookingItems.bookingId, bookingIds), eq(bookingItems.operatorId, operatorId)));
 
-  return { bookingIds, tripIds: items.map((i) => i.tripId) };
+  return { bookingIds, tripIds: items.map((i) => i.tripId), replacedPaid };
 }
 
 /**

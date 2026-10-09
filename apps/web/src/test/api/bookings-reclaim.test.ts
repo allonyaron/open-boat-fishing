@@ -33,17 +33,19 @@ vi.mock("@/lib/push", () => ({
 import { stripe } from "@/lib/stripe";
 import { sendPushToEmails } from "@/lib/push";
 import { POST } from "@/app/api/bookings/route";
+import { signHoldToken } from "@/lib/bookings/hold-token";
 
 let ctx: SeedResult;
 let secondTripId: string;
 let ipCounter = 0;
 
-function postReq(tripId: string, quantity = 1) {
+function postReq(tripId: string, quantity = 1, extra: Record<string, unknown> = {}) {
   return new NextRequest("http://localhost/api/bookings", {
     method: "POST",
     body: JSON.stringify({
       customerEmail: "next@example.com",
       cart: [{ tripId, tickets: [{ ticketType: "adult", quantity }] }],
+      ...extra,
     }),
     headers: {
       "Content-Type": "application/json",
@@ -278,4 +280,80 @@ describe("POST /api/bookings — reclaiming expired holds (P2-3)", () => {
     }
     expect(await status(old.bookingId)).toBe("pending");
   });
+});
+
+describe("POST /api/bookings — replacing the checkout's previous booking (P2-3)", () => {
+  function replacing(bookingId: string, token = signHoldToken({ bookingId, operatorId: ctx.operatorId })) {
+    return { replaces: { bookingId, holdToken: token } };
+  }
+
+  async function bookingsFor(email: string) {
+    return testDb.select({ id: bookings.id }).from(bookings).where(eq(bookings.customerEmail, email));
+  }
+
+  it("releases a live hold it replaces, without the expiry push", async () => {
+    await testDb.update(trips).set({ seatsRemaining: 1 }).where(eq(trips.id, ctx.tripId));
+    const old = await seedHold({ holdExpiresAt: LIVE(), pi: "pi_replaced" });
+
+    const res = await POST(postReq(ctx.tripId, 1, replacing(old.bookingId)));
+
+    expect(res.status).toBe(200);
+    expect(await status(old.bookingId)).toBe("cancelled");
+    expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith("pi_replaced");
+    expect(await seats(ctx.tripId)).toBe(0); // +1 released, -1 booked
+    expect(sendPushToEmails).not.toHaveBeenCalled();
+  });
+
+  it("releases a replaced booking on a trip outside the new cart", async () => {
+    const old = await seedHold({ holdExpiresAt: LIVE() }); // on the first trip
+    const before = await seats(ctx.tripId);
+
+    const res = await POST(postReq(secondTripId, 1, replacing(old.bookingId)));
+
+    expect(res.status).toBe(200);
+    expect(await status(old.bookingId)).toBe("cancelled");
+    expect(await seats(ctx.tripId)).toBe(before + 1);
+  });
+
+  it("ignores a replaces entry whose hold token doesn't match", async () => {
+    const old = await seedHold({ holdExpiresAt: LIVE() });
+    const other = await seedHold({ holdExpiresAt: LIVE() });
+
+    const res = await POST(
+      postReq(ctx.tripId, 1, replacing(old.bookingId, signHoldToken({ bookingId: other.bookingId, operatorId: ctx.operatorId }))),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await status(old.bookingId)).toBe("pending");
+    expect(await status(other.bookingId)).toBe("pending");
+    expect(stripe.paymentIntents.cancel).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 replaced_booking_paid and books nothing when the replaced booking is confirmed", async () => {
+    const paid = await seedBooking(ctx, { status: "confirmed", stripePaymentIntentId: "pi_paid" });
+    const email = `paid-${randomUUID().slice(0, 6)}@example.com`;
+
+    const res = await POST(postReq(ctx.tripId, 1, { ...replacing(paid.bookingId), customerEmail: email }));
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("replaced_booking_paid");
+    expect(await bookingsFor(email)).toHaveLength(0);
+    expect(stripe.paymentIntents.create).not.toHaveBeenCalled();
+  });
+
+  it.each(["succeeded", "processing"])(
+    "returns 409 replaced_booking_paid when the replaced booking's PI is %s, and leaves it alone",
+    async (piStatus) => {
+      const old = await seedHold({ holdExpiresAt: LIVE() });
+      vi.mocked(stripe.paymentIntents.retrieve).mockResolvedValue({ status: piStatus } as never);
+
+      const res = await POST(postReq(ctx.tripId, 1, replacing(old.bookingId)));
+
+      expect(res.status).toBe(409);
+      expect((await res.json()).code).toBe("replaced_booking_paid");
+      expect(await status(old.bookingId)).toBe("pending");
+      expect(stripe.paymentIntents.cancel).not.toHaveBeenCalled();
+      expect(stripe.paymentIntents.create).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -47,18 +47,10 @@ function CheckoutInner({
 
   useEffect(() => {
     try {
+      // The cart stays here until the payment succeeds (the confirmed-booking
+      // view clears it), so a reload or a retry still has it.
       const raw = localStorage.getItem("openboat_cart");
-      if (raw) {
-        setItems(JSON.parse(raw));
-      } else {
-        // No cart — if there's a pending payment in progress, redirect to confirmation
-        const pending = localStorage.getItem("openboat_pending_payment");
-        if (pending) {
-          const { confirmationCode } = JSON.parse(pending);
-          window.location.href = `/booking/confirmation?code=${confirmationCode}`;
-          return; // skip setInitialized — we're redirecting
-        }
-      }
+      if (raw) setItems(JSON.parse(raw));
     } catch { /* ignore */ }
     setInitialized(true); // safe to render now
     posthog.capture("checkout_view");

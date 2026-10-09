@@ -3,6 +3,17 @@
 import { useState, useEffect, useRef } from "react";
 import { PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import type { Stripe, StripeElements } from "@stripe/stripe-js";
+import {
+  type StoredHold,
+  cartKey,
+  clearHold,
+  confirmationUrl,
+  holdHeaders,
+  isLive,
+  loadHold,
+  releaseHold,
+  saveHold,
+} from "@/lib/checkout/stored-hold";
 import posthog from "posthog-js";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
 import { fmtTimeET } from "@/lib/format";
@@ -191,28 +202,10 @@ function HoldBanner({ holdExpiresAt, onExpire }: { holdExpiresAt: string; onExpi
 
 // ─── Checkout form — one page, one button, one commitment ─────────────────────
 
-type HeldBooking = {
-  bookingId: string;
-  clientSecret: string;
-  confirmationCode: string;
-  holdExpiresAt: string;
-  /** Proves this page owns the booking: sent on extend-hold, contact and release. */
-  holdToken: string;
-};
-
-function holdHeaders(b: HeldBooking): Record<string, string> {
-  return { "X-Hold-Token": b.holdToken };
-}
-
-type Attempt = HeldBooking & {
-  /** Where Stripe sends the customer after paying; reused if the booking turns out paid. */
-  returnUrl: string;
-};
-
 type Prepared =
-  | { kind: "ready"; booking: HeldBooking }
+  | { kind: "ready"; hold: StoredHold }
   | { kind: "error"; message: string }
-  | { kind: "paid" };
+  | { kind: "paid"; hold: StoredHold };
 
 const SOMETHING_WRONG = "Something went wrong. Please try again.";
 const HOLD_RAN_OUT = "Your seat hold ran out and the seats were released. Pay again to check they're still free.";
@@ -227,11 +220,38 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
   const [touched, setTouched] = useState({ name: false, mobile: false, email: false });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  // The booking from the first Pay press. A retry after a decline or a closed
-  // 3DS window confirms the same PI again instead of holding the seats twice (P2-3).
-  const [attempt, setAttempt] = useState<Attempt | null>(null);
+  // The booking from the first Pay press, mirrored to sessionStorage. A retry
+  // after a decline or a closed 3DS window confirms the same PI again instead
+  // of holding the seats twice (P2-3); a reload picks it back up.
+  const [attempt, setAttempt] = useState<StoredHold | null>(null);
   const [releasing, setReleasing] = useState(false);
   const submittingRef = useRef(false);
+  const key = cartKey(items);
+
+  useEffect(() => {
+    if (attempt) saveHold(attempt);
+  }, [attempt]);
+
+  // On load: resume this tab's booking if it is still a live hold for this
+  // cart; otherwise give its seats back before anything else happens.
+  useEffect(() => {
+    const stored = loadHold();
+    if (!stored) return;
+    if (stored.cartKey === key && isLive(stored)) {
+      setAttempt(stored);
+      return;
+    }
+    setReleasing(true);
+    void releaseHold(stored).then((result) => {
+      if (result === "paid") {
+        window.location.href = confirmationUrl(stored);
+        return;
+      }
+      clearHold();
+      setReleasing(false);
+    });
+    // Once, on load: later cart changes happen on other pages.
+  }, []);
 
   const nameError = touched.name && !name.trim() ? "Name is required" : null;
   const mobileError = touched.mobile && mobile && !validatePhone(mobile) ? "Enter a 10-digit US number" : null;
@@ -250,19 +270,14 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
     };
   }
 
-  // Gives the held seats back and returns the page to "no booking yet": the
-  // cart goes back into storage, and the next Pay press books afresh.
-  async function releaseAttempt(a: Attempt): Promise<"released" | "paid"> {
+  // Gives the held seats back; the next Pay press books afresh. If the booking
+  // turns out to be paid, it stays saved so the confirmation page can clear
+  // the cart.
+  async function releaseAttempt(a: StoredHold): Promise<"released" | "paid"> {
     setAttempt(null);
-    try {
-      const res = await fetch(`/api/bookings/${a.bookingId}/release`, { method: "POST", headers: holdHeaders(a) });
-      if (res.status === 409) return "paid";
-    } catch {
-      // Carry on: once the hold expires, the next booking request reclaims it.
-    }
-    localStorage.setItem("openboat_cart", JSON.stringify(items));
-    localStorage.removeItem("openboat_pending_payment");
-    return "released";
+    const result = await releaseHold(a);
+    if (result === "released") clearHold();
+    return result;
   }
 
   async function handleHoldExpired() {
@@ -270,24 +285,17 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
     if (!attempt || submittingRef.current) return;
     setReleasing(true);
     const result = await releaseAttempt(attempt);
-    setReleasing(false);
     if (result === "paid") {
-      window.location.href = attempt.returnUrl;
+      window.location.href = confirmationUrl(attempt);
       return;
     }
+    setReleasing(false);
     setSubmitError(HOLD_RAN_OUT);
   }
 
-  // Going back to change the cart gives the held seats back first.
-  async function handleBackToTrips(e: React.MouseEvent<HTMLAnchorElement>) {
-    if (!attempt || submittingRef.current) return;
-    e.preventDefault();
-    const href = e.currentTarget.href;
-    const result = await releaseAttempt(attempt);
-    window.location.href = result === "paid" ? attempt.returnUrl : href;
-  }
-
-  async function createBooking(): Promise<Prepared> {
+  // Books the cart. `replaces` is this checkout's previous booking, which the
+  // server releases in the same request.
+  async function createBooking(replaces: StoredHold | null): Promise<Prepared> {
     const cart = items.map((item) => ({
       tripId: item.tripId,
       tickets: item.tickets.map((t) => ({ ticketType: t.ticketType, quantity: t.quantity })),
@@ -295,6 +303,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
 
     let data: {
       error?: string;
+      code?: string;
       clientSecret?: string;
       confirmationCode?: string;
       bookingId?: string;
@@ -305,35 +314,39 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
       const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cart, ...contactBody(), notes: null }),
+        body: JSON.stringify({
+          cart,
+          ...contactBody(),
+          notes: null,
+          replaces: replaces && { bookingId: replaces.bookingId, holdToken: replaces.holdToken },
+        }),
       });
       data = await res.json();
     } catch {
       return { kind: "error", message: SOMETHING_WRONG };
     }
 
+    if (data.code === "replaced_booking_paid" && replaces) return { kind: "paid", hold: replaces };
     if (data.error || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt || !data.holdToken) {
       return { kind: "error", message: data.error ?? SOMETHING_WRONG };
     }
-
-    localStorage.setItem("openboat_pending_payment", JSON.stringify({ confirmationCode: data.confirmationCode }));
-    localStorage.removeItem("openboat_cart");
     return {
       kind: "ready",
-      booking: {
+      hold: {
         bookingId: data.bookingId,
         clientSecret: data.clientSecret,
         confirmationCode: data.confirmationCode,
         holdExpiresAt: data.holdExpiresAt,
         holdToken: data.holdToken,
+        cartKey: key,
       },
     };
   }
 
   // Reuses the current attempt when its hold is still live, after saving the
-  // contact details as they are now. Otherwise releases it and books afresh.
+  // contact details as they are now. Otherwise books afresh, replacing it.
   async function prepareAttempt(): Promise<Prepared> {
-    if (attempt && new Date(attempt.holdExpiresAt).getTime() > Date.now()) {
+    if (attempt && isLive(attempt)) {
       // Awaited: the confirmation email goes to whatever address the booking has.
       const res = await fetch(`/api/bookings/${attempt.bookingId}/contact`, {
         method: "PATCH",
@@ -341,15 +354,20 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
         body: JSON.stringify(contactBody()),
       }).catch(() => null);
       if (!res) return { kind: "error", message: SOMETHING_WRONG };
-      if (res.ok) return { kind: "ready", booking: attempt };
+      if (res.ok) return { kind: "ready", hold: attempt };
       if (res.status !== 404) {
         const data = await res.json().catch(() => ({}));
         return { kind: "error", message: data.error ?? SOMETHING_WRONG };
       }
-      // 404: the booking stopped being a live hold. Release it below.
+      // 404: the booking stopped being a live hold. Replace it below.
     }
-    if (attempt && (await releaseAttempt(attempt)) === "paid") return { kind: "paid" };
-    return createBooking();
+    const prepared = await createBooking(attempt);
+    // Whatever happened, the server has dealt with the previous booking.
+    if (prepared.kind === "error" && attempt) {
+      setAttempt(null);
+      clearHold();
+    }
+    return prepared;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -381,16 +399,14 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
 
     const prepared = await prepareAttempt();
     if (prepared.kind === "paid") {
-      window.location.href = attempt!.returnUrl;
+      window.location.href = confirmationUrl(prepared.hold);
       return;
     }
     if (prepared.kind === "error") {
       setSubmitError(prepared.message);
       return;
     }
-    const { booking } = prepared;
-    const returnUrl = `${window.location.origin}/booking/delivery?code=${booking.confirmationCode}&email=${encodeURIComponent(email.trim())}&phone=${encodeURIComponent(mobile.trim())}`;
-    const current: Attempt = { ...booking, returnUrl };
+    const current = prepared.hold;
     setAttempt(current);
 
     // Extend the hold before handing off to Stripe so a 3DS challenge or wallet
@@ -406,7 +422,9 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
     const { error: payError } = await stripe.confirmPayment({
       elements,
       clientSecret: current.clientSecret,
-      confirmParams: { return_url: returnUrl },
+      confirmParams: {
+        return_url: `${window.location.origin}/booking/delivery?code=${current.confirmationCode}&email=${encodeURIComponent(email.trim())}&phone=${encodeURIComponent(mobile.trim())}`,
+      },
     });
 
     if (payError) {
@@ -432,7 +450,6 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
     <form onSubmit={handleSubmit} style={{ maxWidth: 760, margin: "0 auto", padding: "16px 16px 60px" }} className="lg:px-[34px] lg:pt-[34px]">
       <a
         href="/book"
-        onClick={handleBackToTrips}
         className="hidden lg:inline"
         style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".1em", color: "#8c3b12", textDecoration: "underline" }}
       >
