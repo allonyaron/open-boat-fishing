@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getOperatorId } from "@/lib/operator";
 import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { customerContactSchema } from "@/lib/bookings/contact";
+import { requireHoldToken } from "@/lib/bookings/hold-token";
 
 // PATCH /api/bookings/:id/contact — a payment retry reuses the first attempt's
 // booking and PI (P2-3), so a name, email or phone fixed after a decline must
@@ -27,6 +28,8 @@ export async function PATCH(
   if (!z.string().uuid().safeParse(bookingId).success) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
+  const denied = requireHoldToken(req, bookingId, operatorId);
+  if (denied) return denied;
 
   const parsed = customerContactSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

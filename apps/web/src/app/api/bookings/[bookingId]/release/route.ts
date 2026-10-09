@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOperatorId } from "@/lib/operator";
 import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { releasePendingBooking } from "@/lib/bookings/release";
+import { requireHoldToken } from "@/lib/bookings/hold-token";
 import { z } from "zod";
 
 // POST /api/bookings/:id/release — the checkout gives back an unpaid hold: it
@@ -23,6 +24,8 @@ export async function POST(
   if (!z.string().uuid().safeParse(bookingId).success) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
+  const denied = requireHoldToken(req, bookingId, operatorId);
+  if (denied) return denied;
 
   const result = await releasePendingBooking(operatorId, bookingId);
   switch (result) {

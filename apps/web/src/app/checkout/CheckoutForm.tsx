@@ -196,7 +196,13 @@ type HeldBooking = {
   clientSecret: string;
   confirmationCode: string;
   holdExpiresAt: string;
+  /** Proves this page owns the booking: sent on extend-hold, contact and release. */
+  holdToken: string;
 };
+
+function holdHeaders(b: HeldBooking): Record<string, string> {
+  return { "X-Hold-Token": b.holdToken };
+}
 
 type Attempt = HeldBooking & {
   /** Where Stripe sends the customer after paying; reused if the booking turns out paid. */
@@ -249,7 +255,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
   async function releaseAttempt(a: Attempt): Promise<"released" | "paid"> {
     setAttempt(null);
     try {
-      const res = await fetch(`/api/bookings/${a.bookingId}/release`, { method: "POST" });
+      const res = await fetch(`/api/bookings/${a.bookingId}/release`, { method: "POST", headers: holdHeaders(a) });
       if (res.status === 409) return "paid";
     } catch {
       // Carry on: once the hold expires, the next booking request reclaims it.
@@ -293,6 +299,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
       confirmationCode?: string;
       bookingId?: string;
       holdExpiresAt?: string;
+      holdToken?: string;
     };
     try {
       const res = await fetch("/api/bookings", {
@@ -305,7 +312,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
       return { kind: "error", message: SOMETHING_WRONG };
     }
 
-    if (data.error || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt) {
+    if (data.error || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt || !data.holdToken) {
       return { kind: "error", message: data.error ?? SOMETHING_WRONG };
     }
 
@@ -318,6 +325,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
         clientSecret: data.clientSecret,
         confirmationCode: data.confirmationCode,
         holdExpiresAt: data.holdExpiresAt,
+        holdToken: data.holdToken,
       },
     };
   }
@@ -329,7 +337,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
       // Awaited: the confirmation email goes to whatever address the booking has.
       const res = await fetch(`/api/bookings/${attempt.bookingId}/contact`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...holdHeaders(attempt) },
         body: JSON.stringify(contactBody()),
       }).catch(() => null);
       if (!res) return { kind: "error", message: SOMETHING_WRONG };
@@ -387,7 +395,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
 
     // Extend the hold before handing off to Stripe so a 3DS challenge or wallet
     // sheet doesn't race the expiry. The banner shows the extended time.
-    fetch(`/api/bookings/${current.bookingId}/extend-hold`, { method: "PATCH" })
+    fetch(`/api/bookings/${current.bookingId}/extend-hold`, { method: "PATCH", headers: holdHeaders(current) })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { holdExpiresAt?: string } | null) => {
         if (!data?.holdExpiresAt) return;

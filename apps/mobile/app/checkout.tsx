@@ -35,6 +35,8 @@ type Attempt = {
   clientSecret: string;
   confirmationCode: string;
   holdExpiresAt: string;
+  /** Proves this app owns the booking: sent on extend-hold, contact and release. */
+  holdToken: string;
   /** The email the booking holds, which the wallet lookup needs. */
   email: string;
 };
@@ -45,7 +47,10 @@ const HOLD_RAN_OUT = "Your seat hold ran out and the seats were released. Tap Pa
 // next booking request reclaims it anyway. Returns false if it turned out paid.
 async function releaseAttempt(a: Attempt): Promise<boolean> {
   try {
-    const res = await fetch(`${API_URL}/api/bookings/${a.bookingId}/release`, { method: "POST" });
+    const res = await fetch(`${API_URL}/api/bookings/${a.bookingId}/release`, {
+      method: "POST",
+      headers: { "X-Hold-Token": a.holdToken },
+    });
     return res.status !== 409;
   } catch {
     return true;
@@ -166,7 +171,7 @@ export default function CheckoutScreen() {
       if (attempt && new Date(attempt.holdExpiresAt).getTime() > Date.now()) {
         const res = await fetch(`${API_URL}/api/bookings/${attempt.bookingId}/contact`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-Hold-Token": attempt.holdToken },
           body: JSON.stringify(contact),
         });
         if (!res.ok && res.status !== 404) {
@@ -210,11 +215,12 @@ export default function CheckoutScreen() {
           bookingId?: string;
           confirmationCode?: string;
           holdExpiresAt?: string;
+          holdToken?: string;
           error?: string;
         };
         const data = (await res.json()) as BookingResponse;
 
-        if (!res.ok || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt) {
+        if (!res.ok || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt || !data.holdToken) {
           setError(data.error ?? "Unable to create booking. Please try again.");
           return;
         }
@@ -223,15 +229,19 @@ export default function CheckoutScreen() {
           clientSecret: data.clientSecret,
           confirmationCode: data.confirmationCode,
           holdExpiresAt: data.holdExpiresAt,
+          holdToken: data.holdToken,
           email: cleanEmail,
         };
         attemptRef.current = attempt;
       }
 
-      const { bookingId, clientSecret, confirmationCode } = attempt;
+      const { bookingId, clientSecret, confirmationCode, holdToken } = attempt;
 
       // Extend the hold so the sheet (and any 3DS step) doesn't race the expiry.
-      fetch(`${API_URL}/api/bookings/${bookingId}/extend-hold`, { method: "PATCH" })
+      fetch(`${API_URL}/api/bookings/${bookingId}/extend-hold`, {
+        method: "PATCH",
+        headers: { "X-Hold-Token": holdToken },
+      })
         .then((r) => (r.ok ? (r.json() as Promise<{ holdExpiresAt?: string }>) : null))
         .then((d) => {
           const current = attemptRef.current;

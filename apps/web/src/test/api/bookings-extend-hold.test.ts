@@ -4,6 +4,8 @@ import { seedOperator, setTripDeparture, cleanupOperator, seedBooking, testDb } 
 import type { SeedResult } from "../db-helpers";
 import { bookings, rateLimits } from "@openboat/db";
 import { eq } from "drizzle-orm";
+import { randomUUID } from "crypto";
+import { signHoldToken } from "@/lib/bookings/hold-token";
 
 let ctx: SeedResult;
 
@@ -17,17 +19,23 @@ afterAll(async () => {
   await cleanupOperator(ctx.operatorId);
 });
 
-function req(bookingId: string, opts: { operatorId?: string; ip?: string } = {}) {
+type Opts = { operatorId?: string; ip?: string; token?: string | null };
+
+// By default the request carries a valid hold token for this operator; pass
+// token: null to omit it.
+function req(bookingId: string, opts: Opts = {}) {
   const headers: Record<string, string> = { "x-forwarded-for": opts.ip ?? "10.3.0.1" };
   if (opts.operatorId !== undefined) headers["x-operator-id"] = opts.operatorId;
   else headers["x-operator-id"] = ctx.operatorId;
+  const token = opts.token === undefined ? signHoldToken({ bookingId, operatorId: ctx.operatorId }) : opts.token;
+  if (token) headers["x-hold-token"] = token;
   return new NextRequest(`http://localhost/api/bookings/${bookingId}/extend-hold`, {
     method: "PATCH",
     headers,
   });
 }
 
-async function call(bookingId: string, opts: { operatorId?: string; ip?: string } = {}) {
+async function call(bookingId: string, opts: Opts = {}) {
   const { PATCH } = await import("@/app/api/bookings/[bookingId]/extend-hold/route");
   return PATCH(req(bookingId, opts), { params: Promise.resolve({ bookingId }) });
 }
@@ -36,6 +44,22 @@ describe("PATCH /api/bookings/[bookingId]/extend-hold", () => {
   it("returns 500 when no operator header is present", async () => {
     const res = await call("00000000-0000-0000-0000-000000000000", { operatorId: "" });
     expect(res.status).toBe(500);
+  });
+
+  it("returns 401 without a hold token, and leaves the hold alone", async () => {
+    const holdExpiresAt = new Date(Date.now() + 30_000);
+    const { bookingId } = await seedBooking(ctx, { status: "pending", holdExpiresAt });
+    const res = await call(bookingId, { ip: "10.3.0.11", token: null });
+    expect(res.status).toBe(401);
+    const [b] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(b.holdExpiresAt?.getTime()).toBe(holdExpiresAt.getTime());
+  });
+
+  it("returns 401 with another booking's hold token", async () => {
+    const { bookingId } = await seedBooking(ctx, { status: "pending" });
+    const token = signHoldToken({ bookingId: randomUUID(), operatorId: ctx.operatorId });
+    const res = await call(bookingId, { ip: "10.3.0.12", token });
+    expect(res.status).toBe(401);
   });
 
   it("returns 404 for an unknown bookingId", async () => {
