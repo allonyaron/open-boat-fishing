@@ -113,7 +113,10 @@ describe("POST /api/bookings/:id/release (P2-3)", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ released: true });
-    expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith("pi_hold");
+    // The reason tells the canceled webhook not to push (the customer left).
+    expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith("pi_hold", {
+      cancellation_reason: "requested_by_customer",
+    });
     expect(await status(bookingId)).toBe("cancelled");
     expect(await seats()).toBe(20);
   });

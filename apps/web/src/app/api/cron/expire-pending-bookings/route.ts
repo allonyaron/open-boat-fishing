@@ -79,7 +79,11 @@ export async function GET(req: NextRequest) {
             continue;
           }
           if (pi.status !== "canceled") {
-            await stripe.paymentIntents.cancel(booking.stripePaymentIntentId);
+            // "abandoned": if the canceled webhook wins the race, it sends
+            // the same "Booking Expired" push this cron would.
+            await stripe.paymentIntents.cancel(booking.stripePaymentIntentId, {
+              cancellation_reason: "abandoned",
+            });
           }
         } catch (stripeErr) {
           console.error(
