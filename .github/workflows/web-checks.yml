@@ -82,8 +82,8 @@ jobs:
           RESEND_API_KEY: "re_ci_placeholder"
 
   # Runs every unit/integration suite (`turbo test`: web API routes against a
-  # real Postgres, db, utils, mobile lib) and the booking Playwright spec against
-  # a production build serving a seeded demo operator.
+  # real Postgres, db, utils, mobile lib) and the booking Playwright specs (the
+  # flow, and the cart) against a production build serving a seeded demo operator.
   tests:
     name: Tests
     needs: changes
@@ -182,7 +182,7 @@ jobs:
       - name: Booking flow (Playwright)
         env:
           E2E_BASE_URL: "http://localhost:3100"
-        run: pnpm exec playwright test e2e/booking-flow.spec.ts
+        run: pnpm exec playwright test e2e/booking-flow.spec.ts e2e/booking-cart-interactions.spec.ts
 
       - name: Upload Playwright results and server log
         if: failure()
