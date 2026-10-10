@@ -399,8 +399,10 @@ export async function POST(req: NextRequest) {
     ticketCount,
     groupDiscountCents,
     holdExpiresAt: holdExpiresAt.toISOString(),
-    // Required by extend-hold, contact and release on this booking.
-    holdToken: signHoldToken({ bookingId: booking.id, operatorId: operator.id }, booking.createdAt),
+    // Required by extend-hold, contact and release on this booking. Timed from
+    // this request's clock, not booking.createdAt: that column has no time
+    // zone, so a database not set to UTC hands it back shifted.
+    holdToken: signHoldToken({ bookingId: booking.id, operatorId: operator.id }, new Date()),
   });
 }
 
