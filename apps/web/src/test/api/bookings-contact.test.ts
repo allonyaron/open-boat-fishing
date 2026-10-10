@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { NextRequest } from "next/server";
 import { seedOperator, seedBooking, cleanupBookings, cleanupOperator, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { bookings } from "@openboat/db";
+import { bookings, rateLimits } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { PATCH } from "@/app/api/bookings/[bookingId]/contact/route";
 import { signHoldToken } from "@/lib/bookings/hold-token";
@@ -124,5 +124,13 @@ describe("PATCH /api/bookings/:id/contact (P2-3)", () => {
   it("returns 404 for a malformed id", async () => {
     const res = await call("not-a-uuid");
     expect(res.status).toBe(404);
+  });
+
+  it("returns 429 on the 11th request for the same booking within 15 minutes", async () => {
+    await testDb.delete(rateLimits);
+    const { bookingId } = await seedBooking(ctx, { status: "pending", holdExpiresAt: LIVE() });
+    for (let i = 0; i < 10; i++) expect((await call(bookingId)).status).toBe(200);
+    const res = await call(bookingId);
+    expect(res.status).toBe(429);
   });
 });

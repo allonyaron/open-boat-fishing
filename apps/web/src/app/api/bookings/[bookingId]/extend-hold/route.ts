@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { bookings, bookingItems, trips } from "@openboat/db";
 import { and, eq, min } from "drizzle-orm";
 import { getOperatorId } from "@/lib/operator";
-import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
+import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { requireHoldToken } from "@/lib/bookings/hold-token";
 
 const EXTEND_MS = 5 * 60 * 1000; // 5 extra minutes on payment attempt
@@ -18,12 +18,15 @@ export async function PATCH(
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
 
-  const rl = await checkRateLimit(`extend-hold:${operatorId}:${clientIp(req)}`, 10, 15 * 60 * 1000);
-  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
-
   const { bookingId } = await params;
   const denied = requireHoldToken(req, bookingId, operatorId);
   if (denied) return denied;
+
+  // Per booking, not per IP: the token already proves the caller owns this
+  // booking, and customers behind one IP (dock wifi, carrier NAT) shouldn't
+  // share a budget. A request without a valid token never gets here.
+  const rl = await checkRateLimit(`extend-hold:${bookingId}`, 10, 15 * 60 * 1000);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
   const [booking] = await db
     .select({

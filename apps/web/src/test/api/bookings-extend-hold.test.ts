@@ -157,12 +157,29 @@ describe("PATCH /api/bookings/[bookingId]/extend-hold", () => {
     }
   });
 
-  it("returns 429 on the 11th request from the same IP within 15 minutes", async () => {
+  it("returns 429 on the 11th request for the same booking within 15 minutes", async () => {
     await testDb.delete(rateLimits);
     const { bookingId } = await seedBooking(ctx, { status: "pending" });
-    const ip = "10.3.0.8";
-    for (let i = 0; i < 10; i++) await call(bookingId, { ip });
-    const res = await call(bookingId, { ip });
+    for (let i = 0; i < 10; i++) await call(bookingId, { ip: `10.3.1.${i}` });
+    const res = await call(bookingId, { ip: "10.3.1.99" });
     expect(res.status).toBe(429);
+  });
+
+  it("limits per booking, not per IP: another booking from the same IP still works", async () => {
+    await testDb.delete(rateLimits);
+    const ip = "10.3.2.1";
+    const first = await seedBooking(ctx, { status: "pending", holdExpiresAt: new Date(Date.now() + 60_000) });
+    for (let i = 0; i < 10; i++) await call(first.bookingId, { ip });
+    const second = await seedBooking(ctx, { status: "pending", holdExpiresAt: new Date(Date.now() + 60_000) });
+    const res = await call(second.bookingId, { ip });
+    expect(res.status).toBe(200);
+  });
+
+  it("doesn't count requests without a valid token", async () => {
+    await testDb.delete(rateLimits);
+    const { bookingId } = await seedBooking(ctx, { status: "pending", holdExpiresAt: new Date(Date.now() + 60_000) });
+    for (let i = 0; i < 12; i++) expect((await call(bookingId, { token: null })).status).toBe(401);
+    const res = await call(bookingId);
+    expect(res.status).toBe(200);
   });
 });
