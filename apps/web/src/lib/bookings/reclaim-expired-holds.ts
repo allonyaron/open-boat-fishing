@@ -134,7 +134,12 @@ async function cancelExpiredHoldPayments(
   if (candidates.length === 0) return { bookingIds: [], tripIds: [], replacedPaid };
 
   const results = await Promise.all(
-    candidates.map((b) => cancelPaymentIntentForRelease(b.stripePaymentIntentId)),
+    candidates.map((b) =>
+      cancelPaymentIntentForRelease(
+        b.stripePaymentIntentId,
+        b.id === replacing ? "requested_by_customer" : "abandoned",
+      ),
+    ),
   );
   if (replacing && results[candidates.findIndex((b) => b.id === replacing)] === "paid") {
     replacedPaid = true;

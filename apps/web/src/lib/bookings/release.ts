@@ -12,15 +12,23 @@ import { cancelPendingBooking } from "./cancel";
  * - "canceled": there is no PI, or it is canceled now. Safe to restore seats.
  * - "paid": the PI succeeded or is processing. Leave the booking to the webhook.
  * - "error": Stripe failed, or the PI changed state under us. Not safe; try later.
+ *
+ * `reason` travels to the payment_intent.canceled webhook, which may cancel
+ * the booking before the caller does and so decides the customer's push:
+ * "requested_by_customer" (they left or replaced the checkout) sends none,
+ * "abandoned" (the hold expired) sends "Booking Expired".
  */
 export async function cancelPaymentIntentForRelease(
   paymentIntentId: string | null,
+  reason: "abandoned" | "requested_by_customer",
 ): Promise<"canceled" | "paid" | "error"> {
   if (!paymentIntentId) return "canceled";
   try {
     const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
     if (pi.status === "succeeded" || pi.status === "processing") return "paid";
-    if (pi.status !== "canceled") await stripe.paymentIntents.cancel(paymentIntentId);
+    if (pi.status !== "canceled") {
+      await stripe.paymentIntents.cancel(paymentIntentId, { cancellation_reason: reason });
+    }
     return "canceled";
   } catch (err) {
     console.error(`Failed to cancel PaymentIntent ${paymentIntentId}:`, err);
@@ -52,7 +60,7 @@ export async function releasePendingBooking(
   if (booking.status === "cancelled") return "released";
   if (booking.status === "confirmed") return "paid";
 
-  const pi = await cancelPaymentIntentForRelease(booking.stripePaymentIntentId);
+  const pi = await cancelPaymentIntentForRelease(booking.stripePaymentIntentId, "requested_by_customer");
   if (pi !== "canceled") return pi;
 
   // Null means a concurrent cancel (webhook, cron) or confirm got there first.

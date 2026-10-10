@@ -137,7 +137,9 @@ describe("POST /api/bookings — reclaiming expired holds (P2-3)", () => {
     expect(res.status).toBe(200);
     expect(await status(old.bookingId)).toBe("cancelled");
     expect(await seats(ctx.tripId)).toBe(0); // +1 reclaimed, -1 booked
-    expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith("pi_old_expired");
+    expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith("pi_old_expired", {
+      cancellation_reason: "abandoned",
+    });
   });
 
   it("tells the reclaimed hold's customer it expired (M10)", async () => {
@@ -299,7 +301,9 @@ describe("POST /api/bookings — replacing the checkout's previous booking (P2-3
 
     expect(res.status).toBe(200);
     expect(await status(old.bookingId)).toBe("cancelled");
-    expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith("pi_replaced");
+    expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith("pi_replaced", {
+      cancellation_reason: "requested_by_customer",
+    });
     expect(await seats(ctx.tripId)).toBe(0); // +1 released, -1 booked
     expect(sendPushToEmails).not.toHaveBeenCalled();
   });
