@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOperatorId } from "@/lib/operator";
-import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
+import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { releasePendingBooking } from "@/lib/bookings/release";
 import { requireHoldToken } from "@/lib/bookings/hold-token";
 import { z } from "zod";
@@ -17,15 +17,18 @@ export async function POST(
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
 
-  const rl = await checkRateLimit(`release-hold:${operatorId}:${clientIp(req)}`, 10, 15 * 60 * 1000);
-  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
-
   const { bookingId } = await params;
   if (!z.string().uuid().safeParse(bookingId).success) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
   const denied = requireHoldToken(req, bookingId, operatorId);
   if (denied) return denied;
+
+  // Per booking, not per IP: the token already proves the caller owns this
+  // booking, and customers behind one IP (dock wifi, carrier NAT) shouldn't
+  // share a budget. A request without a valid token never gets here.
+  const rl = await checkRateLimit(`release-hold:${bookingId}`, 10, 15 * 60 * 1000);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
   const result = await releasePendingBooking(operatorId, bookingId);
   switch (result) {

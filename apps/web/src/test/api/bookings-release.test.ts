@@ -181,11 +181,21 @@ describe("POST /api/bookings/:id/release (P2-3)", () => {
     expect(await seats()).toBe(19);
   });
 
-  it("returns 429 on the 11th request from the same IP within 15 minutes", async () => {
+  it("returns 429 on the 11th request for the same booking within 15 minutes", async () => {
+    await testDb.delete(rateLimits);
+    const { bookingId } = await seedHold();
+    for (let i = 0; i < 10; i++) await call(bookingId);
+    const res = await call(bookingId);
+    expect(res.status).toBe(429);
+  });
+
+  it("limits per booking, not per IP: another booking from the same IP still works", async () => {
     await testDb.delete(rateLimits);
     const ip = "10.41.1.1";
-    for (let i = 0; i < 10; i++) await call("not-a-uuid", { ip });
-    const res = await call("not-a-uuid", { ip });
-    expect(res.status).toBe(429);
+    const first = await seedHold("pi_rl_first");
+    for (let i = 0; i < 10; i++) await call(first.bookingId, { ip });
+    const second = await seedHold("pi_rl_second");
+    const res = await call(second.bookingId, { ip });
+    expect(res.status).toBe(200);
   });
 });
