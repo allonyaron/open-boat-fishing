@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import type { Stripe, StripeElements } from "@stripe/stripe-js";
+import { toApiCart } from "@openboat/utils";
 import {
   type StoredHold,
   cartKey,
@@ -15,14 +16,14 @@ import {
   saveHold,
 } from "@/lib/checkout/stored-hold";
 import posthog from "posthog-js";
+import { type Quote, dollars } from "@openboat/utils";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
+import { toCartItem } from "@/components/BookingCalendar/useCart";
+import type { WebCartLine } from "@/lib/cart/store";
+import { type QuoteState, shownQuote } from "@/lib/cart/quote";
 import { fmtTimeET } from "@/lib/format";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmtDollars(cents: number) {
-  return `$${Math.round(cents / 100)}`;
-}
 
 function fmtDate(d: string) {
   return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {
@@ -119,14 +120,24 @@ function Field({
 
 // ─── Order summary card ───────────────────────────────────────────────────────
 
-function OrderCard({ items, totalCents }: { items: EnrichedCartItem[]; totalCents: number }) {
+function OrderCard({
+  items,
+  quote,
+  chargeCents,
+}: {
+  items: EnrichedCartItem[];
+  quote: Quote | null;
+  /** What Pay charges: the held booking's total, else the quote's. */
+  chargeCents: number | null;
+}) {
+  const discountCents = quote?.discountCents ?? 0;
   return (
     <div style={{ background: "#fff", border: "1px solid #cdd6da", marginTop: 14 }}>
       {items.map((item) => {
-        const subtotal = item.tickets.reduce((s, t) => s + t.quantity * t.priceCents, 0);
-        const faresLabel = item.tickets
-          .map((t) => `${t.quantity} ${t.ticketType} × ${fmtDollars(t.priceCents)}`)
-          .join(" · ");
+        const line = quote?.lines.find((l) => l.tripId === item.tripId);
+        const faresLabel = line
+          ? line.fares.map((f) => `${f.quantity} ${f.ticketType} × ${dollars(f.unitListCents)}`).join(" · ")
+          : item.tickets.map((t) => `${t.quantity} ${t.ticketType}`).join(" · ");
         return (
           <div
             key={item.tripId}
@@ -144,11 +155,21 @@ function OrderCard({ items, totalCents }: { items: EnrichedCartItem[]; totalCent
               </div>
             </div>
             <div style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 18, fontWeight: 600, whiteSpace: "nowrap" }}>
-              {fmtDollars(subtotal)}
+              {line ? dollars(line.listCents) : "…"}
             </div>
           </div>
         );
       })}
+      {discountCents > 0 && (
+        <div
+          style={{ padding: "14px 20px", borderBottom: "1px solid #e3e9eb", display: "flex", justifyContent: "space-between", gap: 16, color: "#186a4a" }}
+        >
+          <span style={{ fontFamily: "var(--font-archivo)", fontSize: 16, fontWeight: 700 }}>Group discount</span>
+          <span style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 18, fontWeight: 600, whiteSpace: "nowrap" }}>
+            −{dollars(discountCents)}
+          </span>
+        </div>
+      )}
       {/* Hull total footer */}
       <div
         style={{ padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "baseline", background: "#16354a", color: "#fff" }}
@@ -157,7 +178,7 @@ function OrderCard({ items, totalCents }: { items: EnrichedCartItem[]; totalCent
           TOTAL DUE TODAY
         </span>
         <span style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 30, fontWeight: 700 }}>
-          {fmtDollars(totalCents)}
+          {chargeCents !== null ? dollars(chargeCents) : "—"}
         </span>
       </div>
     </div>
@@ -203,7 +224,8 @@ function HoldBanner({ holdExpiresAt, onExpire }: { holdExpiresAt: string; onExpi
 // ─── Checkout form — one page, one button, one commitment ─────────────────────
 
 type Prepared =
-  | { kind: "ready"; hold: StoredHold }
+  // fresh: a new booking (and PI) was just made, at the server's current price.
+  | { kind: "ready"; hold: StoredHold; fresh: boolean }
   // answered: the server got as far as releasing any `replaces` (see
   // reachedReclaim), so the previous booking can be dropped.
   | { kind: "error"; message: string; answered: boolean }
@@ -219,7 +241,13 @@ function reachedReclaim(status: number): boolean {
 }
 const HOLD_RAN_OUT = "Your seat hold ran out and the seats were released. Pay again to check they're still free.";
 
-export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
+export function CheckoutForm({
+  lines,
+  quote,
+}: {
+  lines: WebCartLine[];
+  quote: QuoteState & { refresh: () => void };
+}) {
   const stripe = useStripe();
   const elements = useElements();
 
@@ -238,7 +266,19 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
   // A previous booking whose release got no answer. It isn't shown or reused,
   // but the next booking request names it in replaces, so the server frees it.
   const unreleasedRef = useRef<StoredHold | null>(null);
-  const key = cartKey(items);
+  const key = cartKey(lines);
+  const items = lines.map(toCartItem);
+  // While a re-quote loads, the lines keep showing the last quote.
+  const shown = shownQuote(quote).quote;
+  // What a confirm charges: once a booking exists its PI's amount is fixed,
+  // so that, else the server's current quote. Never a client-side sum (P8-3).
+  const chargeCents = attempt?.totalCents ?? (quote.status === "ready" ? quote.quote.totalCents : null);
+
+  // Wallet and BNPL sheets show Elements' amount, and Stripe.js doesn't check
+  // it against the PI, so keep it equal to what will be charged (P8-3 item 5).
+  useEffect(() => {
+    if (elements && chargeCents !== null) elements.update({ amount: chargeCents });
+  }, [elements, chargeCents]);
 
   useEffect(() => {
     if (attempt) saveHold(attempt);
@@ -261,7 +301,8 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
   useEffect(() => {
     const stored = loadHold();
     if (!stored) return;
-    if (stored.cartKey === key && isLive(stored)) {
+    // A hold saved without its total (before P8-3) can't show what it charges.
+    if (stored.cartKey === key && isLive(stored) && typeof stored.totalCents === "number") {
       setAttempt(stored);
       return;
     }
@@ -281,11 +322,6 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
   const nameError = touched.name && !name.trim() ? "Name is required" : null;
   const mobileError = touched.mobile && mobile && !validatePhone(mobile) ? "Enter a 10-digit US number" : null;
   const emailError = touched.email && !validateEmail(email) ? "Enter a valid email address" : null;
-
-  const totalCents = items.reduce(
-    (sum, item) => sum + item.tickets.reduce((s, t) => s + t.priceCents * t.quantity, 0),
-    0,
-  );
 
   function contactBody() {
     return {
@@ -322,10 +358,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
   // Books the cart. `replaces` is this checkout's previous booking, which the
   // server releases in the same request.
   async function createBooking(replaces: StoredHold | null): Promise<Prepared> {
-    const cart = items.map((item) => ({
-      tripId: item.tripId,
-      tickets: item.tickets.map((t) => ({ ticketType: t.ticketType, quantity: t.quantity })),
-    }));
+    const cart = toApiCart(lines);
 
     let status: number;
     let data: {
@@ -336,6 +369,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
       bookingId?: string;
       holdExpiresAt?: string;
       holdToken?: string;
+      totalCents?: number;
     };
     try {
       const res = await fetch("/api/bookings", {
@@ -357,11 +391,20 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
     }
 
     if (data.code === "replaced_booking_paid" && replaces) return { kind: "paid", hold: replaces };
-    if (data.error || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt || !data.holdToken) {
+    if (
+      data.error ||
+      !data.clientSecret ||
+      !data.confirmationCode ||
+      !data.bookingId ||
+      !data.holdExpiresAt ||
+      !data.holdToken ||
+      typeof data.totalCents !== "number"
+    ) {
       return { kind: "error", message: data.error ?? SOMETHING_WRONG, answered: reachedReclaim(status) };
     }
     return {
       kind: "ready",
+      fresh: true,
       hold: {
         bookingId: data.bookingId,
         clientSecret: data.clientSecret,
@@ -369,6 +412,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
         holdExpiresAt: data.holdExpiresAt,
         holdToken: data.holdToken,
         cartKey: key,
+        totalCents: data.totalCents,
       },
     };
   }
@@ -384,7 +428,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
         body: JSON.stringify(contactBody()),
       }).catch(() => null);
       if (!res) return { kind: "error", message: SOMETHING_WRONG, answered: false };
-      if (res.ok) return { kind: "ready", hold: attempt };
+      if (res.ok) return { kind: "ready", hold: attempt, fresh: false };
       if (res.status !== 404) {
         const data = await res.json().catch(() => ({}));
         return { kind: "error", message: data.error ?? SOMETHING_WRONG, answered: false };
@@ -407,20 +451,21 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
     e.preventDefault();
     setTouched({ name: true, mobile: true, email: true });
     if (!name.trim() || !validateEmail(email) || (mobile && !validatePhone(mobile))) return;
-    if (!stripe || !elements || submitting || releasing) return;
+    if (!stripe || !elements || submitting || releasing || chargeCents === null) return;
 
     setSubmitting(true);
     submittingRef.current = true;
     setSubmitError(null);
     try {
-      await pay(stripe, elements);
+      await pay(stripe, elements, chargeCents);
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
     }
   }
 
-  async function pay(stripe: Stripe, elements: StripeElements) {
+  // shownCents: the total on screen when the customer tapped Pay.
+  async function pay(stripe: Stripe, elements: StripeElements, shownCents: number) {
     // Runs before every confirm, retries included (deferred-intent Elements).
     const { error: elementsError } = await elements.submit();
     if (elementsError) {
@@ -428,7 +473,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
       return;
     }
 
-    posthog.capture("payment_attempt", { total_cents: totalCents, retry: attempt !== null });
+    posthog.capture("payment_attempt", { total_cents: shownCents, retry: attempt !== null });
 
     const prepared = await prepareAttempt();
     if (prepared.kind === "paid") {
@@ -441,6 +486,19 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
     }
     const current = prepared.hold;
     setAttempt(current);
+
+    // The booking was priced under the trip locks, which can differ from the
+    // quote on screen (a fare changed meanwhile). Stripe.js would charge the
+    // PI's amount without a word, so show the new total and ask again (P8-3).
+    if (prepared.fresh && current.totalCents !== shownCents) {
+      elements.update({ amount: current.totalCents });
+      quote.refresh();
+      posthog.capture("payment_price_changed", { quoted_cents: shownCents, total_cents: current.totalCents });
+      setSubmitError(
+        `The price changed to ${dollars(current.totalCents!)} while you were checking out. Check the total above, then tap Pay again.`,
+      );
+      return;
+    }
 
     // Extend the hold before handing off to Stripe so a 3DS challenge or wallet
     // sheet doesn't race the expiry. The banner shows the extended time.
@@ -462,7 +520,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
 
     if (payError) {
       posthog.capture("payment_failure", {
-        total_cents: totalCents,
+        total_cents: shownCents,
         error_code: payError.code,
         error_type: payError.type,
         error_message: payError.message,
@@ -497,7 +555,16 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
 
       {attempt && <HoldBanner holdExpiresAt={attempt.holdExpiresAt} onExpire={handleHoldExpired} />}
 
-      <OrderCard items={items} totalCents={totalCents} />
+      <OrderCard items={items} quote={shown} chargeCents={chargeCents} />
+
+      {quote.status === "error" && !attempt && (
+        <div
+          role="alert"
+          style={{ marginTop: 12, border: "1px solid #c94510", background: "#fdeee8", color: "#8c3b12", fontSize: 15, fontWeight: 600, padding: "14px 16px", fontFamily: "var(--font-archivo)" }}
+        >
+          {quote.message} <a href="/cart" style={{ color: "#8c3b12" }}>Review your cart</a>
+        </div>
+      )}
 
       <div style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".16em", color: "#41565f", margin: "34px 0 12px" }}>
         WHO&apos;S FISHING
@@ -565,7 +632,7 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
 
       <button
         type="submit"
-        disabled={!stripe || !elements || submitting || releasing}
+        disabled={!stripe || !elements || submitting || releasing || chargeCents === null}
         style={{
           width: "100%",
           minHeight: 72,
@@ -581,7 +648,11 @@ export function CheckoutForm({ items }: { items: EnrichedCartItem[] }) {
           cursor: submitting ? "not-allowed" : "pointer",
         }}
       >
-        {submitting ? "PROCESSING…" : `PAY ${fmtDollars(totalCents)} · BOOK MY SEATS`}
+        {submitting
+          ? "PROCESSING…"
+          : chargeCents === null
+            ? "PAY · BOOK MY SEATS"
+            : `PAY ${dollars(chargeCents)} · BOOK MY SEATS`}
       </button>
 
       <div

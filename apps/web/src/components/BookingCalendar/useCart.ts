@@ -1,6 +1,28 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { lineFares, quantityOf, totalSeats as countSeats } from "@openboat/utils";
+import { cart, useCartStore, type WebCartLine } from "@/lib/cart/store";
+import { useQuote } from "@/lib/cart/quote";
 import { getDisplayPrices } from "./format";
 import type { EnrichedCartItem, Trip } from "./types";
+
+/** A cart line as the rail and the mobile bar show it. */
+export function toCartItem(line: WebCartLine): EnrichedCartItem {
+  const { trip } = line;
+  const display = getDisplayPrices(trip.product.prices);
+  const collapsed = display.length === 1 && display[0].displayLabel === "seat";
+  return {
+    tripId: trip.id,
+    departureDate: trip.departureDate,
+    startTime: trip.startTime,
+    endTime: trip.endTime,
+    vesselName: trip.vessel.name,
+    vesselColor: trip.vessel.color,
+    category: trip.product.category,
+    productName: trip.product.displayName,
+    seatsRemaining: trip.seatsRemaining,
+    tickets: lineFares(line).map((f) => ({ ...f, displayLabel: collapsed ? "seat" : f.ticketType })),
+  };
+}
 
 export function useCart({
   trips,
@@ -13,165 +35,35 @@ export function useCart({
   initialTrips: Trip[];
   onInitialTripPreAdded?: (departureDate: string) => void;
 }) {
-  // cart: tripId:ticketType -> quantity
-  const [cart, setCart] = useState<Map<string, number>>(new Map());
-  // cached prices so total stays correct across month navigation
-  const [cartPrices, setCartPrices] = useState<Map<string, number>>(new Map());
-  // enriched cart items (written to localStorage for checkout page)
-  const [cartItems, setCartItems] = useState<EnrichedCartItem[]>([]);
+  const { lines, ready } = useCartStore();
+  const quote = useQuote(lines);
 
-  // Restore cart from localStorage on mount, then pre-add initialTripId
-  // if provided. Both steps live in one effect so the pre-add's dedupe check
-  // can read the just-restored items (not stale state).
+  // Pre-add 1 adult ticket when arriving from the homepage BOOK button, once
+  // the stored cart has been read (so a trip already in it isn't added twice).
+  const preAdded = useRef(false);
   useEffect(() => {
-    let restoredItems: EnrichedCartItem[] = [];
-    try {
-      const raw = localStorage.getItem("openboat_cart");
-      if (raw) {
-        const parsed: EnrichedCartItem[] = JSON.parse(raw);
-        const seen = new Set<string>();
-        restoredItems = parsed.filter((item) => {
-          if (seen.has(item.tripId)) return false;
-          seen.add(item.tripId);
-          return true;
-        });
-        const map = new Map<string, number>();
-        const prices = new Map<string, number>();
-        restoredItems.forEach((item) => {
-          item.tickets.forEach((t) => {
-            map.set(`${item.tripId}:${t.ticketType}`, t.quantity);
-            prices.set(`${item.tripId}:${t.ticketType}`, t.priceCents);
-          });
-        });
-        if (map.size > 0) setCart(map);
-        if (prices.size > 0) setCartPrices(prices);
-        if (restoredItems.length > 0) setCartItems(restoredItems);
-      }
-    } catch { /* ignore corrupt data */ }
-
-    // Seats are held only once checkout posts the booking (P8-10). Drop the
-    // key the old cart countdown left behind.
-    try { localStorage.removeItem("openboat_hold_expires"); } catch { /* ignore */ }
-
-    // Pre-add 1 adult ticket when navigating from homepage BOOK button
-    if (initialTripId && !restoredItems.some((i) => i.tripId === initialTripId)) {
-      const trip = initialTrips.find((t) => t.id === initialTripId);
-      if (trip) {
-        const adultPrice =
-          trip.product.prices.find((p) => p.ticketType.toLowerCase() === "adult") ??
-          trip.product.prices[0];
-        if (adultPrice && trip.seatsRemaining > 0) {
-          const k = `${trip.id}:${adultPrice.ticketType}`;
-          setCart((prev) => new Map(prev).set(k, 1));
-          setCartPrices((prev) => new Map(prev).set(k, adultPrice.priceCents));
-          setCartItems((prev) => [
-            ...prev,
-            {
-              tripId: trip.id,
-              departureDate: trip.departureDate,
-              startTime: trip.startTime,
-              endTime: trip.endTime,
-              vesselName: trip.vessel.name,
-              vesselColor: trip.vessel.color,
-              category: trip.product.category,
-              productName: trip.product.displayName,
-              seatsRemaining: trip.seatsRemaining,
-              tickets: [
-                {
-                  ticketType: adultPrice.ticketType,
-                  quantity: 1,
-                  priceCents: adultPrice.priceCents,
-                },
-              ],
-            },
-          ]);
-          onInitialTripPreAdded?.(trip.departureDate);
-        }
-      }
-    }
-  }, []); // intentional: run once on mount only
-
-  // Persist cart to localStorage
-  useEffect(() => {
-    if (cartItems.length === 0) {
-      localStorage.removeItem("openboat_cart");
-    } else {
-      localStorage.setItem("openboat_cart", JSON.stringify(cartItems));
-    }
-  }, [cartItems]);
+    if (!ready || preAdded.current) return;
+    preAdded.current = true;
+    if (!initialTripId || lines.some((l) => l.trip.id === initialTripId)) return;
+    const trip = initialTrips.find((t) => t.id === initialTripId);
+    if (!trip || trip.seatsRemaining <= 0) return;
+    const adult =
+      trip.product.prices.find((p) => p.ticketType.toLowerCase() === "adult") ?? trip.product.prices[0];
+    if (!adult) return;
+    cart.adjust(trip, adult.ticketType, 1);
+    onInitialTripPreAdded?.(trip.departureDate);
+  }, [ready, lines, initialTripId, initialTrips, onInitialTripPreAdded]);
 
   const getQty = useCallback(
-    (tripId: string, ticketType: string) => cart.get(`${tripId}:${ticketType}`) ?? 0,
-    [cart],
+    (tripId: string, ticketType: string) => quantityOf(lines, tripId, ticketType),
+    [lines],
   );
 
-  // §4: Delta-based functional state update — prevents stale-closure seat drops on rapid taps.
-  // Both setCart and setCartItems derive new quantities from their own prev, never from the render
-  // closure. Flag: no other setState(absoluteValue) patterns remain in the stepper path.
+  // The listed trip is the fresh snapshot: it carries current prices and seats.
   const adjustQty = useCallback(
     (tripId: string, ticketType: string, delta: 1 | -1) => {
       const trip = trips.find((t) => t.id === tripId);
-      if (!trip) return;
-
-      const k = `${tripId}:${ticketType}`;
-      const price = trip.product.prices.find((p) => p.ticketType === ticketType);
-
-      if (price) {
-        setCartPrices((prev) => new Map(prev).set(k, price.priceCents));
-      }
-
-      setCart((prev) => {
-        const next = new Map(prev);
-        const otherQty = trip.product.prices
-          .filter((p) => p.ticketType !== ticketType)
-          .reduce((sum, p) => sum + (next.get(`${tripId}:${p.ticketType}`) ?? 0), 0);
-        const maxForType = trip.seatsRemaining - otherQty;
-        const currentQty = next.get(k) ?? 0;
-        const newQty = Math.max(0, Math.min(maxForType, currentQty + delta));
-        if (newQty === 0) next.delete(k);
-        else next.set(k, newQty);
-        return next;
-      });
-
-      const displayPrices = getDisplayPrices(trip.product.prices);
-      const isCollapsed =
-        displayPrices.length === 1 && displayPrices[0].displayLabel === "seat";
-      const displayLabel = isCollapsed ? "seat" : ticketType;
-
-      setCartItems((prev) => {
-        const existing = prev.find((i) => i.tripId === tripId);
-        const without = prev.filter((i) => i.tripId !== tripId);
-        const existingQty =
-          existing?.tickets.find((t) => t.ticketType === ticketType)?.quantity ?? 0;
-        const otherTickets =
-          existing?.tickets.filter((t) => t.ticketType !== ticketType) ?? [];
-        const otherQty = otherTickets.reduce((s, t) => s + t.quantity, 0);
-        const maxForType = trip.seatsRemaining - otherQty;
-        const newQty = Math.max(0, Math.min(maxForType, existingQty + delta));
-        const newTickets = otherTickets.filter((t) => t.quantity > 0).map((t) => ({
-          ...t,
-          displayLabel: isCollapsed ? "seat" : t.ticketType,
-        }));
-        if (newQty > 0 && price) {
-          newTickets.push({ ticketType, quantity: newQty, priceCents: price.priceCents, displayLabel });
-        }
-        if (newTickets.length === 0) return without;
-        return [
-          ...without,
-          {
-            tripId: trip.id,
-            departureDate: trip.departureDate,
-            startTime: trip.startTime,
-            endTime: trip.endTime,
-            vesselName: trip.vessel.name,
-            vesselColor: trip.vessel.color,
-            category: trip.product.category,
-            productName: trip.product.displayName,
-            seatsRemaining: trip.seatsRemaining,
-            tickets: newTickets,
-          },
-        ];
-      });
+      if (trip) cart.adjust(trip, ticketType, delta);
     },
     [trips],
   );
@@ -179,35 +71,21 @@ export function useCart({
   // Returns the removed item so the caller can announce it.
   const removeFromCart = useCallback(
     (tripId: string): EnrichedCartItem | undefined => {
-      const item = cartItems.find((i) => i.tripId === tripId);
-      const trip = trips.find((t) => t.id === tripId);
-      const keys = trip
-        ? trip.product.prices.map((p) => `${tripId}:${p.ticketType}`)
-        : Array.from(cart.keys()).filter((k) => k.startsWith(`${tripId}:`));
-      setCart((prev) => {
-        const next = new Map(prev);
-        keys.forEach((k) => next.delete(k));
-        return next;
-      });
-      const newItems = cartItems.filter((i) => i.tripId !== tripId);
-      setCartItems(newItems);
-      return item;
+      const line = lines.find((l) => l.trip.id === tripId);
+      cart.remove(tripId);
+      return line && toCartItem(line);
     },
-    [cart, cartItems, trips],
+    [lines],
   );
 
-  const totalCents = Array.from(cart.entries()).reduce(
-    (sum, [key, qty]) => sum + qty * (cartPrices.get(key) ?? 0),
-    0,
-  );
-  const totalSeats = Array.from(cart.values()).reduce((a, b) => a + b, 0);
+  const cartItems = useMemo(() => lines.map(toCartItem), [lines]);
 
   return {
     cartItems,
     getQty,
     adjustQty,
     removeFromCart,
-    totalCents,
-    totalSeats,
+    quote,
+    totalSeats: countSeats(lines),
   };
 }

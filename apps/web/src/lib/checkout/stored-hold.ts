@@ -8,7 +8,7 @@
 // payment_intent_unexpected_state and the customer books again. No charge
 // can land on a released booking: its PI is canceled first.
 
-import type { EnrichedCartItem } from "@/components/BookingCalendar";
+export { cartKey } from "@openboat/utils";
 
 const KEY = "openboat_checkout_hold";
 
@@ -21,15 +21,12 @@ export type StoredHold = {
   holdToken: string;
   /** cartKey() of the cart this booking was made for. */
   cartKey: string;
+  /**
+   * The booking's totalCents: its PaymentIntent's amount, which is what a
+   * confirm charges. Missing on holds saved before P8-3; those aren't resumed.
+   */
+  totalCents?: number;
 };
-
-/** A stable fingerprint of what the cart holds, to tell whether the booking still matches it. */
-export function cartKey(items: EnrichedCartItem[]): string {
-  return items
-    .flatMap((item) => item.tickets.map((t) => `${item.tripId}:${t.ticketType}:${t.quantity}`))
-    .sort()
-    .join(",");
-}
 
 export function loadHold(): StoredHold | null {
   try {

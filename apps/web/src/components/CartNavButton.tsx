@@ -1,29 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { EnrichedCartItem } from "@/components/BookingCalendar";
-
-function getCartCount(): number {
-  try {
-    const raw = localStorage.getItem("openboat_cart");
-    if (!raw) return 0;
-    const items: EnrichedCartItem[] = JSON.parse(raw);
-    return items.reduce((sum, item) => sum + item.tickets.reduce((s, t) => s + t.quantity, 0), 0);
-  } catch {
-    return 0;
-  }
-}
+import { totalSeats } from "@openboat/utils";
+import { useCartStore } from "@/lib/cart/store";
 
 export function CartNavButton() {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    setCount(getCartCount());
-    const onStorage = () => setCount(getCartCount());
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  const count = totalSeats(useCartStore().lines);
 
   const label = count > 0 ? `CART · ${count}` : "BOOK A SEAT";
 

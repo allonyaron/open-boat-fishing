@@ -37,9 +37,6 @@ export function fmtDayLabel(dateStr: string): { main: string; sub: string } {
   else if (isWeekend) sub = "WEEKEND";
   return { main, sub };
 }
-export function dollars(cents: number) {
-  return `$${Math.round(cents / 100)}`;
-}
 export function fmtMonthDay(dateStr: string) {
   const dt = new Date(dateStr + "T12:00:00Z");
   return `${MONTHS_SHORT[dt.getUTCMonth()]} ${dt.getUTCDate()}`;

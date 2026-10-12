@@ -11,6 +11,7 @@ import { MobileCartBar } from "./MobileCartBar";
 import { MobilePanelCalendar } from "./MobilePanelCalendar";
 import { parseMonth, toMonthStr } from "./format";
 import { useCart } from "./useCart";
+import { quoteView } from "@/lib/cart/quote-view";
 import type { Trip, VesselInfo } from "./types";
 
 export { BookingNav } from "./BookingNav";
@@ -54,7 +55,7 @@ export function BookingCalendar({
     getQty,
     adjustQty,
     removeFromCart,
-    totalCents,
+    quote,
     totalSeats,
   } = useCart({ trips, initialTripId, initialTrips, onInitialTripPreAdded });
 
@@ -73,6 +74,7 @@ export function BookingCalendar({
     posthog.capture("booking_view");
   }, []);
 
+  const shownQuote = quoteView(quote);
   const { year, mon } = parseMonth(month);
 
   async function goToMonth(m: string) {
@@ -213,7 +215,7 @@ export function BookingCalendar({
         {/* Right: cart rail */}
         <CartRail
           cartItems={cartItems}
-          totalCents={totalCents}
+          quote={shownQuote}
           totalSeats={totalSeats}
           month={month}
           byDate={byDate}
@@ -229,7 +231,7 @@ export function BookingCalendar({
       </div>
 
       <MobileCartBar
-        totalCents={totalCents}
+        quote={shownQuote}
         totalSeats={totalSeats}
         cartItems={cartItems}
         onCheckout={goToCheckout}
