@@ -43,14 +43,17 @@ type BookableTrip = Parameters<typeof isOnlineSalesOpen>[0] & {
 /**
  * Throws (with an httpStatus) unless every trip in the cart can be booked
  * online now with the seats asked for. `trips` must already be scoped to the
- * operator. The booking route calls this under the trip locks; the quote
- * calls it without them, so its answer is advisory.
+ * operator. The booking route calls this under the trip locks.
+ *
+ * The quote passes checkSeats: false. It doesn't reclaim expired holds, so
+ * its seat counts can be low, and only the booking decides seats.
  */
 export function assertCartBookable(
   cart: Cart,
   trips: BookableTrip[],
   onlineCutoffMinutes: number,
   now: Date,
+  { checkSeats = true }: { checkSeats?: boolean } = {},
 ) {
   if (trips.length !== cart.length) {
     throw Object.assign(new Error("One or more trips not found"), { httpStatus: 404 });
@@ -64,7 +67,7 @@ export function assertCartBookable(
       throw Object.assign(new Error("Online sales for this trip have closed"), { httpStatus: 409 });
     }
     const requested = seats[trip.id] ?? 0;
-    if (requested > (trip.seatsRemaining ?? 0)) {
+    if (checkSeats && requested > (trip.seatsRemaining ?? 0)) {
       throw Object.assign(new Error(`Not enough seats available — only ${trip.seatsRemaining} left`), {
         httpStatus: 409,
       });
