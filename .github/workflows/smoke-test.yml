@@ -1,0 +1,41 @@
+name: Smoke Test
+
+# Runs when Vercel reports a deployment, instead of polling for one from the
+# pull_request run. A preview's first deployment is regularly canceled and
+# replaced (the Neon integration provisioning the branch database), and that
+# hand-off has taken up to ~40 minutes; a poll with a time limit then failed
+# PRs whose preview was fine (PR #36, PR #37). Here the check simply waits.
+#
+# "Smoke Test (Vercel Preview)" is a required check on main. GitHub counts a
+# job skipped by `if:` as a pass, and Vercel also reports pending, failed,
+# canceled and inactive deployments. So only a successful Preview deployment
+# gets the required name; every other event runs (skipped) under a different
+# name and can't satisfy the check early.
+on: deployment_status
+
+jobs:
+  smoke-test:
+    name: ${{ (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Preview') && 'Smoke Test (Vercel Preview)' || 'Vercel deployment status (ignored)' }}
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Preview'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Health check
+        env:
+          URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+        run: |
+          if [ -z "$URL" ]; then
+            echo "The deployment event carries no URL"
+            exit 1
+          fi
+          echo "Hitting $URL/api/health"
+          STATUS=$(curl -sL -o /dev/null -w "%{http_code}" \
+            -H "x-vercel-protection-bypass: ${{ secrets.VERCEL_BYPASS_SECRET }}" \
+            "$URL/api/health")
+          echo "HTTP status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed — the deploy is broken (env vars missing, startup error, or DB unreachable)"
+            echo "Look up the digest in Vercel Logs to see the exact error"
+            exit 1
+          fi
+          echo "Health check passed"
