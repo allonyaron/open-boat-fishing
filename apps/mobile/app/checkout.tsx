@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,21 +12,13 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { PaymentSheet, useStripe } from "@stripe/stripe-react-native";
-import { MMKV } from "react-native-mmkv";
+import { dollars, lineFares, toApiCart } from "@openboat/utils";
 import { API_URL } from "@/lib/api";
+import { cart, useAppCart } from "@/lib/cart-store";
+import { shownQuote, useQuote } from "@/lib/quote";
 import { color, font, ls, space, tracking } from "@/constants/nativeTokens";
-import {
-  type Cart,
-  type Trip,
-  dollars,
-  fmtTimeRange,
-  tripTypeColor,
-} from "@/lib/trip-helpers";
+import { fmtTimeRange, tripTypeColor } from "@/lib/trip-helpers";
 import { upsertBooking } from "@/lib/wallet";
-
-const checkoutStorage = new MMKV();
-
-type PendingCheckout = { cart: Cart; cartTrips: Trip[] };
 
 // The booking from the first Pay press. A retry after a decline or a dismissed
 // sheet presents the same PI again instead of holding the seats twice (P2-3).
@@ -39,6 +31,8 @@ type Attempt = {
   holdToken: string;
   /** The email the booking holds, which the wallet lookup needs. */
   email: string;
+  /** The booking's totalCents: the PI's amount, which the sheet charges. */
+  totalCents: number;
 };
 
 const HOLD_RAN_OUT = "Your seat hold ran out and the seats were released. Tap Pay to check they're still free.";
@@ -86,13 +80,14 @@ function ConfirmedView({ code, onDone }: { code: string; onDone: () => void }) {
 
 // ─── CheckoutScreen ───────────────────────────────────────────────────────────
 
-type CartLine = { trip: Trip; ticketType: string; qty: number; priceCents: number; lineTotal: number };
-
 export default function CheckoutScreen() {
   const router = useRouter();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
-  const [pending, setPending] = useState<PendingCheckout | null>(null);
+  // The same cart the Trips tab and the cart screen show (P8-4).
+  const { lines } = useAppCart();
+  const quote = useQuote(lines);
+  const { quote: shown } = shownQuote(quote);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -100,6 +95,12 @@ export default function CheckoutScreen() {
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState<{ code: string; email: string } | null>(null);
   const attemptRef = useRef<Attempt | null>(null);
+  // The held booking's total, once there is one: the amount the sheet charges.
+  const [heldTotal, setHeldTotal] = useState<number | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // What Pay shows: the booking's total once it exists, else the server's
+  // quote. Never a client-side sum (P8-3).
+  const totalCents = heldTotal ?? (quote.status === "ready" ? quote.quote.totalCents : null);
 
   // Leaving checkout (back to change the cart) gives the held seats back.
   useEffect(() => {
@@ -107,43 +108,6 @@ export default function CheckoutScreen() {
       if (attemptRef.current) void releaseAttempt(attemptRef.current);
     };
   }, []);
-
-  useEffect(() => {
-    const raw = checkoutStorage.getString("pending_checkout");
-    if (raw) {
-      try {
-        setPending(JSON.parse(raw) as PendingCheckout);
-      } catch {
-        /* ignore malformed */
-      }
-    }
-  }, []);
-
-  const cartLines = useMemo<CartLine[]>(() => {
-    if (!pending) return [];
-    const lines: CartLine[] = [];
-    for (const [key, qty] of Object.entries(pending.cart)) {
-      if (qty <= 0) continue;
-      const [tripId, ticketType] = key.split(":");
-      const trip = pending.cartTrips.find((t) => t.id === tripId);
-      if (!trip) continue;
-      const price = trip.product.prices.find((p) => p.ticketType === ticketType);
-      if (!price) continue;
-      lines.push({ trip, ticketType, qty, priceCents: price.priceCents, lineTotal: price.priceCents * qty });
-    }
-    return lines;
-  }, [pending]);
-
-  const totalCents = useMemo(() => cartLines.reduce((s, l) => s + l.lineTotal, 0), [cartLines]);
-
-  const linesByTrip = useMemo(() => {
-    const map = new Map<string, { trip: Trip; lines: CartLine[] }>();
-    for (const line of cartLines) {
-      if (!map.has(line.trip.id)) map.set(line.trip.id, { trip: line.trip, lines: [] });
-      map.get(line.trip.id)!.lines.push(line);
-    }
-    return [...map.values()];
-  }, [cartLines]);
 
   const handlePay = useCallback(async () => {
     const cleanName = name.trim();
@@ -182,15 +146,11 @@ export default function CheckoutScreen() {
         }
         // 404: no longer a live hold; it is replaced below.
         if (res.ok) attemptRef.current = attempt = { ...previous, email: cleanEmail };
+        else setHeldTotal(null);
       }
 
       if (!attempt) {
-        const cartByTrip = new Map<string, { ticketType: string; quantity: number }[]>();
-        for (const line of cartLines) {
-          if (!cartByTrip.has(line.trip.id)) cartByTrip.set(line.trip.id, []);
-          cartByTrip.get(line.trip.id)!.push({ ticketType: line.ticketType, quantity: line.qty });
-        }
-        const cartPayload = [...cartByTrip.entries()].map(([tripId, tickets]) => ({ tripId, tickets }));
+        const cartPayload = toApiCart(lines);
 
         // The server releases the previous booking in the same request. If the
         // request never gets an answer, attemptRef keeps it for the next tap.
@@ -211,6 +171,7 @@ export default function CheckoutScreen() {
           confirmationCode?: string;
           holdExpiresAt?: string;
           holdToken?: string;
+          totalCents?: number;
           error?: string;
           code?: string;
         };
@@ -218,16 +179,26 @@ export default function CheckoutScreen() {
         // The server releases `replaces` (or finds it paid) before it books.
         // A rate limit, validation or server error can come back before that,
         // so keep the previous booking for the next tap.
-        if (res.ok || res.status === 404 || res.status === 409) attemptRef.current = null;
+        if (res.ok || res.status === 404 || res.status === 409) {
+          attemptRef.current = null;
+          setHeldTotal(null);
+        }
 
         if (data.code === "replaced_booking_paid" && previous) {
           // It was paid after all (the sheet reported a failure it shouldn't have).
-          checkoutStorage.set("cart_paid", true);
-          checkoutStorage.delete("pending_checkout");
+          cart.clear();
           setConfirmed({ code: previous.confirmationCode, email: previous.email });
           return;
         }
-        if (!res.ok || !data.clientSecret || !data.confirmationCode || !data.bookingId || !data.holdExpiresAt || !data.holdToken) {
+        if (
+          !res.ok ||
+          !data.clientSecret ||
+          !data.confirmationCode ||
+          !data.bookingId ||
+          !data.holdExpiresAt ||
+          !data.holdToken ||
+          typeof data.totalCents !== "number"
+        ) {
           setError(data.error ?? "Unable to create booking. Please try again.");
           return;
         }
@@ -238,8 +209,16 @@ export default function CheckoutScreen() {
           holdExpiresAt: data.holdExpiresAt,
           holdToken: data.holdToken,
           email: cleanEmail,
+          totalCents: data.totalCents,
         };
         attemptRef.current = attempt;
+        // The booking was priced under the trip locks. Show its total, which is
+        // what the sheet charges, and say so if it differs from the quote (P8-3).
+        setHeldTotal(data.totalCents);
+        if (quote.status === "ready" && quote.quote.totalCents !== data.totalCents) {
+          setNotice(`The price changed to ${dollars(data.totalCents)} while you were checking out.`);
+          quote.refresh();
+        }
       }
 
       const { bookingId, clientSecret, confirmationCode, holdToken } = attempt;
@@ -272,6 +251,7 @@ export default function CheckoutScreen() {
         // Most likely the PI was canceled because the hold ran out. Drop it so
         // the next tap books afresh.
         attemptRef.current = null;
+        setHeldTotal(null);
         void releaseAttempt(attempt);
         setError(HOLD_RAN_OUT);
         return;
@@ -287,8 +267,7 @@ export default function CheckoutScreen() {
       }
 
       attemptRef.current = null;
-      checkoutStorage.set("cart_paid", true);
-      checkoutStorage.delete("pending_checkout");
+      cart.clear();
       setConfirmed({ code: confirmationCode, email: cleanEmail });
 
       void (async () => {
@@ -313,13 +292,13 @@ export default function CheckoutScreen() {
     } finally {
       setPaying(false);
     }
-  }, [name, email, phone, cartLines, initPaymentSheet, presentPaymentSheet]);
+  }, [name, email, phone, lines, quote, initPaymentSheet, presentPaymentSheet]);
 
   if (confirmed) {
     return <ConfirmedView code={confirmed.code} onDone={() => router.replace("/(tabs)/tickets")} />;
   }
 
-  if (!pending || cartLines.length === 0) {
+  if (lines.length === 0) {
     return (
       <SafeAreaView style={s.safe}>
         <View style={s.appBar}>
@@ -355,25 +334,38 @@ export default function CheckoutScreen() {
         >
           <Text style={s.sectionLabel}>ORDER SUMMARY</Text>
           <View style={s.card}>
-            {linesByTrip.map(({ trip, lines }, idx) => (
-              <View key={trip.id} style={[s.tripGroup, idx < linesByTrip.length - 1 && s.tripGroupBorder]}>
+            {lines.map((line, idx) => {
+              const { trip } = line;
+              const quoted = shown?.lines.find((l) => l.tripId === trip.id);
+              return (
+              <View key={trip.id} style={[s.tripGroup, idx < lines.length - 1 && s.tripGroupBorder]}>
                 <View style={[s.tripColorBar, { backgroundColor: tripTypeColor(trip.product.category) }]} />
                 <View style={s.tripGroupBody}>
                   <Text style={s.tripVessel}>{trip.vessel.name}</Text>
                   <Text style={s.tripMeta}>{trip.product.displayName}</Text>
                   <Text style={s.tripTime}>{fmtTimeRange(trip.startTime, trip.endTime)}</Text>
-                  {lines.map((line) => (
-                    <View key={line.ticketType} style={s.lineRow}>
-                      <Text style={s.lineLabel}>{ticketLabel(line.ticketType)} × {line.qty}</Text>
-                      <Text style={s.linePrice}>{dollars(line.lineTotal)}</Text>
-                    </View>
-                  ))}
+                  {lineFares(line).map((f) => {
+                    const fare = quoted?.fares.find((q) => q.ticketType === f.ticketType);
+                    return (
+                      <View key={f.ticketType} style={s.lineRow}>
+                        <Text style={s.lineLabel}>{ticketLabel(f.ticketType)} × {f.quantity}</Text>
+                        <Text style={s.linePrice}>{fare ? dollars(fare.listCents) : "…"}</Text>
+                      </View>
+                    );
+                  })}
                 </View>
               </View>
-            ))}
+              );
+            })}
+            {(shown?.discountCents ?? 0) > 0 && (
+              <View style={s.discountRow}>
+                <Text style={s.discountLabel}>Group discount</Text>
+                <Text style={s.discountAmount}>−{dollars(shown!.discountCents)}</Text>
+              </View>
+            )}
             <View style={s.totalRow}>
               <Text style={s.totalLabel}>TOTAL</Text>
-              <Text style={s.totalAmount}>{dollars(totalCents)}</Text>
+              <Text style={s.totalAmount}>{totalCents !== null ? dollars(totalCents) : "…"}</Text>
             </View>
           </View>
 
@@ -420,21 +412,25 @@ export default function CheckoutScreen() {
             </View>
           </View>
 
-          <View style={s.errorSlot}>{error ? <Text style={s.error}>{error}</Text> : null}</View>
+          <View style={s.errorSlot}>
+            {notice ? <Text style={s.notice}>{notice}</Text> : null}
+            {quote.status === "error" && heldTotal === null ? <Text style={s.error}>{quote.message}</Text> : null}
+            {error ? <Text style={s.error}>{error}</Text> : null}
+          </View>
 
           <TouchableOpacity
             style={[s.payBtn, paying && s.payBtnCharging]}
             onPress={handlePay}
-            disabled={paying}
+            disabled={paying || totalCents === null}
             activeOpacity={0.85}
           >
             {paying ? (
               <>
                 <View style={s.spinnerSlot} />
-                <Text style={s.payBtnText}>Charging {dollars(totalCents)}…</Text>
+                <Text style={s.payBtnText}>Charging {totalCents !== null ? dollars(totalCents) : ""}…</Text>
               </>
             ) : (
-              <Text style={s.payBtnText}>PAY {dollars(totalCents)}</Text>
+              <Text style={s.payBtnText}>{totalCents !== null ? `PAY ${dollars(totalCents)}` : "PAY"}</Text>
             )}
           </TouchableOpacity>
           {paying && <Text style={s.chargingNote}>DON&rsquo;T LEAVE THE APP · THIS TAKES A FEW SECONDS</Text>}
@@ -450,6 +446,17 @@ export default function CheckoutScreen() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.deck },
+  discountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: space.md,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: color.ruleSoft,
+  },
+  discountLabel: { fontFamily: font.sansSemibold, fontSize: 14, color: color.greenOpen },
+  discountAmount: { fontFamily: font.monoSemibold, fontSize: 14, color: color.greenOpen },
+  notice: { fontFamily: font.sansSemibold, fontSize: 14, color: color.hull, marginBottom: 6 },
   appBar: {
     height: 54,
     flexDirection: "row",

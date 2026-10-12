@@ -18,17 +18,6 @@ export type Trip = {
   product: { id: string; category: string; displayName: string; prices: Price[] };
 };
 
-export type CartKey = string; // "tripId:ticketType"
-export type Cart = Record<CartKey, number>;
-
-export function cartKey(tripId: string, ticketType: string): CartKey {
-  return `${tripId}:${ticketType}`;
-}
-
-export function dollars(cents: number): string {
-  return `$${Math.round(cents / 100)}`;
-}
-
 export function fmtDuration(startIso: string, endIso: string): string {
   const totalMins = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000);
   const hrs = Math.floor(totalMins / 60);
@@ -66,14 +55,6 @@ export function tripTypeColor(category: string): string {
 
 export function tripTypeLabel(category: string): string {
   return tripTypeFromCategory(category).label;
-}
-
-export function cartQtyForTrip(cart: Cart, trip: Trip): number {
-  return trip.product.prices.reduce((sum, p) => sum + (cart[cartKey(trip.id, p.ticketType)] ?? 0), 0);
-}
-
-export function cartTotalCentsForTrip(cart: Cart, trip: Trip): number {
-  return trip.product.prices.reduce((sum, p) => sum + (cart[cartKey(trip.id, p.ticketType)] ?? 0) * p.priceCents, 0);
 }
 
 export function fmtTimeRange(startIso: string, endIso: string): string {

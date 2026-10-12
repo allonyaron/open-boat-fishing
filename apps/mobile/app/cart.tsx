@@ -1,50 +1,26 @@
-import React, { useMemo, useState } from "react";
+import React from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
-import { MMKV } from "react-native-mmkv";
+import { dollars, lineFares, seatsInLine, totalSeats as countSeats } from "@openboat/utils";
 import { color, font, ls, space, tracking } from "@/constants/nativeTokens";
-import {
-  type Cart,
-  type Trip,
-  cartKey,
-  dollars,
-  fmtDuration,
-  fmtTimeRange,
-  tripTypeColor,
-  tripTypeLabel,
-} from "@/lib/trip-helpers";
-
-const storage = new MMKV();
-
-type Pending = { cart: Cart; cartTrips: Trip[] };
+import { useAppCart } from "@/lib/cart-store";
+import { shownQuote, useQuote } from "@/lib/quote";
+import { fmtDuration, fmtTimeRange, tripTypeColor, tripTypeLabel } from "@/lib/trip-helpers";
 
 export default function CartScreen() {
   const router = useRouter();
-  const [pending] = useState<Pending>(() => {
-    const raw = storage.getString("pending_checkout");
-    if (!raw) return { cart: {}, cartTrips: [] };
-    try {
-      return JSON.parse(raw) as Pending;
-    } catch {
-      return { cart: {}, cartTrips: [] };
-    }
-  });
-
-  const lines = useMemo(() => {
-    return pending.cartTrips
-      .map((trip) => {
-        const tickets = trip.product.prices
-          .map((p) => ({ price: p, qty: pending.cart[cartKey(trip.id, p.ticketType)] ?? 0 }))
-          .filter((t) => t.qty > 0);
-        const seatCount = tickets.reduce((s, t) => s + t.qty, 0);
-        const subtotal = tickets.reduce((s, t) => s + t.qty * t.price.priceCents, 0);
-        return { trip, tickets, seatCount, subtotal };
-      })
-      .filter((l) => l.seatCount > 0);
-  }, [pending]);
-
-  const totalSeats = lines.reduce((s, l) => s + l.seatCount, 0);
-  const totalCents = lines.reduce((s, l) => s + l.subtotal, 0);
+  // The same cart the Trips tab edits, every month included (P8-4).
+  const { lines, updatedOnRestore } = useAppCart();
+  const quote = useQuote(lines);
+  const { quote: shown, updating } = shownQuote(quote);
+  const totalSeats = countSeats(lines);
+  const quoteLine = (tripId: string) => shown?.lines.find((l) => l.tripId === tripId);
+  const fareTotal = (tripId: string, ticketType: string) => {
+    const fare = quoteLine(tripId)?.fares.find((f) => f.ticketType === ticketType);
+    return fare ? dollars(fare.listCents) : "…";
+  };
+  const discountCents = shown?.discountCents ?? 0;
+  const total = shown ? dollars(shown.totalCents) : quote.status === "error" ? "—" : "…";
 
   return (
     <SafeAreaView style={s.safe}>
@@ -57,10 +33,16 @@ export default function CartScreen() {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        {updatedOnRestore && lines.length > 0 && (
+          <Text style={s.notice}>Your cart was updated to current prices and seats.</Text>
+        )}
         {lines.length === 0 ? (
           <Text style={s.emptyText}>No seats selected.</Text>
         ) : (
-          lines.map(({ trip, tickets, subtotal }) => (
+          lines.map((line) => {
+            const { trip } = line;
+            const fares = lineFares(line);
+            return (
             <View key={trip.id} style={s.tripCard}>
               <View style={[s.tripBar, { backgroundColor: tripTypeColor(trip.product.category) }]} />
               <View style={s.tripBody}>
@@ -69,23 +51,27 @@ export default function CartScreen() {
                 <Text style={s.tripMeta}>
                   {trip.departureDate} · {fmtTimeRange(trip.startTime, trip.endTime)} · {fmtDuration(trip.startTime, trip.endTime)}
                 </Text>
-                {tickets.map((t) => (
-                  <View key={t.price.ticketType} style={s.ticketRow}>
+                {fares.map((f) => (
+                  <View key={f.ticketType} style={s.ticketRow}>
                     <Text style={s.ticketLabel}>
-                      {t.qty} × {t.price.ticketType.charAt(0).toUpperCase() + t.price.ticketType.slice(1)}
+                      {f.quantity} × {f.ticketType.charAt(0).toUpperCase() + f.ticketType.slice(1)}
                     </Text>
-                    <Text style={s.ticketPrice}>{dollars(t.qty * t.price.priceCents)}</Text>
+                    <Text style={[s.ticketPrice, updating && s.updating]}>{fareTotal(trip.id, f.ticketType)}</Text>
                   </View>
                 ))}
                 <View style={s.tripFooterRow}>
-                  <Text style={s.subtotal}>Subtotal: {dollars(subtotal)}</Text>
+                  <Text style={[s.subtotal, updating && s.updating]}>
+                    {seatsInLine(line)} SEAT{seatsInLine(line) === 1 ? "" : "S"} ·{" "}
+                    {quoteLine(trip.id) ? dollars(quoteLine(trip.id)!.listCents) : "…"}
+                  </Text>
                   <TouchableOpacity onPress={() => router.push("/(tabs)/trips")}>
                     <Text style={s.editLink}>EDIT SEATS</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             </View>
-          ))
+            );
+          })
         )}
 
         <TouchableOpacity style={s.addTripBtn} onPress={() => router.push("/(tabs)/trips")}>
@@ -94,12 +80,19 @@ export default function CartScreen() {
       </ScrollView>
 
       <View style={s.footer}>
+        {discountCents > 0 && (
+          <View style={s.discountRow}>
+            <Text style={s.discountText}>GROUP DISCOUNT</Text>
+            <Text style={[s.discountText, updating && s.updating]}>−{dollars(discountCents)}</Text>
+          </View>
+        )}
         <View style={s.totalBar}>
           <View>
             <Text style={s.totalLabel}>TOTAL DUE TODAY · {totalSeats} SEAT{totalSeats === 1 ? "" : "S"}</Text>
           </View>
-          <Text style={s.totalValue}>{dollars(totalCents)}</Text>
+          <Text style={[s.totalValue, updating && s.updating]}>{total}</Text>
         </View>
+        {quote.status === "error" && <Text style={s.quoteError}>{quote.message}</Text>}
         <TouchableOpacity
           style={s.payBtn}
           activeOpacity={0.85}
@@ -141,6 +134,17 @@ const s = StyleSheet.create({
     color: color.white,
   },
   scroll: { padding: space.gutter, gap: 12, paddingBottom: 24 },
+  notice: { fontFamily: font.sans, fontSize: 13, color: color.ink2, marginBottom: space.sm },
+  updating: { opacity: 0.5 },
+  discountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: space.gutter,
+    paddingVertical: 8,
+    backgroundColor: color.white,
+  },
+  discountText: { fontFamily: font.monoSemibold, fontSize: 12, letterSpacing: ls(12, tracking.label), color: color.greenOpen },
+  quoteError: { fontFamily: font.sansSemibold, fontSize: 13, color: color.orangeInk, paddingHorizontal: space.gutter, paddingTop: 6 },
   emptyText: { fontFamily: font.sans, fontSize: 15, color: color.ink3, textAlign: "center", paddingTop: 40 },
   tripCard: { flexDirection: "row", backgroundColor: color.white, borderWidth: 1, borderColor: color.rule },
   tripBar: { width: 6 },

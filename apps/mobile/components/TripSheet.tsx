@@ -3,13 +3,10 @@ import { Sheet } from "@/components/Sheet";
 import { InlineStepper } from "@/components/InlineStepper";
 import { SeatPill } from "@/components/SeatPill";
 import { color, font, ls, tracking } from "@/constants/nativeTokens";
+import { dollars, quantityOf, seatsInLine } from "@openboat/utils";
+import type { AppCartLine } from "@/lib/cart-store";
 import {
-  type Cart,
   type Trip,
-  cartKey,
-  cartQtyForTrip,
-  cartTotalCentsForTrip,
-  dollars,
   fmtDuration,
   fmtTimeRange,
   getDisplayPrices,
@@ -19,23 +16,26 @@ import {
 export function TripSheet({
   trip,
   visible,
-  cart,
+  lines,
+  tripTotal,
   onAdjust,
   onClose,
   onHold,
 }: {
   trip: Trip | null;
   visible: boolean;
-  cart: Cart;
-  onAdjust: (tripId: string, ticketType: string, delta: number) => void;
+  lines: AppCartLine[];
+  /** This trip's total from the server quote ("…" while it loads). */
+  tripTotal: string;
+  onAdjust: (trip: Trip, ticketType: string, delta: number) => void;
   onClose: () => void;
   onHold: () => void;
 }) {
   if (!trip) return <Sheet visible={false} onClose={onClose}><View /></Sheet>;
 
   const displayPrices = getDisplayPrices(trip.product.prices);
-  const qty = cartQtyForTrip(cart, trip);
-  const totalCents = cartTotalCentsForTrip(cart, trip);
+  const line = lines.find((l) => l.trip.id === trip.id);
+  const qty = line ? seatsInLine(line) : 0;
   const hasSeats = qty > 0;
 
   return (
@@ -69,11 +69,8 @@ export function TripSheet({
 
         <View style={s.fareRows}>
           {displayPrices.map((price) => {
-            const key = cartKey(trip.id, price.ticketType);
-            const rowQty = cart[key] ?? 0;
-            const otherQty = displayPrices
-              .filter((p) => p.ticketType !== price.ticketType)
-              .reduce((sum, p) => sum + (cart[cartKey(trip.id, p.ticketType)] ?? 0), 0);
+            const rowQty = quantityOf(lines, trip.id, price.ticketType);
+            const otherQty = qty - rowQty;
             const atMax = rowQty >= trip.seatsRemaining - otherQty;
             const label = price.displayLabel.charAt(0).toUpperCase() + price.displayLabel.slice(1);
             return (
@@ -84,8 +81,8 @@ export function TripSheet({
                 </View>
                 <InlineStepper
                   value={rowQty}
-                  onDec={() => onAdjust(trip.id, price.ticketType, -1)}
-                  onInc={() => onAdjust(trip.id, price.ticketType, 1)}
+                  onDec={() => onAdjust(trip, price.ticketType, -1)}
+                  onInc={() => onAdjust(trip, price.ticketType, 1)}
                   atMax={atMax}
                   decLabel={`Remove ${label}`}
                   incLabel={`Add ${label}`}
@@ -97,7 +94,7 @@ export function TripSheet({
 
         <View style={s.totalBar}>
           <Text style={s.totalLabel}>TOTAL</Text>
-          <Text style={s.totalValue}>{dollars(totalCents)}</Text>
+          <Text style={s.totalValue}>{hasSeats ? tripTotal : dollars(0)}</Text>
         </View>
         <View style={{ height: 16 }} />
       </ScrollView>
@@ -110,7 +107,7 @@ export function TripSheet({
           activeOpacity={0.85}
         >
           <Text style={[s.holdText, !hasSeats && s.holdTextDisabled]}>
-            {hasSeats ? `Continue with ${qty} seat${qty === 1 ? "" : "s"} · ${dollars(totalCents)}` : "Pick a seat to continue"}
+            {hasSeats ? `Continue with ${qty} seat${qty === 1 ? "" : "s"} · ${tripTotal}` : "Pick a seat to continue"}
           </Text>
         </TouchableOpacity>
         {hasSeats && (
