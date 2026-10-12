@@ -58,9 +58,9 @@ function readStored(): WebCartLine[] {
 }
 
 /**
- * Re-checks a restored cart against the trips as listed now (prices,
- * status, seats), so a cart saved hours ago can't show stale prices or a
- * trip that has stopped selling (P8-3).
+ * Re-checks a restored cart against the trips as listed now (prices and
+ * status; seats are the booking's call), so a cart saved hours ago can't
+ * show stale prices or a trip that has stopped selling (P8-3).
  */
 async function revalidate() {
   const months = cartMonths(snapshot.lines);
@@ -75,7 +75,7 @@ async function revalidate() {
       ),
     );
     // Applied to the cart as it is now: the customer may have changed it meanwhile.
-    const { lines, changed } = reconcileCart(snapshot.lines, lists.flat());
+    const { lines, changed } = reconcileCart(snapshot.lines, lists.flat(), months);
     persist(lines);
     emit({ lines, updatedOnRestore: snapshot.updatedOnRestore || changed });
   } catch {
