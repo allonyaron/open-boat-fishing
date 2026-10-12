@@ -140,21 +140,34 @@ export function cartMonths(lines: CartLine<CartTrip>[]): string[] {
 }
 
 /**
- * Brings a restored cart up to date with freshly listed trips (P8-3): each
- * line takes the fresh snapshot (prices, seats); a trip no longer listed
- * (cancelled, departed, past its cutoff) or a fare no longer sold is
- * dropped; quantities are cut to the seats left. `fresh` must hold every
- * listed trip in the cart's months. `changed` is true when anything changed
- * other than the snapshot itself.
+ * Brings a restored cart up to date with freshly listed trips (P8-3). Only
+ * lines departing in `months` are checked, and `fresh` must hold every
+ * listed trip in those months; lines in other months (added while the trips
+ * were loading) are left alone. A checked line takes the fresh snapshot
+ * (prices, seats); a trip no longer listed (cancelled, departed, past its
+ * cutoff) or a fare no longer sold is dropped.
+ *
+ * Quantities are not cut to the listed seats: the listing already subtracts
+ * this customer's own held booking, so cutting would shrink a cart whose
+ * seats are held (and change its cartKey, releasing the hold). The booking
+ * decides seats, as the quote leaves them to it.
+ *
+ * `changed` is true when a price changed or anything was dropped.
  */
 export function reconcileCart<T extends CartTrip>(
   lines: CartLine<T>[],
   fresh: T[],
+  months: string[],
 ): { lines: CartLine<T>[]; changed: boolean } {
   const byId = new Map(fresh.map((t) => [t.id, t]));
+  const checked = new Set(months);
   let changed = false;
   const next: CartLine<T>[] = [];
   for (const line of lines) {
+    if (!checked.has(line.trip.departureDate.slice(0, 7))) {
+      next.push(line);
+      continue;
+    }
     const trip = byId.get(line.trip.id);
     if (!trip) {
       changed = true;
@@ -162,18 +175,18 @@ export function reconcileCart<T extends CartTrip>(
     }
     const before = lineFares(line);
     const sold = new Set(trip.product.prices.map((p) => p.ticketType));
-    let seatsLeft = trip.seatsRemaining;
     const quantities: Record<string, number> = {};
     for (const fare of before) {
-      if (!sold.has(fare.ticketType)) continue;
-      const q = Math.min(fare.quantity, seatsLeft);
-      if (q > 0) quantities[fare.ticketType] = q;
-      seatsLeft -= q;
+      if (sold.has(fare.ticketType)) quantities[fare.ticketType] = fare.quantity;
+      else changed = true;
     }
-    const pricesChanged = before.some(
-      (f) => trip.product.prices.find((p) => p.ticketType === f.ticketType)?.priceCents !== f.priceCents,
-    );
-    if (pricesChanged || before.some((f) => quantities[f.ticketType] !== f.quantity)) changed = true;
+    if (
+      before.some(
+        (f) => sold.has(f.ticketType) && trip.product.prices.find((p) => p.ticketType === f.ticketType)?.priceCents !== f.priceCents,
+      )
+    ) {
+      changed = true;
+    }
     if (Object.keys(quantities).length > 0) next.push({ trip, quantities });
   }
   return { lines: next, changed };

@@ -115,9 +115,11 @@ describe("serializeCart / parseStoredCart", () => {
 });
 
 describe("reconcileCart", () => {
+  const NOV = ["2026-11"];
+
   it("keeps an unchanged cart as is", () => {
     const lines: CartLine[] = [{ trip: trip("t1"), quantities: { adult: 2 } }];
-    expect(reconcileCart(lines, [trip("t1")])).toEqual({ lines, changed: false });
+    expect(reconcileCart(lines, [trip("t1")], NOV)).toEqual({ lines, changed: false });
   });
 
   it("takes fresh prices and seats, and says so", () => {
@@ -126,22 +128,41 @@ describe("reconcileCart", () => {
       seatsRemaining: 7,
       product: { prices: [{ ticketType: "adult", priceCents: 6000 }, { ticketType: "child", priceCents: 3500 }] },
     });
-    const result = reconcileCart(lines, [fresh]);
+    const result = reconcileCart(lines, [fresh], NOV);
     expect(result.changed).toBe(true);
     expect(result.lines[0].trip).toBe(fresh);
   });
 
-  it("drops trips no longer listed and fares no longer sold, and cuts to the seats left", () => {
+  it("drops trips no longer listed and fares no longer sold", () => {
     const lines: CartLine[] = [
       { trip: trip("gone"), quantities: { adult: 1 } },
       { trip: trip("t1"), quantities: { adult: 3, child: 2 } },
       { trip: trip("t2"), quantities: { child: 1 } },
     ];
-    const result = reconcileCart(lines, [
-      trip("t1", { seatsRemaining: 4 }),
-      trip("t2", { product: { prices: [{ ticketType: "adult", priceCents: 5500 }] } }),
-    ]);
+    const result = reconcileCart(
+      lines,
+      [trip("t1"), trip("t2", { product: { prices: [{ ticketType: "adult", priceCents: 5500 }] } })],
+      NOV,
+    );
     expect(result.changed).toBe(true);
-    expect(result.lines.map((l) => [l.trip.id, l.quantities])).toEqual([["t1", { adult: 3, child: 1 }]]);
+    expect(result.lines.map((l) => [l.trip.id, l.quantities])).toEqual([["t1", { adult: 3, child: 2 }]]);
+  });
+
+  it("doesn't cut quantities to the listed seats (the listing counts the customer's own hold)", () => {
+    const lines: CartLine[] = [{ trip: trip("t1"), quantities: { adult: 6 } }];
+    const result = reconcileCart(lines, [trip("t1", { seatsRemaining: 4 })], NOV);
+    expect(result.lines[0].quantities).toEqual({ adult: 6 });
+    expect(cartKey(result.lines)).toBe(cartKey(lines));
+  });
+
+  it("leaves lines in months it didn't fetch alone", () => {
+    const october = trip("oct", { departureDate: "2026-10-20" });
+    const lines: CartLine[] = [
+      { trip: trip("t1"), quantities: { adult: 1 } },
+      { trip: october, quantities: { adult: 1 } },
+    ];
+    const result = reconcileCart(lines, [trip("t1")], NOV);
+    expect(result.lines.map((l) => l.trip.id)).toEqual(["t1", "oct"]);
+    expect(result.changed).toBe(false);
   });
 });

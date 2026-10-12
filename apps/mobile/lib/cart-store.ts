@@ -51,7 +51,7 @@ async function revalidate() {
         return (await res.json()) as Trip[];
       }),
     );
-    const { lines, changed } = reconcileCart(snapshot.lines, lists.flat());
+    const { lines, changed } = reconcileCart(snapshot.lines, lists.flat(), months);
     persist(lines);
     emit({ lines, updatedOnRestore: snapshot.updatedOnRestore || changed });
   } catch {
