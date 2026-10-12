@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { dollars, seatsInLine, totalSeats } from "@openboat/utils";
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -8,27 +9,23 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
-import { MMKV } from "react-native-mmkv";
+import { useRouter } from "expo-router";
 import { API_URL } from "@/lib/api";
+import { cart, useAppCart } from "@/lib/cart-store";
+import { shownQuote, useQuote } from "@/lib/quote";
 import { color, font, ls, space, tracking } from "@/constants/nativeTokens";
 import { DayBelt, weekDatesFor } from "@/components/DayBelt";
 import { DateSheet } from "@/components/DateSheet";
 import { TripSheet } from "@/components/TripSheet";
 import { SeatPill } from "@/components/SeatPill";
 import {
-  type Cart,
   type Trip,
-  cartKey,
-  cartQtyForTrip,
-  dollars,
   fmtDuration,
   fmtTimeRange,
   tripTypeColor,
   tripTypeLabel,
 } from "@/lib/trip-helpers";
 
-const storage = new MMKV();
 const OPERATOR_NAME = process.env.EXPO_PUBLIC_OPERATOR_NAME ?? "CAPTREE FISHING";
 
 function todayStr(): string {
@@ -57,16 +54,11 @@ export default function TripsScreen() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
   const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
-  const [cart, setCart] = useState<Cart>({});
-
-  useFocusEffect(
-    useCallback(() => {
-      if (storage.getBoolean("cart_paid")) {
-        setCart({});
-        storage.delete("cart_paid");
-      }
-    }, []),
-  );
+  // One cart for the tab, its resume bar, the cart screen and checkout. Lines
+  // keep their trip snapshot, so seats picked in another month stay (P8-4).
+  const { lines } = useAppCart();
+  const quote = useQuote(lines);
+  const { quote: shown, updating } = shownQuote(quote);
 
   useEffect(() => {
     const monthStr = `${monthYear}-${String(monthIdx + 1).padStart(2, "0")}`;
@@ -118,43 +110,26 @@ export default function TripsScreen() {
     selectDateAcrossMonths(base.toISOString().slice(0, 10));
   }
 
-  const handleAdjust = useCallback((tripId: string, ticketType: string, delta: number) => {
-    setCart((prev) => {
-      const key = cartKey(tripId, ticketType);
-      const next = Math.max(0, (prev[key] ?? 0) + delta);
-      if (next === 0) {
-        const copy = { ...prev };
-        delete copy[key];
-        return copy;
-      }
-      return { ...prev, [key]: next };
-    });
+  const handleAdjust = useCallback((trip: Trip, ticketType: string, delta: number) => {
+    cart.adjust(trip, ticketType, delta);
   }, []);
 
-  const cartTripIds = useMemo(
-    () => new Set(Object.keys(cart).filter((k) => cart[k] > 0).map((k) => k.split(":")[0])),
-    [cart],
-  );
-
   const handleHold = useCallback(() => {
-    const cartTrips = trips.filter((t) => cartTripIds.has(t.id));
-    storage.set("pending_checkout", JSON.stringify({ cart, cartTrips }));
     setActiveTrip(null);
-    if (cartTripIds.size > 1) {
+    if (lines.length > 1) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       router.push("/cart" as any);
     } else {
       router.push("/checkout");
     }
-  }, [cart, trips, cartTripIds, router]);
+  }, [lines.length, router]);
 
-  const cartTotalQty = Object.values(cart).reduce((s, q) => s + q, 0);
-  const cartTotalCents = trips.reduce((sum, t) => {
-    return (
-      sum +
-      t.product.prices.reduce((s, p) => s + (cart[cartKey(t.id, p.ticketType)] ?? 0) * p.priceCents, 0)
-    );
-  }, 0);
+  const cartTotalQty = totalSeats(lines);
+  const cartTotal = shown ? dollars(shown.totalCents) : quote.status === "error" ? "—" : "…";
+  const activeLineTotal = (() => {
+    const line = activeTrip && shown?.lines.find((l) => l.tripId === activeTrip.id);
+    return line ? dollars(line.totalCents) : "…";
+  })();
 
   return (
     <SafeAreaView style={s.safe}>
@@ -205,7 +180,8 @@ export default function TripsScreen() {
           <View style={s.cardList}>
             {dayTrips.map((trip) => {
               const soldOut = trip.seatsRemaining === 0;
-              const qty = cartQtyForTrip(cart, trip);
+              const line = lines.find((l) => l.trip.id === trip.id);
+              const qty = line ? seatsInLine(line) : 0;
               return (
                 <TouchableOpacity
                   key={trip.id}
@@ -253,8 +229,8 @@ export default function TripsScreen() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           onPress={() => router.push("/cart" as any)}
         >
-          <Text style={s.resumeText}>
-            {cartTotalQty} SEAT{cartTotalQty === 1 ? "" : "S"} · {dollars(cartTotalCents)}
+          <Text style={[s.resumeText, updating && { opacity: 0.6 }]}>
+            {cartTotalQty} SEAT{cartTotalQty === 1 ? "" : "S"} · {cartTotal}
           </Text>
           <Text style={s.resumeCta}>REVIEW →</Text>
         </TouchableOpacity>
@@ -278,7 +254,8 @@ export default function TripsScreen() {
       <TripSheet
         trip={activeTrip}
         visible={!!activeTrip}
-        cart={cart}
+        lines={lines}
+        tripTotal={activeLineTotal}
         onAdjust={handleAdjust}
         onClose={() => setActiveTrip(null)}
         onHold={handleHold}
