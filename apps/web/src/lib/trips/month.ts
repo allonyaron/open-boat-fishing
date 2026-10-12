@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { todayET } from "@/lib/date-et";
 import { onlineSalesOpenSql } from "@/lib/trips/online-sales";
+import { loadPriceBook } from "@/lib/bookings/price-book";
+import { resolveTripPrices } from "@/lib/bookings/price-cart";
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -22,6 +24,10 @@ export function currentMonthET(): string {
  * (not departed, not past their cutoff), ordered by date and start time.
  * Shared by GET /api/trips and the /book server render, so both list the
  * same trips. `month` must pass isValidMonth.
+ *
+ * Each trip's `product.prices` are the prices it sells at: the product's
+ * active fares with the schedule's overrides applied, as the booking route
+ * charges them (P8-3).
  */
 export async function getTripsForMonth(operatorId: string, month: string, now: Date = new Date()) {
   const [year, mon] = month.split("-").map(Number);
@@ -29,7 +35,7 @@ export async function getTripsForMonth(operatorId: string, month: string, now: D
   const lastDay = new Date(Date.UTC(year, mon, 0)).getUTCDate();
   const endDate = `${month}-${String(lastDay).padStart(2, "0")}`;
 
-  return db.query.trips.findMany({
+  const rows = await db.query.trips.findMany({
     where: (t, { eq, and, gte, lte }) =>
       and(
         eq(t.operatorId, operatorId),
@@ -41,16 +47,16 @@ export async function getTripsForMonth(operatorId: string, month: string, now: D
       ),
     with: {
       vessel: true,
-      product: {
-        with: {
-          prices: {
-            where: (p, { eq }) => eq(p.active, true),
-          },
-        },
-      },
+      product: true,
     },
     orderBy: (t, { asc }) => [asc(t.departureDate), asc(t.startTime)],
   });
+
+  const book = await loadPriceBook(operatorId, rows);
+  return rows.map((trip) => ({
+    ...trip,
+    product: { ...trip.product, prices: resolveTripPrices(trip, book) },
+  }));
 }
 
 export type MonthTrip = Awaited<ReturnType<typeof getTripsForMonth>>[number];

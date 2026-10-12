@@ -10,6 +10,8 @@ import { fmtTimeET } from "@/lib/format";
 import { SailingsSection } from "@/components/SailingsSection";
 import type { FormattedSailing } from "@/components/SailingsSection";
 import { SiteHeader } from "@/components/SiteHeader";
+import { loadPriceBook } from "@/lib/bookings/price-book";
+import { resolveTripPrices } from "@/lib/bookings/price-cart";
 
 function fishImagePath(category: string): string | null {
   const lower = category.toLowerCase();
@@ -57,14 +59,12 @@ export default async function HomePage() {
         productName: products.displayName,
         category: products.category,
         seatsRemaining: trips.seatsRemaining,
-        priceCents: productPrices.priceCents,
+        productId: trips.productId,
+        scheduleId: trips.scheduleId,
+        vesselId: trips.vesselId,
       })
       .from(trips)
       .innerJoin(products, eq(products.id, trips.productId))
-      .leftJoin(
-        productPrices,
-        and(eq(productPrices.productId, products.id), eq(productPrices.active, true)),
-      )
       .where(
         and(
           eq(trips.operatorId, operator.id),
@@ -105,25 +105,21 @@ export default async function HomePage() {
       .orderBy(products.category),
   ]);
 
-  // De-duplicate week trips and compute min price per trip
-  const tripMap = new Map<string, { tripId: string; departureDate: string; startTime: Date; endTime: Date; productName: string; category: string; seatsRemaining: number; minCents: number | null }>();
-  for (const row of weekTripRows) {
-    const existing = tripMap.get(row.tripId);
-    if (!existing) {
-      tripMap.set(row.tripId, {
-        tripId: row.tripId,
-        departureDate: row.departureDate,
-        startTime: row.startTime,
-        endTime: row.endTime,
-        productName: row.productName,
-        category: row.category ?? "",
-        seatsRemaining: row.seatsRemaining,
-        minCents: row.priceCents,
-      });
-    } else if (row.priceCents !== null && (existing.minCents === null || row.priceCents < existing.minCents)) {
-      existing.minCents = row.priceCents;
-    }
-  }
+  // Each trip's "from" price, at the prices it sells for (schedule overrides included, P8-3).
+  const priceBook = await loadPriceBook(operator.id, weekTripRows);
+  const weekTrips = weekTripRows.map((row) => {
+    const prices = resolveTripPrices({ id: row.tripId, ...row }, priceBook).map((p) => p.priceCents);
+    return {
+      tripId: row.tripId,
+      departureDate: row.departureDate,
+      startTime: row.startTime,
+      endTime: row.endTime,
+      productName: row.productName,
+      category: row.category ?? "",
+      seatsRemaining: row.seatsRemaining,
+      minCents: prices.length > 0 ? Math.min(...prices) : null,
+    };
+  });
 
   function tripTypeFromCategory(cat: string): { color: string; label: string } {
     const lower = cat.toLowerCase();
@@ -138,7 +134,7 @@ export default async function HomePage() {
     return hrs === 1 ? "1 HR" : `${hrs} HR`;
   }
 
-  const formattedSailings: FormattedSailing[] = Array.from(tripMap.values()).map((s) => {
+  const formattedSailings: FormattedSailing[] = weekTrips.map((s) => {
     const { color, label } = tripTypeFromCategory(s.category);
     return {
       tripId: s.tripId,
