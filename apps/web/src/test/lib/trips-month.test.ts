@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
-import { eq } from "drizzle-orm";
-import { trips } from "@openboat/db";
+import { and, eq } from "drizzle-orm";
+import { productPrices, schedulePrices, trips } from "@openboat/db";
 import { currentMonthET, getTripsForMonth, isValidMonth } from "@/lib/trips/month";
 import { seedOperator, setTripDeparture, cleanupOperator, testDb } from "../db-helpers";
 
@@ -41,6 +41,26 @@ describe("getTripsForMonth", () => {
     const [trip] = (await getTripsForMonth(ctx.operatorId, month)).filter((t) => t.id === ctx.tripId);
     expect(trip.vessel.id).toBe(ctx.vesselId);
     expect(trip.product.prices.map((p) => p.ticketType).sort()).toEqual(["adult", "child"]);
+  });
+
+  it("prices each trip as the booking route charges it: schedule overrides, active fares only", async () => {
+    await testDb.insert(schedulePrices).values([
+      { scheduleId: ctx.scheduleId, operatorId: ctx.operatorId, ticketType: "adult", priceCents: 12550 },
+      { scheduleId: ctx.scheduleId, operatorId: ctx.operatorId, ticketType: "senior", priceCents: 9000 },
+    ]);
+    await testDb.update(productPrices).set({ active: false }).where(
+      and(eq(productPrices.productId, ctx.productId), eq(productPrices.ticketType, "child")),
+    );
+    try {
+      const [trip] = (await getTripsForMonth(ctx.operatorId, month)).filter((t) => t.id === ctx.tripId);
+      expect(trip.product.prices).toEqual([
+        { ticketType: "adult", priceCents: 12550 },
+        { ticketType: "senior", priceCents: 9000 },
+      ]);
+    } finally {
+      await testDb.delete(schedulePrices).where(eq(schedulePrices.scheduleId, ctx.scheduleId));
+      await testDb.update(productPrices).set({ active: true }).where(eq(productPrices.productId, ctx.productId));
+    }
   });
 
   it("lists a trip until its online-sales cutoff, then drops it", async () => {

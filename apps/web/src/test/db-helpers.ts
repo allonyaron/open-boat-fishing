@@ -12,6 +12,7 @@ import {
   products,
   productPrices,
   schedules,
+  schedulePrices,
   trips,
   staff,
   bookings,
@@ -272,6 +273,7 @@ export async function cleanupOperator(operatorId: string) {
   await testDb.delete(bookingItems).where(eq(bookingItems.operatorId, operatorId));
   await testDb.delete(bookings).where(eq(bookings.operatorId, operatorId));
   await testDb.delete(trips).where(eq(trips.operatorId, operatorId));
+  await testDb.delete(schedulePrices).where(eq(schedulePrices.operatorId, operatorId));
   await testDb.delete(schedules).where(eq(schedules.operatorId, operatorId));
   await testDb.delete(productPrices).where(
     inArray(
