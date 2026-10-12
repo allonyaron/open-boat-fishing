@@ -1,16 +1,17 @@
 import { useState } from "react";
 import { fmtTimeET } from "@/lib/format";
-import { dollars } from "./format";
+import { dollars } from "@openboat/utils";
+import type { QuoteView } from "@/lib/cart/quote-view";
 import type { EnrichedCartItem } from "./types";
 
 export function MobileCartBar({
-  totalCents,
+  quote,
   totalSeats,
   cartItems,
   onCheckout,
   onRemove,
 }: {
-  totalCents: number;
+  quote: QuoteView;
   totalSeats: number;
   cartItems: EnrichedCartItem[];
   onCheckout: () => void;
@@ -47,7 +48,6 @@ export function MobileCartBar({
             </div>
           ) : (
             cartItems.map((item) => {
-              const subtotal = item.tickets.reduce((s, t) => s + t.priceCents * t.quantity, 0);
               const faresLabel = item.tickets.map((t) => `${t.quantity} ${t.displayLabel ?? t.ticketType} × ${dollars(t.priceCents)}`).join(" · ");
               const dt = new Date(item.departureDate + "T12:00:00Z");
               const dateLabel = dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase();
@@ -63,7 +63,7 @@ export function MobileCartBar({
                     <div className="font-plex-mono" style={{ fontSize: 11, color: "#5b6f79" }}>{faresLabel}</div>
                   </div>
                   <div className="flex flex-col items-end flex-shrink-0">
-                    <span className="font-plex-mono font-bold" style={{ fontSize: 15, color: "#16354a" }}>{dollars(subtotal)}</span>
+                    <span className="font-plex-mono font-bold" style={{ fontSize: 15, color: "#16354a", opacity: quote.updating ? 0.5 : 1 }}>{quote.lineSubtotal(item.tripId)}</span>
                     <button
                       type="button"
                       onClick={() => onRemove(item.tripId)}
@@ -136,10 +136,24 @@ export function MobileCartBar({
         }}
       >
         <div>
-          <div className="font-plex-mono" style={{ fontSize: 10, letterSpacing: ".16em", color: "#5b6f79" }}>TOTAL</div>
-          <div className="font-archivo font-bold" style={{ fontSize: 26, color: hasSeats ? "#16354a" : "#9aa8ae" }}>
-            {dollars(totalCents)}
+          <div className="font-plex-mono" style={{ fontSize: 10, letterSpacing: ".16em", color: "#5b6f79" }}>
+            TOTAL
+            {hasSeats && quote.discountCents > 0 && (
+              <span style={{ color: "#186a4a" }}> · GROUP −{dollars(quote.discountCents)}</span>
+            )}
           </div>
+          <div
+            className="font-archivo font-bold"
+            aria-busy={quote.updating}
+            style={{ fontSize: 26, color: hasSeats ? "#16354a" : "#9aa8ae", opacity: quote.updating ? 0.5 : 1 }}
+          >
+            {hasSeats ? quote.total : dollars(0)}
+          </div>
+          {hasSeats && quote.error && (
+            <div role="alert" className="font-archivo" style={{ fontSize: 12, fontWeight: 600, color: "#8c3b12", maxWidth: 170 }}>
+              {quote.error}
+            </div>
+          )}
         </div>
         <button
           type="button"

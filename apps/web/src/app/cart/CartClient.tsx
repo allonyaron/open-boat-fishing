@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { dollars } from "@openboat/utils";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
+import { toCartItem } from "@/components/BookingCalendar/useCart";
+import { cart, useCartStore } from "@/lib/cart/store";
+import { useQuote } from "@/lib/cart/quote";
+import { quoteView, type QuoteView } from "@/lib/cart/quote-view";
 import { fmtTimeET } from "@/lib/format";
 
 function fmtDate(d: string) {
@@ -10,10 +14,6 @@ function fmtDate(d: string) {
   const mon = dt.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase();
   const day = dt.getUTCDate();
   return `${dow} ${mon} ${day}`;
-}
-
-function dollars(cents: number) {
-  return `$${Math.round(cents / 100)}`;
 }
 
 // ─── Square stepper (design spec) ────────────────────────────────────────────
@@ -93,10 +93,12 @@ function Stepper({
 
 function TripCard({
   item,
+  quote,
   onQtyChange,
   onRemove,
 }: {
   item: EnrichedCartItem;
+  quote: QuoteView;
   onQtyChange: (type: string, qty: number) => void;
   onRemove: () => void;
 }) {
@@ -147,7 +149,6 @@ function TripCard({
             const otherQty = item.tickets
               .filter((t) => t.ticketType !== ticket.ticketType)
               .reduce((s, t) => s + t.quantity, 0);
-            const subtotal = ticket.priceCents * ticket.quantity;
             return (
               <div
                 key={ticket.ticketType}
@@ -174,9 +175,9 @@ function TripCard({
                   />
                   <div
                     className="font-plex-mono font-bold text-right"
-                    style={{ fontSize: 15, minWidth: 54, color: "#16354a" }}
+                    style={{ fontSize: 15, minWidth: 54, color: "#16354a", opacity: quote.updating ? 0.5 : 1 }}
                   >
-                    {dollars(subtotal)}
+                    {quote.fareSubtotal(item.tripId, ticket.ticketType)}
                   </div>
                 </div>
               </div>
@@ -191,52 +192,23 @@ function TripCard({
 // ─── Cart client ──────────────────────────────────────────────────────────────
 
 export function CartClient({ operatorName }: { operatorName: string }) {
-  const [items, setItems] = useState<EnrichedCartItem[]>([]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("openboat_cart");
-      if (raw) setItems(JSON.parse(raw));
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    if (items.length === 0) {
-      localStorage.removeItem("openboat_cart");
-    } else {
-      localStorage.setItem("openboat_cart", JSON.stringify(items));
-    }
-  }, [items]);
-
-  function setQty(tripId: string, ticketType: string, qty: number) {
-    setItems((prev) =>
-      prev
-        .map((item) => {
-          if (item.tripId !== tripId) return item;
-          const tickets =
-            qty === 0
-              ? item.tickets.filter((t) => t.ticketType !== ticketType)
-              : item.tickets.map((t) =>
-                  t.ticketType === ticketType ? { ...t, quantity: qty } : t,
-                );
-          return { ...item, tickets };
-        })
-        .filter((item) => item.tickets.length > 0),
-    );
-  }
-
-  function removeTrip(tripId: string) {
-    setItems((prev) => prev.filter((item) => item.tripId !== tripId));
-  }
-
-  const totalCents = items.reduce(
-    (sum, item) => sum + item.tickets.reduce((s, t) => s + t.priceCents * t.quantity, 0),
-    0,
-  );
+  const { lines, ready, updatedOnRestore } = useCartStore();
+  const quoteState = useQuote(lines);
+  const quote = quoteView(quoteState);
+  const items = lines.map(toCartItem);
   const totalTickets = items.reduce(
     (sum, item) => sum + item.tickets.reduce((s, t) => s + t.quantity, 0),
     0,
   );
+
+  function setQty(tripId: string, ticketType: string, qty: number) {
+    const line = lines.find((l) => l.trip.id === tripId);
+    if (line) cart.set(line.trip, ticketType, qty);
+  }
+
+  // The stored cart is read after hydration; until then, render nothing
+  // rather than flash the empty state.
+  if (!ready) return <div className="min-h-screen bg-deck" />;
 
   if (items.length === 0) {
     return (
@@ -295,24 +267,50 @@ export function CartClient({ operatorName }: { operatorName: string }) {
             <TripCard
               key={item.tripId}
               item={item}
+              quote={quote}
               onQtyChange={(type, qty) => setQty(item.tripId, type, qty)}
-              onRemove={() => removeTrip(item.tripId)}
+              onRemove={() => cart.remove(item.tripId)}
             />
           ))}
         </div>
 
+        {updatedOnRestore && (
+          <p role="status" className="font-archivo" style={{ marginTop: 12, fontSize: 13, color: "#41565f" }}>
+            Your cart was updated to current prices and seats.
+          </p>
+        )}
+
+        {quote.discountCents > 0 && (
+          <div
+            className="flex items-center justify-between font-plex-mono"
+            style={{ marginTop: 16, padding: "12px 16px", background: "#fff", boxShadow: "inset 0 0 0 1px #cdd6da", color: "#186a4a", fontSize: 13, fontWeight: 600, letterSpacing: ".1em", opacity: quote.updating ? 0.5 : 1 }}
+          >
+            <span>GROUP DISCOUNT</span>
+            <span>−{dollars(quote.discountCents)}</span>
+          </div>
+        )}
+
         {/* Order total */}
         <div
           className="bg-hull flex items-center justify-between"
-          style={{ marginTop: 16, padding: "18px 16px" }}
+          style={{ marginTop: quote.discountCents > 0 ? 0 : 16, padding: "18px 16px" }}
         >
           <span className="font-plex-mono" style={{ fontSize: 11, letterSpacing: ".16em", color: "#c9d6dd", fontWeight: 500 }}>
             ORDER TOTAL · {totalTickets} {totalTickets === 1 ? "TICKET" : "TICKETS"}
           </span>
-          <span className="font-plex-mono font-bold text-white" style={{ fontSize: 30 }}>
-            {dollars(totalCents)}
+          <span
+            className="font-plex-mono font-bold text-white"
+            aria-busy={quote.updating}
+            style={{ fontSize: 30, opacity: quote.updating ? 0.5 : 1 }}
+          >
+            {quote.total}
           </span>
         </div>
+        {quote.error && (
+          <p role="alert" className="font-archivo" style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: "#8c3b12" }}>
+            {quote.error}
+          </p>
+        )}
 
         {/* Checkout CTA */}
         <a

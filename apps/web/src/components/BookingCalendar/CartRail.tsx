@@ -1,11 +1,12 @@
 import { fmtTimeET } from "@/lib/format";
 import { RailCalendar } from "./RailCalendar";
-import { dollars } from "./format";
+import { dollars } from "@openboat/utils";
+import type { QuoteView } from "@/lib/cart/quote-view";
 import type { EnrichedCartItem, Trip } from "./types";
 
 export function CartRail({
   cartItems,
-  totalCents,
+  quote,
   totalSeats,
   month,
   byDate,
@@ -19,7 +20,7 @@ export function CartRail({
   onNextMonth,
 }: {
   cartItems: EnrichedCartItem[];
-  totalCents: number;
+  quote: QuoteView;
   totalSeats: number;
   month: string;
   byDate: Record<string, Trip[]>;
@@ -101,10 +102,6 @@ export function CartRail({
               }}
             >
               {cartItems.map((item) => {
-                const subtotal = item.tickets.reduce(
-                  (s, t) => s + t.quantity * t.priceCents,
-                  0
-                );
                 const dateShort = new Date(
                   item.departureDate + "T12:00:00Z"
                 ).toLocaleDateString("en-US", {
@@ -123,8 +120,11 @@ export function CartRail({
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <div className="font-archivo text-[16px] font-bold">{item.productName}</div>
-                      <div className="font-plex-mono text-[17px] font-semibold flex-shrink-0">
-                        {dollars(subtotal)}
+                      <div
+                        className="font-plex-mono text-[17px] font-semibold flex-shrink-0"
+                        style={{ opacity: quote.updating ? 0.5 : 1 }}
+                      >
+                        {quote.lineSubtotal(item.tripId)}
                       </div>
                     </div>
                     <div
@@ -180,6 +180,15 @@ export function CartRail({
             padding: "14px 22px 18px",
           }}
         >
+          {hasSeats && quote.discountCents > 0 && (
+            <div
+              className="flex items-baseline justify-between gap-2 mb-2 font-plex-mono text-[13px]"
+              style={{ color: "#186a4a", opacity: quote.updating ? 0.5 : 1 }}
+            >
+              <span className="font-semibold tracking-[.12em]">GROUP DISCOUNT</span>
+              <span className="font-semibold">−{dollars(quote.discountCents)}</span>
+            </div>
+          )}
           <div className="flex items-baseline justify-between gap-2 mb-3">
             <span
               className="font-plex-mono text-[12px] font-semibold tracking-[.16em]"
@@ -189,11 +198,17 @@ export function CartRail({
             </span>
             <span
               className="font-plex-mono text-[30px] font-bold"
-              style={{ lineHeight: 1, color: "#16354a" }}
+              aria-busy={quote.updating}
+              style={{ lineHeight: 1, color: "#16354a", opacity: quote.updating ? 0.5 : 1 }}
             >
-              {dollars(totalCents)}
+              {hasSeats ? quote.total : dollars(0)}
             </span>
           </div>
+          {hasSeats && quote.error && (
+            <div role="alert" className="font-archivo text-[13px] font-semibold mb-3" style={{ color: "#8c3b12" }}>
+              {quote.error}
+            </div>
+          )}
           <button
             type="button"
             onClick={hasSeats ? onCheckout : undefined}
@@ -206,7 +221,7 @@ export function CartRail({
             }}
           >
             <span>Check out</span>
-            <span>{dollars(totalCents)} →</span>
+            <span>{hasSeats ? quote.total : dollars(0)} →</span>
           </button>
           <div
             className="font-plex-mono text-[11px] tracking-[.1em] mt-3 text-center"

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { dollars } from "@openboat/utils";
 import { BoatGlyph } from "@/components/icons/BoatGlyph";
 
 export type FormattedSailing = {
@@ -17,10 +18,6 @@ export type FormattedSailing = {
   startTimeFormatted: string;
   departureDateFormatted: string;
 };
-
-function dollars(cents: number) {
-  return `$${Math.round(cents / 100)}`;
-}
 
 function SeatPill({ seatsRemaining }: { seatsRemaining: number }) {
   const soldOut = seatsRemaining === 0;

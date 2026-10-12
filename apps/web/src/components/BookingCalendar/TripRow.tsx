@@ -1,6 +1,7 @@
 import { fmtTimeET } from "@/lib/format";
 import { InlineStepper } from "./InlineStepper";
-import { dollars, fmtDuration, getDisplayPrices } from "./format";
+import { dollars } from "@openboat/utils";
+import { fmtDuration, getDisplayPrices } from "./format";
 import type { Trip } from "./types";
 
 export function TripRow({

@@ -3,8 +3,9 @@ import path from "path";
 import fs from "fs";
 
 // Interactive coverage for the BookingCalendar refactor: everything that curl
-// smoke tests can't reach — useCart's adjust/remove, localStorage round-trip,
-// subtotal math, and cart survival across month navigation.
+// smoke tests can't reach — the cart store's adjust/remove, its localStorage
+// round-trip, the server-quoted total, and cart survival across month
+// navigation.
 //
 // Seed-independent: it books the first trip on the 15th of next month (every
 // month of the demo seed has weekday trips; see booking-flow.spec.ts) and reads
@@ -75,12 +76,12 @@ test.describe("booking cart interactions", () => {
     await expect(rail.getByText(/^2\s*×/)).toBeVisible();
     await page.screenshot({ path: shot("03-after-add-2") });
 
-    // localStorage carries the cart.
+    // localStorage carries the cart: one trip, two seats.
     const stored = await page.evaluate(() => localStorage.getItem("openboat_cart"));
     expect(stored).toBeTruthy();
     const parsed = JSON.parse(stored!);
-    expect(parsed).toHaveLength(1);
-    expect(parsed[0].tickets[0].quantity).toBe(2);
+    expect(parsed.lines).toHaveLength(1);
+    expect(Object.values(parsed.lines[0].quantities)).toEqual([2]);
 
     // Reload — cart must survive.
     await page.reload();
@@ -122,9 +123,9 @@ test.describe("booking cart interactions", () => {
     const rail = page.locator(".booking-rail");
     await expect(rail.getByText(monthLabel(target))).toBeVisible();
 
-    // useCart stores priceCents independently of the current month's trip
-    // list, so the total must stay correct even when the trip row is no
-    // longer in the DOM.
+    // The cart keeps its trip snapshots and the total comes from the server
+    // quote, so the total stays correct when the trip row is no longer in
+    // the DOM.
     await rail.getByRole("button", { name: "Next month" }).click();
     await expect(rail.getByText(monthLabel(target, 1))).toBeVisible();
     await expect(checkoutBtn).toContainText(total);
