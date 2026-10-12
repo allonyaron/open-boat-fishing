@@ -8,8 +8,6 @@ import {
   bookings,
   bookingItems,
   tickets,
-  productPrices,
-  schedulePrices,
   operators,
 } from "@openboat/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -21,10 +19,10 @@ import { customerContactSchema } from "@/lib/bookings/contact";
 import { signHoldToken, verifyHoldToken } from "@/lib/bookings/hold-token";
 import { reclaimExpiredHolds } from "@/lib/bookings/reclaim-expired-holds";
 import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
-import { isOnlineSalesOpen } from "@/lib/trips/online-sales";
+import { assertCartBookable, cartSchema, seatsByTrip } from "@/lib/bookings/cart";
+import { loadPriceBook } from "@/lib/bookings/price-book";
+import { priceCart } from "@/lib/bookings/price-cart";
 import { z } from "zod";
-
-const PLATFORM_FEE_CENTS = 150; // $1.50 per ticket
 
 const WALLET_WINDOW_MS = 15 * 60 * 1000;
 const WALLET_MAX_ATTEMPTS = 5;
@@ -39,27 +37,7 @@ const bookingBodySchema = customerContactSchema.extend({
   // can't leave it holding seats (P2-3).
   replaces: z.object({ bookingId: z.string().uuid(), holdToken: z.string().max(1000) }).nullish(),
   notes: z.string().max(500).nullish(),
-  cart: z
-    .array(
-      z.object({
-        tripId: z.string().uuid(),
-        tickets: z
-          .array(
-            z.object({
-              ticketType: z.enum(["adult", "child", "senior"]),
-              quantity: z.number().int().min(1).max(30),
-            }),
-          )
-          .min(1)
-          .max(10),
-      }),
-    )
-    .min(1)
-    .max(10)
-    .refine(
-      (items) => new Set(items.map((i) => i.tripId)).size === items.length,
-      { message: "Duplicate tripId in cart" },
-    ),
+  cart: cartSchema,
 });
 
 async function enforceMinDelay(startMs: number) {
@@ -99,12 +77,7 @@ export async function POST(req: NextRequest) {
 
   const tripIds = cart.map((c) => c.tripId);
 
-  const seatRequestsByTrip: Record<string, number> = {};
-  for (const item of cart) {
-    for (const t of item.tickets) {
-      seatRequestsByTrip[item.tripId] = (seatRequestsByTrip[item.tripId] ?? 0) + t.quantity;
-    }
-  }
+  const seatRequestsByTrip = seatsByTrip(cart);
 
   // Expired holds on these trips give their seats back before we count seats,
   // so availability doesn't wait for the expiry cron (P2-3), and so does the
@@ -143,110 +116,13 @@ export async function POST(req: NextRequest) {
           .orderBy(trips.id)
           .for("update");
 
-        if (tripRows.length !== tripIds.length) {
-          throw Object.assign(new Error("One or more trips not found"), { httpStatus: 404 });
-        }
-
         // One clock for every check in this request, read after the locks are held.
         const now = new Date();
-        for (const trip of tripRows) {
-          if (trip.status !== "scheduled") {
-            throw Object.assign(new Error("Trip is no longer available for booking"), {
-              httpStatus: 409,
-            });
-          }
-          if (!isOnlineSalesOpen(trip, operator.onlineCutoffMinutes, now)) {
-            throw Object.assign(new Error("Online sales for this trip have closed"), {
-              httpStatus: 409,
-            });
-          }
-          const requested = seatRequestsByTrip[trip.id] ?? 0;
-          if (requested > (trip.seatsRemaining ?? 0)) {
-            throw Object.assign(
-              new Error(`Not enough seats available — only ${trip.seatsRemaining} left`),
-              { httpStatus: 409 },
-            );
-          }
-        }
+        assertCartBookable(cart, tripRows, operator.onlineCutoffMinutes, now);
 
-        const productIds = [...new Set(tripRows.map((t) => t.productId))];
-        // One-off "Add a departure" trips have scheduleId null — they can never have a
-        // schedule-level price override, so drop nulls before querying schedulePrices.
-        const scheduleIds = [
-          ...new Set(tripRows.map((t) => t.scheduleId).filter((id): id is string => id !== null)),
-        ];
-        const vesselIds = [...new Set(tripRows.map((t) => t.vesselId))];
-
-        const [productPriceRows, schedulePriceRows, vesselRows] = await Promise.all([
-          tx.select().from(productPrices).where(inArray(productPrices.productId, productIds)),
-          scheduleIds.length > 0
-            ? tx.select().from(schedulePrices).where(and(inArray(schedulePrices.scheduleId, scheduleIds), eq(schedulePrices.operatorId, operator.id)))
-            : Promise.resolve([]),
-          tx.select().from(vessels).where(and(inArray(vessels.id, vesselIds), eq(vessels.operatorId, operator.id))),
-        ]);
-
-        // Schedule-level price takes precedence over product-level price
-        function findPrice(trip: (typeof tripRows)[0], ticketType: string) {
-          return (
-            schedulePriceRows.find(
-              (p) => p.scheduleId === trip.scheduleId && p.ticketType === ticketType,
-            ) ??
-            productPriceRows.find(
-              (p) => p.productId === trip.productId && p.ticketType === ticketType,
-            )
-          );
-        }
-
-        let totalCents = 0;
-        let ticketCount = 0;
-
-        // Count tickets per vessel to evaluate group discounts
-        const ticketsByVessel: Record<string, number> = {};
-        for (const item of cart) {
-          const trip = tripRows.find((t) => t.id === item.tripId)!;
-          const count = item.tickets.reduce((s, t) => s + t.quantity, 0);
-          ticketsByVessel[trip.vesselId] = (ticketsByVessel[trip.vesselId] ?? 0) + count;
-        }
-
-        for (const item of cart) {
-          const trip = tripRows.find((t) => t.id === item.tripId)!;
-          for (const t of item.tickets) {
-            const price = findPrice(trip, t.ticketType);
-            if (!price) {
-              throw Object.assign(
-                new Error(`No price found for ${t.ticketType} on trip ${item.tripId}`),
-                { httpStatus: 400 },
-              );
-            }
-            totalCents += price.priceCents * t.quantity;
-            ticketCount += t.quantity;
-          }
-        }
-
-        // Apply group discount per vessel when threshold is met
-        let groupDiscountCents = 0;
-        for (const vessel of vesselRows) {
-          const threshold = vessel.groupDiscountThreshold;
-          const pct = vessel.groupDiscountPct;
-          if (!threshold || !pct) continue;
-          const count = ticketsByVessel[vessel.id] ?? 0;
-          if (count < threshold) continue;
-
-          // Discount applies only to tickets on this vessel
-          let vesselSubtotal = 0;
-          for (const item of cart) {
-            const trip = tripRows.find((t) => t.id === item.tripId)!;
-            if (trip.vesselId !== vessel.id) continue;
-            for (const t of item.tickets) {
-              const price = findPrice(trip, t.ticketType)!;
-              vesselSubtotal += price.priceCents * t.quantity;
-            }
-          }
-          groupDiscountCents += Math.round((vesselSubtotal * pct) / 100);
-        }
-
-        totalCents -= groupDiscountCents;
-        const platformFeeCents = PLATFORM_FEE_CENTS * ticketCount;
+        const priced = priceCart(cart, tripRows, await loadPriceBook(operator.id, tripRows, tx));
+        const { totalCents, ticketCount, feeCents: platformFeeCents } = priced;
+        const groupDiscountCents = priced.discountCents;
 
         // Decrement seats now, while we hold the row locks
         for (const [tripId, count] of Object.entries(seatRequestsByTrip)) {
@@ -290,61 +166,31 @@ export async function POST(req: NextRequest) {
           })
           .returning();
 
-        for (const item of cart) {
-          const trip = tripRows.find((t) => t.id === item.tripId)!;
-          const vessel = vesselRows.find((v) => v.id === trip.vesselId)!;
-          const rawSubtotal = item.tickets.reduce((s, t) => {
-            const price = findPrice(trip, t.ticketType)!;
-            return s + price.priceCents * t.quantity;
-          }, 0);
-          // Pro-rate group discount across items by their share of the vessel subtotal
-          const vesselSubtotal = cart
-            .filter((ci) => tripRows.find((t) => t.id === ci.tripId)!.vesselId === trip.vesselId)
-            .reduce((s, ci) => {
-              const cTrip = tripRows.find((t) => t.id === ci.tripId)!;
-              return (
-                s +
-                ci.tickets.reduce((ss, t) => {
-                  const p = findPrice(cTrip, t.ticketType)!;
-                  return ss + p.priceCents * t.quantity;
-                }, 0)
-              );
-            }, 0);
-          const threshold = vessel.groupDiscountThreshold;
-          const pct = vessel.groupDiscountPct;
-          const itemDiscount =
-            threshold && pct && (ticketsByVessel[vessel.id] ?? 0) >= threshold && vesselSubtotal > 0
-              ? Math.round(
-                  (rawSubtotal / vesselSubtotal) * Math.round((vesselSubtotal * pct) / 100),
-                )
-              : 0;
-
+        for (const line of priced.lines) {
           const [bookingItem] = await tx
             .insert(bookingItems)
             .values({
               bookingId: booking.id,
-              tripId: item.tripId,
+              tripId: line.tripId,
               operatorId: operator.id,
-              subtotalCents: rawSubtotal - itemDiscount,
+              subtotalCents: line.netCents,
             })
             .returning();
 
-          const ticketValues = item.tickets.flatMap((t) => {
-            const price = findPrice(trip, t.ticketType)!;
-            return Array.from({ length: t.quantity }, () => {
-              const id = randomUUID();
-              return {
-                id,
-                bookingItemId: bookingItem.id,
-                bookingId: booking.id,
-                operatorId: operator.id,
-                ticketType: t.ticketType,
-                priceCents: price.priceCents,
-                feeAmountCents: PLATFORM_FEE_CENTS,
-                feeStatus: "held" as const,
-                qrPayload: id,
-              };
-            });
+          // priceCents stays the list price until row 8 stores each ticket's net.
+          const ticketValues = line.tickets.map((t) => {
+            const id = randomUUID();
+            return {
+              id,
+              bookingItemId: bookingItem.id,
+              bookingId: booking.id,
+              operatorId: operator.id,
+              ticketType: t.ticketType as (typeof tickets.$inferInsert)["ticketType"],
+              priceCents: t.listCents,
+              feeAmountCents: t.feeCents,
+              feeStatus: "held" as const,
+              qrPayload: id,
+            };
           });
 
           if (ticketValues.length > 0) {
