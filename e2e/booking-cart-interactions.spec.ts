@@ -1,15 +1,16 @@
 import { test, expect, type TestInfo } from "@playwright/test";
 import path from "path";
 import fs from "fs";
+import { bookableDate } from "./book-dates";
 
 // Interactive coverage for the BookingCalendar refactor: everything that curl
 // smoke tests can't reach — the cart store's adjust/remove, its localStorage
 // round-trip, the server-quoted total, and cart survival across month
 // navigation.
 //
-// Seed-independent: it books the first trip on the 15th of next month (every
-// month of the demo seed has weekday trips; see booking-flow.spec.ts) and reads
-// the seat price off the page instead of assuming one.
+// Seed-independent: it books the first trip on a day from the 15th of next
+// month on (?date= opens that day's panel) and reads the seat price off the
+// page instead of assuming one.
 
 function screenshotter(testInfo: TestInfo) {
   const dir = path.join("screenshots", testInfo.project.name, "cart-interactions");
@@ -17,10 +18,7 @@ function screenshotter(testInfo: TestInfo) {
   return (name: string) => path.join(dir, `${name}.png`);
 }
 
-const target = (() => {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 15));
-})();
+let target: Date;
 
 function monthLabel(d: Date, offset = 0): string {
   const m = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + offset, 1));
@@ -40,11 +38,11 @@ test.describe("booking cart interactions", () => {
     test.skip(testInfo.project.name === "mobile", "desktop-only spec");
   });
 
-  const bookUrl = `/book?date=${target.toISOString().slice(0, 10)}`;
-
   test.beforeEach(async ({ page }) => {
+    const date = await bookableDate(page.request);
+    target = new Date(`${date}T12:00:00Z`);
     // Avoid cross-test leakage from the previous run's cart.
-    await page.goto(bookUrl);
+    await page.goto(`/book?date=${date}`);
     await page.evaluate(() => localStorage.removeItem("openboat_cart"));
     await page.reload();
   });
@@ -92,15 +90,13 @@ test.describe("booking cart interactions", () => {
     await removeSeat.click();
     await expect(page.getByRole("button", { name: /^Check out/i })).toContainText(`$${price}`);
 
-    // Remove button clears the item entirely. Pressed from the keyboard: at
-    // 1280x800 the rail's sticky calendar and total shelf leave ~100px for the
-    // cart list, so a pointer click only lands within a narrow scroll range.
-    // This spec covers the cart logic, not that layout.
+    // Remove button clears the item entirely, and takes a real pointer click.
     const removeFromCart = page.getByRole("button", { name: /^Remove .* from cart$/ }).first();
     await expect(removeFromCart).toBeVisible();
-    await removeFromCart.focus();
-    await page.keyboard.press("Enter");
+    await removeFromCart.click();
     await expect(page.getByText("No seats yet.")).toBeVisible();
+    // With the cart empty, focus falls back to the rail's heading.
+    await expect(rail.getByText(/^YOUR SEATS/)).toBeFocused();
 
     // localStorage must be cleared.
     const after = await page.evaluate(() => localStorage.getItem("openboat_cart"));
@@ -117,22 +113,23 @@ test.describe("booking cart interactions", () => {
     await expect(checkoutBtn).toContainText("$");
     const total = `$${dollars(await checkoutBtn.innerText())}`;
 
-    // Scope month-nav assertions to the rail calendar, which is the only
-    // visible calendar at desktop width (the mobile panel is lg:hidden but
-    // still in the DOM and would silently absorb clicks).
-    const rail = page.locator(".booking-rail");
-    await expect(rail.getByText(monthLabel(target))).toBeVisible();
+    // Scope month-nav assertions to the desktop calendar in the main column
+    // (the mobile month card is lg:hidden but still in the DOM).
+    const cal = page.locator(".booking-main");
+    await expect(cal.getByRole("heading", { name: monthLabel(target) })).toBeVisible();
 
     // The cart keeps its trip snapshots and the total comes from the server
     // quote, so the total stays correct when the trip row is no longer in
     // the DOM.
-    await rail.getByRole("button", { name: "Next month" }).click();
-    await expect(rail.getByText(monthLabel(target, 1))).toBeVisible();
+    await cal.getByRole("button", { name: "Next month" }).click();
+    await expect(cal.getByRole("heading", { name: monthLabel(target, 1) })).toBeVisible();
     await expect(checkoutBtn).toContainText(total);
+    // Paging the month closes the day panel.
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.screenshot({ path: shot("06-after-month-next") });
 
-    await rail.getByRole("button", { name: "Previous month" }).click();
-    await expect(rail.getByText(monthLabel(target))).toBeVisible();
+    await cal.getByRole("button", { name: "Previous month" }).click();
+    await expect(cal.getByRole("heading", { name: monthLabel(target) })).toBeVisible();
     await expect(checkoutBtn).toContainText(total);
   });
 });

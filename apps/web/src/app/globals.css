@@ -70,29 +70,520 @@
   .booking-trip-row .trip-col-action { grid-column: 1 / -1; }
 }
 
-/* Booking shell: 2-col with stretching rail on large screens, 1-col below lg (1024px) */
+/* Booking page. Below 1024px (mobile) it is a normal scrolling page. From
+   1024px it is an app shell: header, then a main column that scrolls on its
+   own and a cart rail that never moves. */
+.booking-app {
+  max-width: 1440px;
+  margin: 0 auto;
+  border-left: 2px solid theme('colors.rule.DEFAULT');
+  border-right: 2px solid theme('colors.rule.DEFAULT');
+  min-height: 100vh;
+}
 .booking-shell {
   display: grid;
   grid-template-columns: minmax(0,1fr) 372px;
   align-items: start;
 }
-.booking-rail {
-  align-self: stretch;
-  height: 100%;
-}
-@media (max-width: 1024px) {
+@media (max-width: 1023.98px) {
   .booking-shell {
     grid-template-columns: minmax(0,1fr);
   }
   .booking-rail { display: none !important; }
   .booking-mobile-bar { display: flex !important; flex-direction: column; }
 }
+@media (min-width: 1024px) {
+  /* The shell fills the window below anything the layout puts above it (the
+     demo banner), so the rail's total shelf is never under the fold. */
+  body:has(> .booking-app) {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  body:has(> .booking-app) > .booking-app {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+  .booking-app {
+    height: 100vh;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  body:has(> .booking-app) > .booking-app { height: auto; }
+  .booking-shell {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .booking-main {
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    container-type: inline-size;
+    container-name: calcol;
+    scrollbar-width: thin;
+    scrollbar-color: #a9b6bc transparent;
+  }
+  .booking-main-cal { height: 100%; }
+  .booking-rail {
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: theme('colors.deck.2');
+    border-left: 2px solid theme('colors.rule.DEFAULT');
+  }
+}
+/* Short desktop windows: the address/phone bar and the trust line give their
+   height to the calendar. */
+@media (min-width: 1024px) and (max-height: 759.98px) {
+  .booking-app .booking-nav-addr,
+  .booking-app .bk-rail-trust { display: none; }
+}
 
-/* Rail calendar responsive: hide full grid at short viewport heights */
-.booking-rail-cal-compact { display: none; }
-@media (max-height: 720px) {
-  .booking-rail-cal-grid { display: none; }
-  .booking-rail-cal-compact { display: block; }
+/* Desktop month calendar */
+.bk-cal {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px 16px;
+}
+.bk-cal-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 48px;
+  flex-shrink: 0;
+}
+.bk-cal-nav { display: flex; align-items: center; gap: 12px; }
+.bk-navbtn {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: #fff;
+  border: 1px solid theme('colors.hull.DEFAULT');
+  color: theme('colors.hull.DEFAULT');
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.bk-navbtn:disabled { border-color: theme('colors.rule.soft'); color: #b9c3c7; cursor: default; }
+.bk-cal-title {
+  margin: 0;
+  min-width: 150px;
+  text-align: center;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  color: theme('colors.hull.DEFAULT');
+}
+.bk-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 14px;
+}
+.bk-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  letter-spacing: .06em;
+  color: theme('colors.ink-2');
+  white-space: nowrap;
+}
+.bk-legend .bk-legend-low { color: theme('colors.orange.press'); font-weight: 600; }
+.bk-legend .bk-legend-full { color: #8a999f; }
+.bk-legend-cart {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  background: theme('colors.cart-tint');
+  box-shadow: inset 0 0 0 1px #f0c9b3;
+}
+.bk-cal-dow {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0,1fr));
+  gap: 4px;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+.bk-cal-dow div {
+  padding: 0 6px 4px;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 10px;
+  letter-spacing: .1em;
+  color: theme('colors.ink-3');
+}
+.bk-cal-body { position: relative; flex: 1; min-height: 0; }
+.bk-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0,1fr));
+  gap: 4px;
+  height: 100%;
+}
+.bk-cal-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.bk-cal-empty > * { pointer-events: auto; background: theme('colors.deck.DEFAULT'); padding: 24px 32px; }
+
+/* Day box */
+.bk-day {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 6px 6px 4px;
+  display: flex;
+  flex-direction: column;
+}
+.bk-day.is-sail { background: #fff; box-shadow: inset 0 0 0 1px theme('colors.rule.DEFAULT'); }
+.bk-day.is-sail:hover { box-shadow: inset 0 0 0 1px theme('colors.hull.DEFAULT'); }
+.bk-day.is-past { background: #e6ebeb; }
+.bk-day.is-open,
+.bk-day.is-open:hover { box-shadow: inset 0 0 0 2px theme('colors.hull.DEFAULT'); }
+.bk-day-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.bk-day-hit:focus-visible { outline-offset: -3px; }
+.bk-day-hd {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 20px;
+  flex-shrink: 0;
+}
+.bk-day-num {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: theme('colors.hull.DEFAULT');
+}
+.bk-day.is-none .bk-day-num { color: theme('colors.border-input'); }
+.bk-day.is-past .bk-day-num { color: #8a999f; }
+.bk-day-today { font-size: 9px; letter-spacing: .12em; color: theme('colors.orange.ink'); }
+.bk-day-dot { width: 7px; height: 7px; border-radius: 50%; background: theme('colors.orange.DEFAULT'); }
+
+/* Trip lines */
+.bk-lines {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bk-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  height: 14px;
+  padding: 0 2px 0 4px;
+  border: none;
+  border-left: 3px solid var(--vc);
+  background: transparent;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  line-height: 14px;
+  color: theme('colors.ink-2');
+  text-align: left;
+  cursor: pointer;
+}
+.bk-line:hover { background: theme('colors.deck.2'); }
+.bk-line-time { flex-shrink: 0; font-weight: 600; color: theme('colors.hull.DEFAULT'); }
+.bk-line-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-line-count { flex-shrink: 0; font-weight: 700; }
+.bk-line.is-low,
+.bk-line.is-low .bk-line-time { color: theme('colors.orange.press'); }
+.bk-line.is-full,
+.bk-line.is-full .bk-line-time { color: theme('colors.border-input'); }
+.bk-line.is-full .bk-line-name { text-decoration: line-through; }
+.bk-line.is-in { background: theme('colors.cart-tint'); }
+.bk-line.is-more {
+  padding-left: 7px;
+  border-left-color: transparent;
+  font-weight: 600;
+  letter-spacing: .06em;
+  color: theme('colors.hull.DEFAULT');
+}
+.bk-line.is-more:hover { background: transparent; text-decoration: underline; }
+@container calcol (max-width: 700px) {
+  .bk-legend { display: none; }
+  .bk-line { font-size: 10.5px; gap: 3px; }
+  .bk-line-time { letter-spacing: -.02em; }
+  .bk-line.is-full .bk-line-name { display: none; }
+  .bk-line.is-full .bk-line-count { margin-left: auto; }
+}
+
+/* Day panel */
+.bk-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid theme('colors.hull.DEFAULT');
+  box-shadow: 0 18px 40px rgba(13,28,38,.28);
+}
+.bk-panel-hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 8px 8px 14px;
+  background: theme('colors.hull.DEFAULT');
+  color: #fff;
+}
+.bk-panel-title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .12em;
+}
+.bk-panel-title span {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .12em;
+  color: theme('colors.ink-dark-3');
+}
+.bk-panel-btn {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid theme('colors.hull.line');
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.bk-panel-btn:disabled { opacity: .4; cursor: default; }
+.bk-panel-body {
+  position: relative;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bk-ptrip {
+  flex-shrink: 0;
+  padding: 12px 14px;
+  border: 1px solid #dde4e6;
+  border-left: 4px solid var(--vc);
+  background: theme('colors.deck.3');
+}
+.bk-ptrip.is-in { border-color: theme('colors.orange.DEFAULT'); border-left-color: var(--vc); background: #fff; }
+.bk-ptrip.is-soldout { opacity: .55; }
+.bk-ptrip.is-focus { box-shadow: 0 0 0 2px theme('colors.hull.DEFAULT'); }
+.bk-ptrip.is-flash { animation: bk-flash 1.4s ease-out; }
+@keyframes bk-flash { 0%, 60% { background: theme('colors.focus-flash'); } }
+.bk-ptrip-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.bk-ptrip-kicker {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  letter-spacing: .16em;
+  color: theme('colors.orange.ink');
+}
+.bk-ptrip-seats {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+}
+.bk-ptrip-name { margin-top: 3px; font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+.bk-ptrip-meta {
+  margin-top: 4px;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 12px;
+  color: theme('colors.ink-2');
+}
+.bk-ptrip-fares { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.bk-waitlist {
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 18px;
+  border: 1px solid theme('colors.border-input');
+  background: transparent;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  color: theme('colors.ink-2');
+  cursor: pointer;
+}
+
+/* Cart rail */
+.bk-rail-hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 18px 22px 12px;
+}
+.bk-rail-heading {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  color: theme('colors.hull.DEFAULT');
+}
+.bk-rail-sub {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  letter-spacing: .1em;
+  color: theme('colors.ink-3');
+}
+.bk-rail-wrap { position: relative; flex: 1; min-height: 0; }
+.bk-rail-list {
+  position: relative;
+  height: 100%;
+  margin: 0;
+  padding: 0 22px 8px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #a9b6bc transparent;
+}
+.bk-rail-list:focus-visible { outline-offset: -2px; }
+.bk-rail-wrap.has-more::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 44px;
+  background: linear-gradient(rgba(230,234,234,0), theme('colors.deck.2'));
+  pointer-events: none;
+}
+.bk-rail-more {
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  z-index: 2;
+  transform: translateX(-50%);
+  min-height: 32px;
+  padding: 0 14px;
+  border: none;
+  background: theme('colors.hull.DEFAULT');
+  color: #fff;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  box-shadow: 0 4px 10px rgba(13,28,38,.2);
+  cursor: pointer;
+}
+.bk-rail-wrap.has-more .bk-rail-more { display: block; }
+.bk-rail-empty {
+  margin: 0 22px;
+  padding: 18px 16px;
+  border: 1px dashed #a9b6bc;
+  background: theme('colors.deck.DEFAULT');
+}
+.bk-cart-item {
+  flex-shrink: 0;
+  padding: 10px 12px 4px 14px;
+  background: #fff;
+  border: 1px solid theme('colors.rule.DEFAULT');
+  border-left: 4px solid var(--vc);
+}
+.bk-cart-item.is-flash { animation: bk-cart-flash 1.2s ease-out; }
+@keyframes bk-cart-flash {
+  0%, 50% { border-color: theme('colors.orange.DEFAULT'); border-left-color: var(--vc); }
+}
+.bk-cart-date {
+  display: block;
+  margin-top: 3px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  letter-spacing: .02em;
+  color: theme('colors.ink-2');
+  text-align: left;
+  cursor: pointer;
+}
+.bk-cart-date:hover { color: theme('colors.hull.DEFAULT'); text-decoration: underline; }
+.bk-cart-fares-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+}
+.bk-cart-remove {
+  position: relative;
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  color: theme('colors.orange.press');
+  text-decoration: underline;
+  cursor: pointer;
+}
+/* 44×44 hit area around a 32px-tall link */
+.bk-cart-remove::before { content: ""; position: absolute; left: -14px; right: -10px; top: -6px; bottom: -6px; }
+.bk-rail-shelf {
+  flex-shrink: 0;
+  padding: 14px 22px 16px;
+  border-top: 2px solid theme('colors.rule.DEFAULT');
+  box-shadow: 0 -8px 16px rgba(13,28,38,.09);
+  background: theme('colors.deck.2');
 }
 
 /* ── Focus-visible (accessibility) ───────────────────────────────────────── */

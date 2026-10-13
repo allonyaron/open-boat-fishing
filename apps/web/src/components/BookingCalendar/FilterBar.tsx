@@ -62,8 +62,13 @@ export function FilterBar({
                   border: `1px solid ${filter === v.name ? "#c94510" : "#3c5867"}`,
                   padding: "0 16px",
                   minHeight: 44,
+                  gap: 8,
                 }}
               >
+                <span
+                  aria-hidden="true"
+                  style={{ width: 10, height: 10, background: v.color, display: "inline-block", flexShrink: 0 }}
+                />
                 {v.name.toUpperCase()}
               </button>
             ))}

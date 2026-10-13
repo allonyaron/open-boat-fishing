@@ -36,6 +36,10 @@ const config: Config = {
         "ink-dark-2": "#b6c6ce",
         "ink-dark-3": "#c9d6dd",
         "green-open": "#186a4a",
+        // /book desktop calendar: a trip line already in the cart, and the day
+        // panel's "here it is" flash on a trip card.
+        "cart-tint": "#fbe9df",
+        "focus-flash": "#dce5ea",
         // ── Admin console redesign ("Merchant" direction, design_handoff_admin_console) ──
         merchant: {
           ink: "#303030",

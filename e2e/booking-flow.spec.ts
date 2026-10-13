@@ -2,6 +2,7 @@ import { test, expect, type TestInfo } from "@playwright/test";
 import path from "path";
 import fs from "fs";
 import { FIXTURE_PATH } from "./global-setup";
+import { bookableDate } from "./book-dates";
 
 type Fixtures = { code: string | null; bookingId: string | null };
 
@@ -42,7 +43,10 @@ test("booking flow", async ({ page }, testInfo) => {
   const shot = screenshotter(testInfo);
 
   // ── 01  Trip list ──────────────────────────────────────────────────────────
-  await page.goto(nextMonthBookUrl());
+  // Desktop lists one day's trips at a time, in the day panel ?date= opens, so
+  // go to a day that sells adult seats.
+  const date = await bookableDate(page.request, { adult: true });
+  await page.goto(`/book?date=${date}`);
   const addAdult = page.getByRole("button", { name: "One more adult seat" }).first();
   await expect(addAdult).toBeVisible();
   await page.screenshot({ path: shot("01-trips") });

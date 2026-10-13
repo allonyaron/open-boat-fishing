@@ -53,7 +53,7 @@ export function BookingNav({
       {/* Desktop header */}
       {(dockAddress || phone) && (
         <div
-          className="hidden lg:flex bg-hull flex-wrap gap-3 justify-between font-plex-mono text-[12px] tracking-[.1em] text-ink-dark-3"
+          className="booking-nav-addr hidden lg:flex bg-hull flex-wrap gap-3 justify-between font-plex-mono text-[12px] tracking-[.1em] text-ink-dark-3"
           style={{ padding: "9px 24px" }}
         >
           <span>{dockAddress ?? ""}</span>
