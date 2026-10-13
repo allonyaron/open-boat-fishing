@@ -11,9 +11,10 @@ import { FilterBar } from "./FilterBar";
 import { MobileCartBar } from "./MobileCartBar";
 import { MobilePanelCalendar } from "./MobilePanelCalendar";
 import { MonthCalendar } from "./MonthCalendar";
-import { parseMonth, toMonthStr, todayET } from "./format";
+import { parseMonth, toMonthStr } from "./format";
 import { useCart } from "./useCart";
 import { quoteView } from "@/lib/cart/quote-view";
+import { todayET } from "@/lib/date-et";
 import type { Trip, VesselInfo } from "./types";
 
 export { BookingNav } from "./BookingNav";

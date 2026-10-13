@@ -7,10 +7,17 @@ type ListedTrip = {
   product: { prices: { ticketType: string; priceCents: number }[] };
 };
 
-/** "YYYY-MM" for the month after this one: fully in the future. */
+/**
+ * "YYYY-MM" for the month after this one: fully in the future. Counted from
+ * the month in Eastern time, which /book opens on (currentMonthET), so it is
+ * the month "Next month" loads even late on the last day of a month.
+ */
 export function nextMonth(offset = 1): string {
-  const now = new Date();
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
+  const [y, m] = new Date()
+    .toLocaleDateString("en-CA", { timeZone: "America/New_York" })
+    .split("-")
+    .map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + offset, 1));
   return d.toISOString().slice(0, 7);
 }
 
