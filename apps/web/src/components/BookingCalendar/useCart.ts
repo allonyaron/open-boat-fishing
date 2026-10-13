@@ -87,5 +87,6 @@ export function useCart({
     removeFromCart,
     quote,
     totalSeats: countSeats(lines),
+    ready,
   };
 }
