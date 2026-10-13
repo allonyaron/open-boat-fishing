@@ -80,40 +80,38 @@ Then visit `http://localhost:3000/status` — you should see 4 vessels, ~60 prod
 
 ### Step 1 — Browse the calendar
 
-1. The homepage loads a booking calendar.
-2. **Desktop:** You see a month grid on the left and "Select a date" on the right.
-3. Click any date that shows colored dots (each dot = a vessel with a trip that day).
-4. The right panel populates with trip cards for that date.
-5. **Mobile viewport** (resize browser): the layout switches to a scrollable list grouped by date.
+1. The homepage shows this week's sailings. Click **FULL SEASON CALENDAR** (or open `/book`).
+2. **Desktop (1024px wide and up):** the month fills the left column and the cart rail sits on the right.
+   - Each day box lists its trips as lines: start time, species, and a bar in the boat's colour.
+   - Rust with a number = 10 or fewer seats left (rust with no number if the product hides remaining seats). Grey, struck through, `FULL` = sold out. Days that don't fit all their trips end in `+N MORE`.
+   - The boat chips at the top filter the calendar; each has its boat's colour swatch.
+   - Only the calendar side scrolls. The rail never moves.
+3. **Mobile (under 1024px):** a month card above a list of trips grouped by day. Tapping a day scrolls the list to it.
 
-### Step 2 — Select tickets
+### Step 2 — Add seats
 
-1. Click any trip card → a bottom sheet opens (mobile) or the right panel expands (desktop).
-2. You see: vessel name, departure–return time, available seats, ticket types with prices.
-3. The **Adult** stepper starts at 1. Hit `+` to add more. Hit `−` to reduce.
-4. Add a Child or Senior ticket too if you want to test multiple types.
-5. Watch the **live subtotal** update at the bottom.
-6. Click **"Add to cart"**.
-7. A cart bar appears pinned at the bottom: "$ total / N tickets — Checkout →"
+1. **Desktop:** click a day box, a trip line or `+N MORE`. A panel opens beside the box with that day's trips (a trip line also highlights that trip and focuses its `+`). Nothing is added until you press `+`.
+2. Each trip shows species, seat state, name, times, boat, and a `− / +` stepper per fare (Adult/Child, or one Seat stepper when the fares are equal).
+3. Press `+`. The trip appears in the rail (desktop) or the bottom cart bar (mobile), with the total from the server quote.
+4. In the panel, `‹ ›` step to the previous/next sailing day; Esc, `×` or a click outside closes it.
+5. **Optional, multi-trip cart:** add trips on other days or months. In the rail, an item's date line ("SUN NOV 1 · 5:00 AM · OPEN BOAT II") reopens that day; `REMOVE` takes the trip out.
 
-**Optional — multi-trip cart:** Navigate to a different date and add a second trip. Both appear in the cart.
+Arriving from a homepage **BOOK** button (`/book?date=…&trip=…`) adds one seat of that trip and opens its day.
 
 ### Step 3 — Checkout
 
-1. Click **"Checkout →"** in the cart bar → goes to `/cart`.
-2. You see an order summary with each trip, ticket breakdown, and total.
-3. Fill in the contact form:
-   - **Email** (required — use a real address so you get the confirmation email)
-   - **Name** (optional)
-   - **Phone** (optional)
-4. Click **"Checkout →"** → goes to `/checkout` with the Stripe Payment Element.
-5. Enter the test card:
+1. Click **CHECK OUT** in the rail (desktop) or the cart bar (mobile) → `/checkout`.
+2. You see the order summary and total, then **WHO'S FISHING**:
+   - **Name on the manifest** (required)
+   - **Mobile** (optional, US number)
+   - **Email** (required; use a real address to get the confirmation email)
+3. Under **PAYMENT**, enter the test card:
    - Card number: **`4242 4242 4242 4242`**
    - Expiry: **`12/34`** (any future date)
    - CVC: **`123`**
    - ZIP: **`10001`**
-6. Click **"Pay"**.
-7. Stripe redirects to `/booking/delivery`.
+4. Click **PAY $… · BOOK MY SEATS**.
+5. Stripe redirects to `/booking/delivery`.
 
 ### Step 4 — Watch the webhook fire
 
@@ -513,9 +511,9 @@ All test cards: expiry `12/34`, CVC `123`, ZIP `10001`.
 Use this to track your walkthrough:
 
 - [ ] Status page loads, shows 4 vessels
-- [ ] Web: calendar renders, trip cards appear on date click
-- [ ] Web: ticket selector opens, quantities work, subtotal updates
-- [ ] Web: add to cart, cart bar appears
+- [ ] Web: `/book` calendar renders trip lines; clicking a day opens its panel (desktop)
+- [ ] Web: `+ / −` work, the cart rail (desktop) or cart bar (mobile) shows the trip and the total
+- [ ] Web: `REMOVE` and the cart item's date line work in the rail
 - [ ] Web: checkout with `4242` card succeeds
 - [ ] Web: `payment_intent.succeeded` appears in Stripe CLI terminal
 - [ ] Web: `/booking/delivery` loads with confirmation code

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { nextMonth, tripsFor } from "./book-dates";
+import { bookableDate, nextMonth, tripsFor } from "./book-dates";
 
 // Desktop /book: the month calendar, its trip lines, the day panel and the
 // fixed cart rail (design_handoff_book_calendar). Line states need trips the
@@ -277,6 +277,45 @@ test.describe("booking calendar (desktop)", () => {
     await expect(card).toBeVisible();
     await expect(card).toHaveClass(/is-focus/);
     await expect(boxButton(page, first.departureDate)).toHaveAttribute("aria-expanded", "true");
+  });
+
+  test("an add out of view scrolls the rail list (not the page) to the item and flashes it", async ({ page }) => {
+    const picked = await seedCart(page, 5);
+    const last = picked[4];
+    // 4 of the 5 items fit at 1280×800, so the last one starts (mostly) out of view.
+    await page.goto(`/book?date=${last.departureDate}`);
+    const item = rail(page).locator(`[data-cart-item="${last.id}"]`);
+    await expect(item).toHaveCount(1);
+    await expect(item).not.toBeInViewport({ ratio: 1 });
+
+    await dialog(page)
+      .locator(`[data-trip-card="${last.id}"]`)
+      .getByRole("button", { name: /^One more .*seat$/ })
+      .first()
+      .click();
+    await expect(item).toHaveClass(/is-flash/);
+    await expect(item).toBeInViewport({ ratio: 1 });
+    expect(await rail(page).locator(".bk-rail-list").evaluate((l) => l.scrollTop)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
+  test("/book?date=&trip= (the home page's BOOK link) opens that day on that trip, with a seat added", async ({ page }) => {
+    const date = await bookableDate(page.request);
+    const trip = (await tripsFor(page.request, date.slice(0, 7))).find(
+      (t) => t.departureDate === date && t.seatsRemaining >= 2,
+    )!;
+    await page.goto("/book");
+    await page.evaluate(() => localStorage.removeItem("openboat_cart"));
+    await page.goto(`/book?date=${date}&trip=${trip.id}`);
+
+    const card = dialog(page).locator(`[data-trip-card="${trip.id}"]`);
+    await expect(card).toHaveClass(/is-focus/);
+    await expect(boxButton(page, date)).toHaveAttribute("aria-expanded", "true");
+    // The pre-added seat: in the rail, and on the card's stepper.
+    await expect(rail(page).locator(`[data-cart-item="${trip.id}"]`)).toContainText(/^.*1 ×/);
+    await expect(card).toHaveClass(/is-in/);
+    // Opened by the page, not the customer: focus stays where it was.
+    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
   });
 
   test("short window: address bar hidden, 3 lines per box at 1280×680", async ({ page }) => {
