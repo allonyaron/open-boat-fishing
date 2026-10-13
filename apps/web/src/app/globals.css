@@ -117,3 +117,84 @@
 @media (max-width: 700px) {
   .booking-co-grid { grid-template-columns: minmax(0,1fr); }
 }
+
+/* ── Demo mode notice (DemoTab) ───────────────────────────────────────────────
+   Positioned at the top centre of the page (not the window), so it takes no
+   room and scrolls away with the page: it only ever sits over the headers'
+   empty centre, never over content. Colours are the demo banner's amber. */
+.demo-tab {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 60; /* over the sticky headers (z-50) */
+  transform: translateX(-50%);
+}
+.demo-tab-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid #f59e0b;
+  border-top: none;
+  background: rgba(253, 230, 138, 0.85);
+  color: #78350f;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.demo-tab-btn:hover,
+.demo-tab-btn[aria-expanded="true"] { background: #fde68a; }
+/* A taller, wider hit area than the 22px tab shows */
+.demo-tab-btn::before { content: ""; position: absolute; left: -12px; right: -12px; top: 0; bottom: -18px; }
+.demo-tab-btn:focus-visible { outline: 2px solid #78350f; outline-offset: 2px; }
+/* Below 1024px headers put controls near the top centre (the logo at 360px,
+   the admin's Dock/Desk toggle from 14px down), so the tab shrinks to a 14px
+   "DEMO" whose hit area is just the tab. */
+@media (max-width: 1023.98px) {
+  .demo-tab-btn { height: 14px; padding: 0 7px; font-size: 9px; letter-spacing: .12em; }
+  .demo-tab-btn::before { display: none; }
+  .demo-tab-long { display: none; }
+}
+.demo-tab-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  width: min(360px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  padding: 14px 16px 10px;
+  border: 1px solid #f59e0b;
+  background: #fef3c7;
+  color: #78350f;
+  font-size: 14px;
+  line-height: 1.5;
+  box-shadow: 0 12px 28px rgba(13, 28, 38, 0.22);
+}
+.demo-tab-panel p { margin: 0 0 6px; }
+.demo-tab-card { font-family: var(--font-ibm-plex-mono), monospace; font-size: 15px; font-weight: 600; letter-spacing: .04em; }
+.demo-tab-title {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.demo-tab-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+.demo-tab-foot a { color: #78350f; text-decoration: underline; text-underline-offset: 2px; }
+.demo-tab-close {
+  width: 36px;
+  height: 36px;
+  margin-right: -8px;
+  border: none;
+  background: transparent;
+  color: #78350f;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.demo-tab-panel :focus-visible { outline: 2px solid #78350f; outline-offset: 2px; }
+@media print { .demo-tab { display: none; } }

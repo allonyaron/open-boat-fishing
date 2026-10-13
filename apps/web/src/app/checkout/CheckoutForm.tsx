@@ -244,9 +244,11 @@ const HOLD_RAN_OUT = "Your seat hold ran out and the seats were released. Pay ag
 export function CheckoutForm({
   lines,
   quote,
+  demoMode = false,
 }: {
   lines: WebCartLine[];
   quote: QuoteState & { refresh: () => void };
+  demoMode?: boolean;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -614,6 +616,15 @@ export function CheckoutForm({
       <div style={{ fontFamily: "var(--font-ibm-plex-mono)", fontSize: 12, letterSpacing: ".16em", color: "#41565f", margin: "26px 0 12px" }}>
         PAYMENT
       </div>
+      {demoMode && (
+        <div
+          style={{ border: "1px solid #f59e0b", background: "#fef3c7", color: "#78350f", padding: "10px 14px", marginBottom: 12, fontFamily: "var(--font-archivo)", fontSize: 14 }}
+        >
+          Demo: no real payment. Use card{" "}
+          <span style={{ fontFamily: "var(--font-ibm-plex-mono)", whiteSpace: "nowrap" }}>4242 4242 4242 4242</span>,
+          any future date and any CVC.
+        </div>
+      )}
       <div style={{ background: "#fff", border: "1px solid #cdd6da", padding: 20 }}>
         {/* Link is off (P2-5). Without this, a card-only intent still shows Link as a
             wallet, and Link's funding sources add "Bank" and "Klarna" tabs. */}
