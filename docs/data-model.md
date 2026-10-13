@@ -1,5 +1,7 @@
 # Data Model
 
+The full data dictionary and ER diagrams (every table, column, constraint and index) are generated from the database into [`docs/schema/`](schema/README.md) by tbls. This page explains how the pieces fit together and why.
+
 ## Core Hierarchy
 
 ```
