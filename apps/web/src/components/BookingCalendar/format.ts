@@ -108,8 +108,3 @@ export function fmtDayShort(dateStr: string): string {
 export function vesselShort(name: string): string {
   return name.replace(/^(M\/?V|F\/?V)\s+/i, "").toUpperCase();
 }
-
-/** Today's date in Eastern time, "YYYY-MM-DD". */
-export function todayET(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-}
