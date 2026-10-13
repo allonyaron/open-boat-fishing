@@ -39,10 +39,12 @@ function CheckoutInner({
   operatorName,
   phone,
   dockAddress,
+  demoMode,
 }: {
   operatorName: string;
   phone: string | null;
   dockAddress: string | null;
+  demoMode: boolean;
 }) {
   // The cart stays until the payment succeeds (the confirmed-booking view
   // clears it), so a reload or a retry still has it.
@@ -113,7 +115,7 @@ function CheckoutInner({
   return (
     <Shell operatorName={operatorName} phone={phone} dockAddress={dockAddress}>
       <Elements stripe={stripePromise} options={elementsOptions}>
-        <CheckoutForm lines={lines} quote={quote} />
+        <CheckoutForm lines={lines} quote={quote} demoMode={demoMode} />
       </Elements>
 
       {/* Checkout footer — trust/contact line only, not the full site footer */}
@@ -132,14 +134,17 @@ export function CheckoutClient({
   operatorName,
   phone,
   dockAddress,
+  demoMode = false,
 }: {
   operatorName: string;
   phone: string | null;
   dockAddress: string | null;
+  /** The live demo: shows the Stripe test card above the payment form. */
+  demoMode?: boolean;
 }) {
   return (
     <Suspense>
-      <CheckoutInner operatorName={operatorName} phone={phone} dockAddress={dockAddress} />
+      <CheckoutInner operatorName={operatorName} phone={phone} dockAddress={dockAddress} demoMode={demoMode} />
     </Suspense>
   );
 }
