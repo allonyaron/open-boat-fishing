@@ -1,0 +1,31 @@
+# tbls — generates docs/schema/ (data dictionary + ER diagrams) from a live
+# database. The docs describe what the migrations actually built, so point it
+# at a database migrated from this branch, never at production.
+#
+#   createdb obf_tbls && DATABASE_URL=postgres://localhost:5432/obf_tbls pnpm --filter @openboat/db migrate
+#   SCHEMA_DOCS_DSN=postgres://localhost:5432/obf_tbls?sslmode=disable tbls doc --rm-dist
+#
+# CI runs `tbls diff` against a freshly migrated Postgres and fails if
+# docs/schema/ is out of date. Table and column descriptions come from
+# COMMENT ON statements in the migrations.
+
+dsn: ${SCHEMA_DOCS_DSN}
+docPath: docs/schema
+
+name: Open Boat
+
+format:
+  adjust: true
+
+er:
+  format: svg
+  # Per-table diagrams show the table plus its direct neighbours only.
+  distance: 1
+
+exclude:
+  # Drizzle's migration bookkeeping, not app data.
+  - drizzle.*
+
+# Don't write docs/schema/schema.json: it embeds the generating machine's
+# Postgres build string and search_path, which would differ in CI.
+disableOutputSchema: true
