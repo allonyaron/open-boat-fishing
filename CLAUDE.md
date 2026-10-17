@@ -175,7 +175,7 @@ DATABASE_URL=... tsx src/seed-demo.ts           # seed MV Open Boat demo operato
 DATABASE_URL=... tsx src/seed-trips-dev.ts      # seed dev trips (4 vessels, 157 trips)
 DATABASE_URL=... tsx src/seed-sailed-trip.ts    # seed a past sailed trip for revenue testing
 DATABASE_URL=... tsx src/seed-admin.ts          # create admin staff account
-DATABASE_URL=... tsx src/seed-fishing-reports.ts <operator-slug> [--days=30] [--dry-run]  # reports for recent past trips
+DATABASE_URL=... tsx src/seed-fishing-reports.ts <operator-slug> [--days=30] [--voice=logbook|hype] [--dry-run]  # reports for recent past trips
 
 # Individual apps
 pnpm --filter @openboat/web dev
