@@ -1,7 +1,14 @@
 // ─── Fishing report seed content ─────────────────────────────────────────────
-// Phrase pools for seed-fishing-reports.ts. Written in the breathless, all-caps,
-// exclamation-heavy voice of a real party-boat report. Every name here is made
-// up: crew, pool winners, and boats. Never paste a real operator's reports in.
+// Species profiles and phrase pools for seed-fishing-reports.ts.
+//
+// Two voices:
+//   logbook — the deadpan party-boat daily log: "Today's 7:01AM trip caught
+//             462 Fluke; keeping 54 to 7.4LBS, 33 Sea Bass, 3 Porgies and
+//             1 Cape Shark." Every fish over the rail gets listed, oddballs too.
+//   hype    — breathless all-caps marketing copy with crew shoutouts and pools.
+//
+// Counts and bycatch are modelled on real Long Island party-boat logs. Every
+// name here is made up. Never paste a real operator's reports in.
 
 export type Rng = () => number;
 
@@ -11,193 +18,304 @@ export const pick = <T>(rng: Rng, items: readonly T[]): T =>
 export const between = (rng: Rng, min: number, max: number) =>
   Math.round(min + rng() * (max - min));
 
+export interface FishName {
+  one: string;
+  many: string;
+}
+
+/** [fish, min, max, chance of showing up at all] */
+export type Bycatch = [FishName, number, number, number];
+
 export interface SpeciesProfile {
-  species: string;
+  name: FishName;
   /** Boat-wide count range on a normal day. */
-  count: [number, number];
-  /** Pool fish weight range in lbs. Absent = no pool on this species. */
-  poolLbs?: [number, number];
-  /** Nickname for a big one, e.g. "doormat". */
+  caught: [number, number];
+  /** Share kept, for fish with a tight size limit ("caught 462; keeping 54"). */
+  keepRate?: [number, number];
+  /** Count above which the log says "Keeping a Full Boat Limit". */
+  fullLimitAt?: number;
+  /** Biggest-fish weight range in lbs, for "to 7.4LBS" and the pool. */
+  maxLbs?: [number, number];
+  bycatch: Bycatch[];
+  /** Hype voice: nickname for a big one, e.g. "doormat". */
   bigOne: string;
-  /** Species-specific lines. {n} = count, {big} = bigOne. */
+  /** Hype voice lines. {n} = count, {big} = bigOne. */
   lines: string[];
 }
 
+const fish = (one: string, many = one): FishName => ({ one, many });
+
+export const FISH = {
+  fluke: fish("Fluke"),
+  seaBass: fish("Sea Bass"),
+  porgy: fish("Porgy", "Porgies"),
+  blackfish: fish("Blackfish"),
+  stripedBass: fish("Striped Bass"),
+  bluefish: fish("Bluefish"),
+  weakfish: fish("Weakfish"),
+  ling: fish("Ling"),
+  cod: fish("Cod"),
+  tilefish: fish("Tilefish"),
+  tuna: fish("Yellowfin Tuna"),
+  mahi: fish("Mahi"),
+  squid: fish("Squid"),
+  seaRobin: fish("Sea Robin", "Sea Robins"),
+  capeShark: fish("Cape Shark"),
+  blowfish: fish("Blowfish"),
+  stargazer: fish("Stargazer", "Stargazers"),
+  triggerfish: fish("Trigger Fish"),
+  cunner: fish("Cunner"),
+  mackerel: fish("Mackerel"),
+  bonita: fish("Bonita"),
+  eel: fish("Eel", "Eels"),
+  redHake: fish("Big Red Hake"),
+  pollack: fish("Pollack"),
+  whiteHake: fish("White Hake"),
+  blueline: fish("Blueline Tilefish"),
+  skipjack: fish("Skipjack"),
+};
+
+// One of these turns up now and then on any trip. The funnier the better.
+export const ODDBALLS: FishName[] = [
+  fish("Lobster"),
+  fish("Toad Fish"),
+  fish("Barrel Fish"),
+  fish("Cobia"),
+  fish("Atlantic Gar"),
+  fish("Sundial"),
+  fish("Albacore"),
+  fish("Flounder"),
+  fish("Sheepshead"),
+  fish("Horseshoe Crab"),
+];
+export const ODDBALL_RATE = 0.06;
+
 export const SPECIES: Record<string, SpeciesProfile> = {
   fluke: {
-    species: "Fluke",
-    count: [18, 90],
-    poolLbs: [4, 10],
+    name: FISH.fluke,
+    caught: [20, 700],
+    keepRate: [0.07, 0.2],
+    maxLbs: [4, 8.4],
+    bycatch: [
+      [FISH.seaRobin, 2, 35, 0.9],
+      [FISH.seaBass, 2, 45, 0.7],
+      [FISH.capeShark, 1, 17, 0.4],
+      [FISH.blowfish, 1, 3, 0.25],
+      [FISH.stargazer, 1, 2, 0.12],
+      [FISH.porgy, 1, 3, 0.2],
+      [FISH.bluefish, 1, 2, 0.15],
+    ],
     bigOne: "doormat",
     lines: [
-      "The fluke were STACKED on the drift and we put {n} keepers in the box!!",
-      "Bucktail and Gulp was the ticket today, {n} keepers and a TON of shorts released to fight another day!",
-      "Drift after drift the rods were bending, {n} keepers boat-wide and a few legit {big}s!!",
-      "Started slow on the first drift then the tide turned and it was GAME ON, {n} fluke in the box!",
+      "The fluke were STACKED on the drift, {n} over the rail!!",
+      "Bucktail and Gulp was the ticket today, {n} fluke and a TON of shorts released to fight another day!",
+      "Drift after drift the rods were bending, {n} fluke boat-wide and a few legit {big}s!!",
     ],
   },
   seaBass: {
-    species: "Sea Bass",
-    count: [80, 380],
-    poolLbs: [3, 6],
+    name: FISH.seaBass,
+    caught: [200, 1100],
+    fullLimitAt: 340,
+    maxLbs: [3, 6],
+    bycatch: [
+      [FISH.porgy, 10, 700, 0.85],
+      [FISH.ling, 3, 80, 0.5],
+      [FISH.mackerel, 1, 90, 0.35],
+      [FISH.triggerfish, 1, 28, 0.35],
+      [FISH.bluefish, 1, 130, 0.35],
+      [FISH.bonita, 1, 40, 0.2],
+      [FISH.cunner, 2, 60, 0.25],
+      [FISH.eel, 1, 10, 0.2],
+      [FISH.blackfish, 1, 7, 0.2],
+      [FISH.fluke, 1, 50, 0.4],
+    ],
     bigOne: "knothead",
     lines: [
-      "The sea bass were CHEWING, {n} keepers and plenty of big blue-headed {big}s in the mix!!",
-      "We anchored up on the wreck and it was double-headers all around, {n} sea bass in the box!",
-      "Limits for a bunch of people today!! {n} sea bass boat-wide and the jigs were working too!",
+      "The sea bass were CHEWING, {n} and plenty of big blue-headed {big}s in the mix!!",
+      "We anchored up on the wreck and it was double-headers all around, {n} sea bass!",
     ],
   },
   porgy: {
-    species: "Porgy",
-    count: [60, 300],
-    poolLbs: [2, 3],
-    bigOne: "hubcap",
-    lines: [
-      "Porgies were on EVERY drop, {n} of them, a bunch of real {big}s!!",
-      "Clam on the bottom and it was nonstop porgy action, {n} in the box, the kids LOVED it!",
+    name: FISH.porgy,
+    caught: [50, 850],
+    maxLbs: [2, 3.5],
+    bycatch: [
+      [FISH.seaBass, 20, 300, 0.9],
+      [FISH.triggerfish, 1, 10, 0.3],
+      [FISH.bluefish, 1, 20, 0.3],
     ],
+    bigOne: "hubcap",
+    lines: ["Porgies were on EVERY drop, {n} of them, a bunch of real {big}s!!"],
   },
   blackfish: {
-    species: "Blackfish",
-    count: [20, 110],
-    poolLbs: [6, 13],
+    name: FISH.blackfish,
+    caught: [8, 310],
+    maxLbs: [5, 9.4],
+    bycatch: [
+      [FISH.cunner, 1, 32, 0.7],
+      [FISH.seaBass, 1, 3, 0.3],
+      [FISH.porgy, 1, 5, 0.25],
+      [FISH.capeShark, 2, 15, 0.2],
+      [FISH.seaRobin, 1, 7, 0.15],
+      [FISH.mackerel, 1, 2, 0.1],
+    ],
     bigOne: "bulldog",
     lines: [
-      "The tog bite was ON FIRE today!! {n} keepers and some MONSTER {big}s on green crabs!",
-      "Blackfish were tight to the rocks and our anglers were tighter, {n} keepers boat-wide!!",
-      "You gotta be quick on the hookset with these guys and today everybody was, {n} blackfish in the box!",
+      "The tog bite was ON FIRE today!! {n} blackfish and some MONSTER {big}s on green crabs!",
+      "Blackfish were tight to the rocks and our anglers were tighter, {n} boat-wide!!",
     ],
   },
   stripedBass: {
-    species: "Striped Bass",
-    count: [6, 40],
-    poolLbs: [16, 38],
+    name: FISH.stripedBass,
+    caught: [1, 300],
+    fullLimitAt: 70,
+    maxLbs: [18, 42],
+    bycatch: [
+      [FISH.capeShark, 1, 12, 0.3],
+      [FISH.bluefish, 1, 57, 0.4],
+      [FISH.weakfish, 1, 3, 0.15],
+    ],
     bigOne: "cow",
     lines: [
-      "BASS ARE HERE!! {n} stripers came over the rail tonight including a couple of real {big}s!!",
-      "We found the bass on the bunker schools and it went OFF, {n} stripers, released plenty of overs too!",
-      "Live eels did the job tonight, {n} striped bass and the drag was SCREAMING all night!",
+      "BASS ARE HERE!! {n} stripers came over the rail including a couple of real {big}s!!",
+      "We found the bass on the bunker schools and it went OFF, {n} stripers!",
     ],
   },
   bluefish: {
-    species: "Bluefish",
-    count: [25, 160],
-    poolLbs: [7, 16],
+    name: FISH.bluefish,
+    caught: [1, 60],
+    maxLbs: [6, 15],
+    bycatch: [
+      [FISH.weakfish, 1, 3, 0.25],
+      [FISH.fluke, 1, 16, 0.35],
+      [FISH.stripedBass, 1, 2, 0.25],
+      [FISH.seaRobin, 1, 13, 0.2],
+    ],
     bigOne: "gator",
     lines: [
       "CHOPPERS EVERYWHERE!! {n} bluefish and some absolute {big}s that bit through EVERYTHING!",
-      "The blues were blitzing on top and our anglers got into them hard, {n} bluefish in the box!!",
-      "Diamond jigs and chunks were both working, {n} blues and a couple of {big}s that pulled like trains!",
+      "The blues were blitzing on top, {n} bluefish!!",
     ],
   },
   weakfish: {
-    species: "Weakfish",
-    count: [5, 30],
-    poolLbs: [3, 8],
+    name: FISH.weakfish,
+    caught: [1, 12],
+    maxLbs: [3, 8],
+    bycatch: [[FISH.bluefish, 1, 10, 0.6]],
     bigOne: "tiderunner",
-    lines: [
-      "Bonus weakfish showed up too!! {n} of them including a beautiful {big}!",
-    ],
+    lines: ["Weakfish showed up!! {n} of them including a beautiful {big}!"],
   },
   ling: {
-    species: "Ling",
-    count: [40, 220],
-    poolLbs: [1, 3],
-    bigOne: "slimer",
-    lines: [
-      "The ling were thick on the bottom, {n} of them, everybody went home with a bag full of fillets!!",
-      "Ling, ling and MORE LING, {n} boat-wide and some nice {big}s mixed in!",
+    name: FISH.ling,
+    caught: [40, 340],
+    maxLbs: [1.5, 3],
+    bycatch: [
+      [FISH.seaBass, 20, 220, 0.8],
+      [FISH.redHake, 5, 125, 0.3],
+      [FISH.porgy, 2, 20, 0.3],
+      [FISH.capeShark, 2, 24, 0.4],
     ],
+    bigOne: "slimer",
+    lines: ["Ling, ling and MORE LING, {n} boat-wide and some nice {big}s mixed in!"],
   },
   cod: {
-    species: "Cod",
-    count: [6, 40],
-    poolLbs: [12, 32],
-    bigOne: "bull cod",
-    lines: [
-      "COD ARE CHEWING out deep!! {n} cod over the rail including a gorgeous {big}!",
-      "The long ride was SO worth it, {n} cod and the jiggers were crushing them!",
+    name: FISH.cod,
+    caught: [3, 40],
+    maxLbs: [12, 32],
+    bycatch: [
+      [FISH.pollack, 1, 20, 0.6],
+      [FISH.whiteHake, 1, 10, 0.4],
+      [FISH.redHake, 5, 40, 0.5],
+      [FISH.seaBass, 50, 400, 0.7],
     ],
+    bigOne: "bull cod",
+    lines: ["COD ARE CHEWING out deep!! {n} cod over the rail including a gorgeous {big}!"],
   },
   tilefish: {
-    species: "Tilefish",
-    count: [10, 60],
-    poolLbs: [15, 40],
+    name: FISH.tilefish,
+    caught: [10, 60],
+    maxLbs: [15, 40],
+    bycatch: [[FISH.blueline, 5, 80, 0.8]],
     bigOne: "golden",
-    lines: [
-      "Deep drop success!! {n} tilefish came up from the canyon floor and they were BEAUTIFUL {big}s!",
-      "The electric reels were humming all morning, {n} tiles boat-wide!!",
-    ],
+    lines: ["Deep drop success!! {n} tilefish came up from the canyon and they were BEAUTIFUL {big}s!"],
   },
   tuna: {
-    species: "Yellowfin Tuna",
-    count: [2, 14],
-    poolLbs: [40, 90],
-    bigOne: "football",
-    lines: [
-      "TUNA TIME!!! {n} yellowfin landed and the fight on some of these was over 30 minutes!!",
-      "We marked them deep and dropped jigs and BOOM, {n} yellowfin on the deck!",
+    name: FISH.tuna,
+    caught: [1, 14],
+    maxLbs: [40, 90],
+    bycatch: [
+      [FISH.mahi, 1, 12, 0.5],
+      [FISH.skipjack, 1, 8, 0.3],
     ],
+    bigOne: "football",
+    lines: ["TUNA TIME!!! {n} yellowfin landed and the fight on some of these was over 30 minutes!!"],
   },
   mahi: {
-    species: "Mahi-Mahi",
-    count: [6, 30],
-    poolLbs: [8, 20],
+    name: FISH.mahi,
+    caught: [1, 30],
+    maxLbs: [8, 20],
+    bycatch: [[FISH.bonita, 1, 10, 0.4]],
     bigOne: "bull",
-    lines: [
-      "We found a lobster pot buoy LOADED with mahi, {n} of them and one big {big}!!",
-    ],
+    lines: ["We found a lobster pot buoy LOADED with mahi, {n} of them and one big {big}!!"],
   },
   squid: {
-    species: "Squid",
-    count: [120, 600],
-    bigOne: "monster squid",
-    lines: [
-      "The squid were swarming the lights!! {n} squid and EVERYBODY got inked at least once, LOL!",
-      "Nonstop squid jigging all night, {n} of them, calamari for the whole neighborhood!!",
+    name: FISH.squid,
+    caught: [120, 600],
+    bycatch: [
+      [FISH.bluefish, 1, 10, 0.4],
+      [FISH.seaRobin, 1, 5, 0.2],
     ],
-  },
-  seaRobin: {
-    species: "Sea Robin",
-    count: [3, 25],
-    bigOne: "sea robin",
-    lines: ["Plus the usual sea robins croaking at us, {n} of them, lol!"],
+    bigOne: "monster squid",
+    lines: ["The squid were swarming the lights!! {n} squid and EVERYBODY got inked at least once, LOL!"],
   },
 };
 
 // Matched against `${product.displayName} ${product.category}`, lowercased.
-// Order matters only for readability; every match is kept.
+// The first match is the trip's target species; later matches add to the box.
 export const SPECIES_RULES: [RegExp, keyof typeof SPECIES][] = [
-  [/fluke/, "fluke"],
-  [/sea bass/, "seaBass"],
-  [/porg/, "porgy"],
+  [/tuna/, "tuna"],
+  [/tilefish/, "tilefish"],
+  [/\bcod\b|super deep/, "cod"],
+  [/squid/, "squid"],
   [/blackfish|\btog/, "blackfish"],
+  [/fluke/, "fluke"],
+  [/sea bass|wreck/, "seaBass"],
+  [/porg/, "porgy"],
   [/strip|(?<!sea )\bbass\b/, "stripedBass"],
   [/blue/, "bluefish"],
   [/weakfish/, "weakfish"],
   [/\bling\b/, "ling"],
-  [/\bcod\b/, "cod"],
-  [/tilefish/, "tilefish"],
-  [/tuna/, "tuna"],
   [/pelagic/, "mahi"],
-  [/squid/, "squid"],
 ];
 
 // Products with no fish to report.
 export const NON_FISHING = /fireworks|seal watch|nature cruise/i;
 
 // When nothing matches, assume a generic wreck/bottom trip.
-export const FALLBACK_SPECIES: (keyof typeof SPECIES)[] = ["seaBass", "ling"];
+export const FALLBACK_SPECIES: (keyof typeof SPECIES)[] = ["seaBass"];
+
+// ── Logbook voice ────────────────────────────────────────────────────────────
+
+/** "NEW FREE FOR LIFE LEADER {name}." — the season-long biggest-fish contest. */
+export const FREE_FOR_LIFE_RATE = 0.04;
+export const FREE_FOR_LIFE_LEADERS = [
+  "WALTER K.",
+  "Stephanie R.",
+  "Big Sal",
+  "DONNA M.",
+  "Hector P.",
+  "Little Joey",
+  "MARGARET T.",
+  "Rocco",
+];
+
+/** Night trips that come home empty: "Tonight's 6PM trip caught nothing." */
+export const SKUNK_RATE = 0.06;
+
+// ── Hype voice ───────────────────────────────────────────────────────────────
 
 export const CAPTAINS = ["Capt. Sal", "Capt. Joey", "Capt. Ritchie", "Capt. Denise", "Capt. Vinnie"];
-export const MATES = [
-  "Mate Kevin",
-  "Mate Dee",
-  "Mate Paulie",
-  "Mate Tommy",
-  "Mate Gina",
-  "Mate Frankie",
-];
+export const MATES = ["Mate Kevin", "Mate Dee", "Mate Paulie", "Mate Tommy", "Mate Gina", "Mate Frankie"];
 
 export const POOL_WINNERS = [
   "Big Mike from Massapequa",
@@ -224,7 +342,6 @@ export const OPENERS = [
   "You had to be here folks!!!",
   "The fishing gods were SMILING on us today!!",
   "Just when you thought it couldn't get better... IT DID!!!",
-  "INSANE. That's the only word for today!!",
 ];
 
 export const NIGHT_OPENERS = [
@@ -251,7 +368,6 @@ export const POOL_LINES = [
   "Pool went to {winner} with a {lbs} lb {species}!!",
   "Congrats to {winner} who took the pool with a {lbs} lb {big}!!",
   "{winner} won the pool with a {lbs} pounder!! WHAT A FISH!",
-  "Pool winner was {winner}, {lbs} lbs of pure {species}!!",
 ];
 
 export const CLOSERS = [
@@ -259,6 +375,5 @@ export const CLOSERS = [
   "Don't miss out, the fish are HERE!! Book now!",
   "See you on the water!! 🎣",
   "Spots are filling up fast, reserve online!!",
-  "Bring the family, there's room on the rail!!",
   "Tight lines everybody!!",
 ];
