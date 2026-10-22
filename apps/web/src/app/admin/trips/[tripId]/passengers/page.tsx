@@ -9,9 +9,10 @@ import {
   CardRow,
   Button,
   Dialog,
-  TicketStatusPill,
-  ticketPillStatus,
+  StatusLight,
+  ticketLightKind,
   useToast,
+  ErrorState,
 } from "@/components/admin/merchant";
 
 type TicketData = {
@@ -95,7 +96,7 @@ export default function PassengerListPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't update check-in.");
+        showToast(body.error ?? "Couldn't update check-in.", "error");
         return;
       }
       await load();
@@ -110,7 +111,7 @@ export default function PassengerListPage() {
       const res = await fetch(`/api/admin/tickets/${ticketId}/refund`, { method: "POST" });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't refund this ticket.");
+        showToast(body.error ?? "Couldn't refund this ticket.", "error");
         return;
       }
       showToast(`Refunded ${dollars(body.refundedCents)}. The seat is back on sale.`);
@@ -123,15 +124,7 @@ export default function PassengerListPage() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-merchant-red-tint bg-[#fff8f7] p-5">
-        <div className="text-14 font-semibold text-merchant-red">Can&rsquo;t reach the booking system</div>
-        <p className="mt-1 text-13 text-merchant-muted">
-          This trip&rsquo;s passenger list just can&rsquo;t load right now.
-        </p>
-        <Button variant="secondary" className="mt-3" onClick={load}>
-          Try again
-        </Button>
-      </div>
+      <ErrorState onRetry={load} body={<>This trip&rsquo;s passenger list just can&rsquo;t load right now.</>} />
     );
   }
 
@@ -218,7 +211,7 @@ export default function PassengerListPage() {
               )}
               <div className="flex flex-col gap-2">
                 {booking.tickets.map((ticket) => {
-                  const pill = ticketPillStatus(ticket);
+                  const pill = ticketLightKind(ticket);
                   const label = ticket.passengerName
                     ? `${ticket.passengerName} · ${TICKET_LABEL[ticket.ticketType]}`
                     : `${TICKET_LABEL[ticket.ticketType]} ticket`;
@@ -237,9 +230,9 @@ export default function PassengerListPage() {
                         </span>
                       </div>
                       <div className="flex items-center gap-2 print:hidden">
-                        <TicketStatusPill status={pill} />
+                        <StatusLight kind={pill} />
                         <Button
-                          variant={ticket.checkedIn ? "secondary" : "primary"}
+                          variant={ticket.checkedIn ? "secondary" : "strong"}
                           disabled={busy}
                           onClick={() =>
                             ticket.voided
@@ -280,7 +273,7 @@ export default function PassengerListPage() {
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant="danger-confirm"
               disabled={!!busyTicket}
               onClick={() => refundTarget && submitRefund(refundTarget)}
             >

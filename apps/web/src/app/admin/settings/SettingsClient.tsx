@@ -18,6 +18,7 @@ import {
   type BoatInput,
   type TripTypeInput,
   type PersonInput,
+  ErrorState,
 } from "@/components/admin/merchant";
 
 type Vessel = {
@@ -124,7 +125,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't save the boat.");
+        showToast(body.error ?? "Couldn't save the boat.", "error");
         return;
       }
       showToast(isEdit ? "Boat updated." : "Boat added.");
@@ -162,7 +163,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't save the trip type.");
+        showToast(body.error ?? "Couldn't save the trip type.", "error");
         return;
       }
       showToast(isEdit ? "Trip type updated." : "Trip type added.");
@@ -201,7 +202,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't save this person.");
+        showToast(body.error ?? "Couldn't save this person.", "error");
         return;
       }
       showToast(isEdit ? "Person updated." : "Person added.");
@@ -219,7 +220,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
       body: JSON.stringify({ [field]: value }),
     });
     if (!res.ok) {
-      showToast("Couldn't save that change.");
+      showToast("Couldn't save that change.", "error");
       return false;
     }
     setOperator((prev) => (prev ? { ...prev, [field]: value } : prev));
@@ -228,13 +229,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-merchant-red-tint bg-[#fff8f7] p-5">
-        <div className="text-14 font-semibold text-merchant-red">Can&rsquo;t reach the booking system</div>
-        <p className="mt-1 text-13 text-merchant-muted">Settings just can&rsquo;t load right now.</p>
-        <Button variant="secondary" className="mt-3" onClick={load}>
-          Try again
-        </Button>
-      </div>
+      <ErrorState onRetry={load} body={<>Settings just can&rsquo;t load right now.</>} />
     );
   }
 

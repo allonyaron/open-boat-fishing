@@ -11,6 +11,7 @@ import {
   ScheduleDialog,
   type ProductOption,
   type SchedulePatternInput,
+  ErrorState,
 } from "@/components/admin/merchant";
 
 type Schedule = {
@@ -84,7 +85,7 @@ export default function WeeklySchedulePage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't update the pattern.");
+        showToast(body.error ?? "Couldn't update the pattern.", "error");
         return;
       }
       showToast(
@@ -112,7 +113,7 @@ export default function WeeklySchedulePage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't save the schedule.");
+        showToast(body.error ?? "Couldn't save the schedule.", "error");
         return;
       }
       showToast(
@@ -129,13 +130,7 @@ export default function WeeklySchedulePage() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-merchant-red-tint bg-[#fff8f7] p-5">
-        <div className="text-14 font-semibold text-merchant-red">Can&rsquo;t reach the booking system</div>
-        <p className="mt-1 text-13 text-merchant-muted">Your schedules just can&rsquo;t load right now.</p>
-        <Button variant="secondary" className="mt-3" onClick={load}>
-          Try again
-        </Button>
-      </div>
+      <ErrorState onRetry={load} body={<>Your schedules just can&rsquo;t load right now.</>} />
     );
   }
 
@@ -158,7 +153,7 @@ export default function WeeklySchedulePage() {
         <h1 className="text-20 font-bold text-merchant-ink" style={{ letterSpacing: "-0.01em" }}>
           Weekly schedule
         </h1>
-        <Button variant="primary" onClick={() => setDialogSchedule("new")} disabled={products.length === 0}>
+        <Button variant="key" onClick={() => setDialogSchedule("new")} disabled={products.length === 0}>
           New pattern
         </Button>
       </div>
@@ -203,7 +198,7 @@ export default function WeeklySchedulePage() {
                             !s.active
                               ? "bg-merchant-fill-3 text-merchant-disabled"
                               : on
-                                ? "bg-merchant-chrome-mid text-white"
+                                ? "bg-ob-key text-ob-key-ink"
                                 : "bg-merchant-fill-3 text-merchant-faint"
                           }`}
                         >

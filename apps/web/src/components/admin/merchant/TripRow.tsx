@@ -1,6 +1,6 @@
 import { fmtTimeET } from "@/lib/format";
 import { useDensity } from "./DensityContext";
-import { StatusPill, tripPillStatus } from "./StatusPill";
+import { StatusLight, tripLightKind } from "./StatusLight";
 import { TextButton } from "./Button";
 
 export type TripRowData = {
@@ -51,7 +51,7 @@ function seatsLabel(trip: TripRowData) {
 function TripRowDock({ trip, actions }: { trip: TripRowData; actions: TripRowActions }) {
   const cancelled = trip.status === "cancelled";
   const pct = trip.capacity > 0 ? Math.min(100, (trip.ticketsSold / trip.capacity) * 100) : 0;
-  const pillStatus = tripPillStatus(trip);
+  const pillStatus = tripLightKind(trip);
   const barColor = cancelled
     ? "bg-merchant-disabled"
     : pillStatus === "sold-out"
@@ -70,7 +70,7 @@ function TripRowDock({ trip, actions }: { trip: TripRowData; actions: TripRowAct
           <div className="text-12 text-merchant-faint">back {fmtTimeET(trip.endTime)}</div>
         </div>
         <div className="flex-1 min-w-0 sm:hidden flex justify-end">
-          <StatusPill status={pillStatus} />
+          <StatusLight kind={pillStatus} />
         </div>
       </div>
       <div className="flex-1 min-w-0">
@@ -91,7 +91,7 @@ function TripRowDock({ trip, actions }: { trip: TripRowData; actions: TripRowAct
       </div>
       <div className="flex sm:flex-col items-center sm:items-end justify-between flex-shrink-0 gap-2">
         <div className="hidden sm:block">
-          <StatusPill status={pillStatus} />
+          <StatusLight kind={pillStatus} />
         </div>
         {!cancelled && (
           <div className="flex gap-3">
@@ -140,7 +140,7 @@ function TripTableDesk({ trips, actions }: { trips: TripRowData[]; actions: Trip
                   {cancelled ? seatsLabel(trip) : `${trip.ticketsSold}/${trip.capacity}`}
                 </td>
                 <td className="px-4 py-2.5">
-                  <StatusPill status={tripPillStatus(trip)} />
+                  <StatusLight kind={tripLightKind(trip)} dense />
                 </td>
                 <td className="px-4 py-2.5 whitespace-nowrap">
                   {!cancelled && (

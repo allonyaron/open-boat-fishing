@@ -35,7 +35,7 @@ export function CancelDialog({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Keep the trip
           </Button>
-          <Button variant="destructive" onClick={() => onConfirm(reason)} disabled={busy}>
+          <Button variant="danger-confirm" onClick={() => onConfirm(reason)} disabled={busy}>
             Cancel and refund
           </Button>
         </>
@@ -94,7 +94,7 @@ export function SeatsDialog({
             Cancel
           </Button>
           <Button
-            variant="primary"
+            variant="key"
             onClick={() =>
               onConfirm({ capacity: value, onlineCutoffMinutes: cutoff === "" ? null : Number(cutoff) })
             }
@@ -162,7 +162,7 @@ export function AddDepartureDialog({
             Cancel
           </Button>
           <Button
-            variant="primary"
+            variant="key"
             disabled={busy || !productId}
             onClick={() => onConfirm({ productId, departureTime, returnTime, capacity })}
           >

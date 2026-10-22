@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { dollars } from "@openboat/utils";
 import { fmtTimeET } from "@/lib/format";
-import { Card, Button, useToast } from "@/components/admin/merchant";
+import { Card, Button, useToast, ErrorState } from "@/components/admin/merchant";
 
 type OperatorInfo = { stripeAccountId: string | null; stripeOnboardingComplete: boolean };
 
@@ -101,20 +101,14 @@ export default function MoneyPage() {
     if (!stripeParam || announcedStripeParam) return;
     setAnnouncedStripeParam(true);
     if (stripeParam === "connected") showToast("Stripe connected. Payouts are on.");
-    else if (stripeParam === "cancelled") showToast("Stripe connection cancelled — payouts are still off.");
-    else if (stripeParam === "error") showToast("Something went wrong connecting Stripe. Try again.");
+    else if (stripeParam === "cancelled") showToast("Stripe connection cancelled — payouts are still off.", "error");
+    else if (stripeParam === "error") showToast("Something went wrong connecting Stripe. Try again.", "error");
     router.replace("/admin/money");
   }, [searchParams, announcedStripeParam, showToast, router]);
 
   if (error) {
     return (
-      <div className="rounded-xl border border-merchant-red-tint bg-[#fff8f7] p-5">
-        <div className="text-14 font-semibold text-merchant-red">Can&rsquo;t reach the booking system</div>
-        <p className="mt-1 text-13 text-merchant-muted">Money just can&rsquo;t load right now.</p>
-        <Button variant="secondary" className="mt-3" onClick={() => load(days)}>
-          Try again
-        </Button>
-      </div>
+      <ErrorState onRetry={() => load(days)} body={<>Money just can&rsquo;t load right now.</>} />
     );
   }
 
@@ -140,7 +134,7 @@ export default function MoneyPage() {
               href="https://dashboard.stripe.com"
               target="_blank"
               rel="noreferrer"
-              className="flex-shrink-0 inline-flex items-center justify-center rounded-lg bg-merchant-chrome-mid text-white text-13 font-semibold px-3.5"
+              className="flex-shrink-0 inline-flex items-center justify-center rounded-lg bg-ob-key text-ob-key-ink text-13 font-semibold px-3.5"
               style={{ minHeight: "38px" }}
             >
               Open Stripe
@@ -156,7 +150,7 @@ export default function MoneyPage() {
             </div>
             <a
               href="/api/stripe/connect/start"
-              className="flex-shrink-0 inline-flex items-center justify-center rounded-lg bg-merchant-chrome-mid text-white text-13 font-semibold px-3.5"
+              className="flex-shrink-0 inline-flex items-center justify-center rounded-lg bg-ob-key text-ob-key-ink text-13 font-semibold px-3.5"
               style={{ minHeight: "38px" }}
             >
               Set up payouts
@@ -171,7 +165,7 @@ export default function MoneyPage() {
               key={p.days}
               onClick={() => setDays(p.days)}
               className={`rounded-md px-2.5 py-1 text-12 font-semibold transition-colors ${
-                days === p.days ? "bg-white text-merchant-ink shadow-sm" : "text-merchant-muted"
+                days === p.days ? "bg-ob-key text-ob-key-ink" : "text-merchant-muted"
               }`}
             >
               {p.label}

@@ -60,7 +60,7 @@ export function BoatDialog({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
+          <Button variant="key" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
             {isEdit ? "Save boat" : "Add boat"}
           </Button>
         </>

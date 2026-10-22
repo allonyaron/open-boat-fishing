@@ -1,12 +1,23 @@
 "use client";
 
+import "./ob-tokens.css";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { DensityProvider, ToastProvider, Chrome } from "@/components/admin/merchant";
+import { DensityProvider, ThemeProvider, ToastProvider, Chrome } from "@/components/admin/merchant";
 
 type Me = { staffId: string; name: string; role: string } | null;
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <ThemeProvider>
+      <DensityProvider>
+        <AdminShell>{children}</AdminShell>
+      </DensityProvider>
+    </ThemeProvider>
+  );
+}
+
+function AdminShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [me, setMe] = useState<Me | undefined>(undefined);
@@ -33,8 +44,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (me === undefined) {
     return (
-      <div className="min-h-screen bg-merchant-page flex items-center justify-center">
-        <div className="text-merchant-faint text-13">Loading…</div>
+      <div className="min-h-screen bg-ob-bg font-ui flex items-center justify-center">
+        <div role="status" className="text-body-sm text-ob-ink-3">
+          Loading…
+        </div>
       </div>
     );
   }
@@ -42,12 +55,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!me) return null; // redirecting to /admin/login
 
   return (
-    <DensityProvider>
-      <ToastProvider>
-        <Chrome me={me} pathname={pathname} onLogout={logout}>
-          {children}
-        </Chrome>
-      </ToastProvider>
-    </DensityProvider>
+    <ToastProvider>
+      <Chrome me={me} pathname={pathname} onLogout={logout}>
+        {children}
+      </Chrome>
+    </ToastProvider>
   );
 }
