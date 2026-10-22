@@ -84,7 +84,7 @@ export function ScheduleDialog({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
+          <Button variant="key" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
             Save schedule
           </Button>
         </>
@@ -117,7 +117,7 @@ export function ScheduleDialog({
                   type="button"
                   onClick={() => toggleDay(d)}
                   className={`w-[46px] h-[46px] rounded-lg text-13 font-semibold transition-colors ${
-                    on ? "bg-merchant-chrome-mid text-white" : "bg-merchant-fill-3 text-merchant-faint"
+                    on ? "bg-ob-key text-ob-key-ink" : "bg-merchant-fill-3 text-merchant-faint"
                   }`}
                 >
                   {DAY_LABELS[d]}

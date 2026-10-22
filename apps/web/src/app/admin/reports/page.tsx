@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { fmtTimeET, fmtDayLabelET } from "@/lib/format";
 import { todayET } from "@/lib/date-et";
-import { Card, CardRow, Button, useToast, ReportDialog, type ReportFormInput } from "@/components/admin/merchant";
+import { Card, CardRow, Button, useToast, ReportDialog, type ReportFormInput, ErrorState } from "@/components/admin/merchant";
 
 type PendingTrip = {
   id: string;
@@ -94,7 +94,7 @@ export default function ReportsPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't save the report.");
+        showToast(body.error ?? "Couldn't save the report.", "error");
         return;
       }
       showToast("Posted. It's live on your Fishing Reports page.");
@@ -107,13 +107,7 @@ export default function ReportsPage() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-merchant-red-tint bg-[#fff8f7] p-5">
-        <div className="text-14 font-semibold text-merchant-red">Can&rsquo;t reach the booking system</div>
-        <p className="mt-1 text-13 text-merchant-muted">Reports just can&rsquo;t load right now.</p>
-        <Button variant="secondary" className="mt-3" onClick={load}>
-          Try again
-        </Button>
-      </div>
+      <ErrorState onRetry={load} body={<>Reports just can&rsquo;t load right now.</>} />
     );
   }
 
@@ -148,7 +142,7 @@ export default function ReportsPage() {
                 <div className="text-13 text-merchant-muted">{trip.ticketsSold} aboard</div>
               </div>
               <Button
-                variant="primary"
+                variant="key"
                 className="flex-shrink-0"
                 onClick={() => setDialog({ tripId: trip.id, label: tripLabel(trip) })}
               >

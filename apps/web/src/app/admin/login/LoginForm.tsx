@@ -73,7 +73,7 @@ export function LoginForm({ operatorName }: { operatorName: string | null }) {
                 </div>
               )}
 
-              <Button type="submit" variant="primary" disabled={loading} className="w-full">
+              <Button type="submit" variant="key" disabled={loading} className="w-full">
                 {loading ? "Signing in…" : "Sign in"}
               </Button>
 

@@ -17,6 +17,7 @@ import {
   AddDepartureDialog,
   type TripRowData,
   type ProductOption,
+  ErrorState,
 } from "@/components/admin/merchant";
 
 type TodayResponse = {
@@ -103,7 +104,7 @@ export default function TodayPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't cancel the trip.");
+        showToast(body.error ?? "Couldn't cancel the trip.", "error");
         return;
       }
       showToast(
@@ -128,7 +129,7 @@ export default function TodayPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't update seats.");
+        showToast(body.error ?? "Couldn't update seats.", "error");
         return;
       }
       showToast(`Trip updated — ${settings.capacity} seats.`);
@@ -155,7 +156,7 @@ export default function TodayPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't add the departure.");
+        showToast(body.error ?? "Couldn't add the departure.", "error");
         return;
       }
       showToast("Departure added.");
@@ -168,16 +169,7 @@ export default function TodayPage() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-merchant-red-tint bg-[#fff8f7] p-5">
-        <div className="text-14 font-semibold text-merchant-red">Can&rsquo;t reach the booking system</div>
-        <p className="mt-1 text-13 text-merchant-muted">
-          Your trips are safe — this screen just can&rsquo;t load them right now. Customers may not be able to book
-          until it&rsquo;s back.
-        </p>
-        <Button variant="secondary" className="mt-3" onClick={load}>
-          Try again
-        </Button>
-      </div>
+      <ErrorState onRetry={load} body={<>Your trips are safe — this screen just can&rsquo;t load them right now. Customers may not be able to book until it&rsquo;s back.</>} />
     );
   }
 
@@ -209,7 +201,7 @@ export default function TodayPage() {
             <Button variant="secondary" onClick={() => setDialog({ type: "addDeparture" })} disabled={!data}>
               Add a departure
             </Button>
-            <Button variant="primary" onClick={() => router.push("/admin/calendar")}>
+            <Button variant="key" onClick={() => router.push("/admin/calendar")}>
               Open the calendar
             </Button>
           </div>
@@ -375,7 +367,7 @@ function Alerts({
       {items.map((item) => (
         <div
           key={item.key}
-          className="flex items-start gap-3 rounded-xl bg-white border border-merchant-hairline pl-3 pr-4 py-3"
+          className="flex items-start gap-3 rounded-xl bg-ob-panel border border-merchant-hairline pl-3 pr-4 py-3"
           style={{ borderLeft: `4px solid ${item.accent}` }}
         >
           <div className="flex-1 min-w-0">
@@ -403,7 +395,7 @@ function Alerts({
 function PhonePreview({ trips, actions }: { trips: TripRowData[]; actions: Parameters<typeof TripList>[0]["actions"] }) {
   const live = trips.filter((t) => t.status !== "cancelled");
   return (
-    <div className="rounded-2xl border border-merchant-hairline bg-white p-3 sticky top-[76px]">
+    <div className="rounded-2xl border border-merchant-hairline bg-ob-panel p-3 sticky top-[76px]">
       <div className="text-12 font-semibold text-merchant-faint text-center mb-2">Captain&rsquo;s phone view</div>
       <div className="flex flex-col gap-2.5">
         {live.length === 0 && <div className="text-13 text-merchant-muted text-center py-6">Nothing going out today.</div>}
@@ -419,7 +411,7 @@ function PhonePreview({ trips, actions }: { trips: TripRowData[]; actions: Param
             <button
               onClick={() => actions.onWhosComing(t.id)}
               style={{ minHeight: "46px" }}
-              className="mt-2 w-full rounded-lg bg-merchant-chrome-mid text-white text-13 font-semibold"
+              className="mt-2 w-full rounded-lg bg-ob-key text-ob-key-ink text-13 font-semibold"
             >
               Who&rsquo;s coming
             </button>

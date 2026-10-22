@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
-import { Input, Label, Select, Toggle } from "./Input";
+import { Input, Label, Select } from "./Input";
+import { Toggle } from "./Controls";
 import type { VesselOption } from "./TripTypeDialog";
 
 export type PersonInput = {
@@ -59,7 +60,7 @@ export function PersonDialog({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
+          <Button variant="key" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
             {isEdit ? "Save person" : "Add person"}
           </Button>
         </>
@@ -97,7 +98,7 @@ export function PersonDialog({
                   style={{ minHeight: "46px" }}
                   className={`rounded-lg text-14 font-semibold capitalize transition-colors ${
                     form.role === r
-                      ? "bg-merchant-chrome-mid text-white"
+                      ? "bg-ob-key text-ob-key-ink"
                       : "bg-merchant-fill-3 text-merchant-ink"
                   }`}
                 >

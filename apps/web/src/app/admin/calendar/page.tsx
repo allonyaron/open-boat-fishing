@@ -15,6 +15,7 @@ import {
   AddDepartureDialog,
   type TripRowData,
   type ProductOption,
+  ErrorState,
 } from "@/components/admin/merchant";
 
 type DialogState =
@@ -118,7 +119,7 @@ export default function CalendarPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't cancel the trip.");
+        showToast(body.error ?? "Couldn't cancel the trip.", "error");
         return;
       }
       showToast(
@@ -143,7 +144,7 @@ export default function CalendarPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't update seats.");
+        showToast(body.error ?? "Couldn't update seats.", "error");
         return;
       }
       showToast(`Trip updated — ${settings.capacity} seats.`);
@@ -169,7 +170,7 @@ export default function CalendarPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't add the departure.");
+        showToast(body.error ?? "Couldn't add the departure.", "error");
         return;
       }
       showToast("Departure added.");
@@ -182,15 +183,7 @@ export default function CalendarPage() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-merchant-red-tint bg-[#fff8f7] p-5">
-        <div className="text-14 font-semibold text-merchant-red">Can&rsquo;t reach the booking system</div>
-        <p className="mt-1 text-13 text-merchant-muted">
-          Your trips are safe — this screen just can&rsquo;t load them right now.
-        </p>
-        <Button variant="secondary" className="mt-3" onClick={load}>
-          Try again
-        </Button>
-      </div>
+      <ErrorState onRetry={load} body={<>Your trips are safe — this screen just can&rsquo;t load them right now.</>} />
     );
   }
 
@@ -256,7 +249,7 @@ export default function CalendarPage() {
                 key={date}
                 onClick={() => setSelected(date)}
                 className={`min-h-[92px] p-1.5 text-left border-b border-r border-merchant-hairline last:border-r-0 [&:nth-child(7n)]:border-r-0 ${
-                  isSelected ? "bg-merchant-fill-2" : "bg-white hover:bg-merchant-fill"
+                  isSelected ? "bg-merchant-fill-2" : "bg-ob-panel hover:bg-merchant-fill"
                 } ${!inMonth ? "opacity-40" : ""}`}
                 style={isSelected ? { boxShadow: "inset 0 0 0 2px #303030" } : isToday ? { boxShadow: "inset 0 0 0 1px #005bd3" } : undefined}
               >

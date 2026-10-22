@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
-import { Input, Label, Select, Toggle } from "./Input";
+import { Input, Label, Select } from "./Input";
+import { Toggle } from "./Controls";
 
 export type VesselOption = { id: string; name: string };
 
@@ -72,7 +73,7 @@ export function TripTypeDialog({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
+          <Button variant="key" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
             {isEdit ? "Save trip type" : "Add trip type"}
           </Button>
         </>

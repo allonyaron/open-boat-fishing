@@ -1,0 +1,85 @@
+/* Open Boat admin console v2 — design tokens (from design_handoff_admin_console_v2/tokens.css). One token set, two themes.
+   "console" (dark, default) and "sunlight" (high-contrast light). Tailwind maps these in tailwind.tokens.ts.
+   Contrast: WCAG 2.x ratios computed from these hex values (Oct 2026). Format "X on panel · Y on panel-2" unless noted.
+   All text ≥ 4.5:1 (AA) on panel, panel-2, bg and its own tint; lamps, gauges and control borders ≥ 3:1. */
+/* Fonts: Archivo + IBM Plex Mono are self-hosted through next/font/local in app/layout.tsx
+   (--font-archivo, --font-ibm-plex-mono), so the handoff's Google Fonts @import is dropped. */
+
+:root, [data-ob-theme="console"] {
+  --ob-bg: #0c0f12;          /* page / chassis */
+  --ob-panel: #141a1f;       /* panels */
+  --ob-panel-2: #1c242b;     /* raised: inputs, table head, hover */
+  --ob-hair: #26313a;        /* 1px row dividers */
+  --ob-rule: #3a4752;        /* 2px panel edges, structural rules */
+  --ob-control: #6b7b88;     /* input + secondary-button borders: 4.0:1 · 3.6 */
+  --ob-ink: #eef3f6;         /* 15.7:1 on panel · 14.1 on panel-2 */
+  --ob-ink-2: #b4c0c9;       /* 9.5:1 · 8.5 */
+  --ob-ink-3: #8c9aa6;       /* 6.1:1 · 5.5 */
+  --ob-key: #eef3f6;         /* primary button fill — the "lit key" */
+  --ob-key-ink: #0c0f12;
+  --ob-key-hover: #ffffff;
+  --ob-go: #3ddc84;          /* live / good: boarding, sold out, aboard */
+  --ob-go-ink: #3ddc84;      /* 9.8:1 · 8.6 on go-tint */
+  --ob-go-tint: #0f2a1d;
+  --ob-caution: #f5b841;     /* needs a look: filling up, report owed, held money */
+  --ob-caution-ink: #f5b841; /* 9.9:1 · 8.8 on caution-tint */
+  --ob-caution-tint: #2b2210;
+  --ob-alert: #ff5a3d;       /* stop: cancelled, refunded, destructive */
+  --ob-alert-ink: #ff7a61;   /* 6.9:1 · 6.7 on alert-tint */
+  --ob-alert-tint: #2e1410;
+  --ob-alert-fill: #d92d12;  /* destructive confirm button (white text 4.8:1; hover 6.4) */
+  --ob-alert-fill-hover: #b8240d;
+  --ob-focus: #ffffff;
+  --ob-scrim: rgba(4, 6, 8, 0.72);
+  --ob-shadow-dialog: 0 0 0 1px #3a4752, 0 24px 64px rgba(0,0,0,0.6);
+  --ob-shadow-toast: 0 0 0 1px #3a4752, 0 10px 28px rgba(0,0,0,0.5);
+  --ob-glow-go: 0 0 0 3px rgba(61,220,132,0.18), 0 0 10px rgba(61,220,132,0.55);
+}
+
+[data-ob-theme="sunlight"] {
+  --ob-bg: #e4e8eb;
+  --ob-panel: #ffffff;
+  --ob-panel-2: #f1f4f6;
+  --ob-hair: #c3ccd3;
+  --ob-rule: #0c0f12;        /* rules go full ink in sun — the console grid stays visible */
+  --ob-control: #4a5763;     /* 7.4:1 */
+  --ob-ink: #0c0f12;         /* 19.2:1 on panel · 17.4 on panel-2 */
+  --ob-ink-2: #2e3a44;       /* 11.6:1 · 10.5 */
+  --ob-ink-3: #4a5763;       /* 7.4:1 · 6.7 */
+  --ob-key: #0c0f12;
+  --ob-key-ink: #ffffff;
+  --ob-key-hover: #2e3a44;
+  --ob-go: #0a8a43;          /* lamps/gauge: 4.4:1 · 3.6 on bg */
+  --ob-go-ink: #066633;      /* 7.1:1 · 6.2 on go-tint */
+  --ob-go-tint: #dcf5e6;
+  --ob-caution: #a87600;     /* lamps/gauge: 4.0:1 · 3.2 on bg (was #c78a00, 2.97:1 — failed) */
+  --ob-caution-ink: #7a4f00; /* 7.1:1 · 6.3 on caution-tint */
+  --ob-caution-tint: #fdf0cf;
+  --ob-alert: #d92d12;        /* 4.8:1 · 3.9 on bg */
+  --ob-alert-ink: #a81f08;   /* 7.3:1 · 6.0 on alert-tint */
+  --ob-alert-tint: #fde3dd;
+  --ob-alert-fill: #b8240d;  /* white text 6.4:1 */
+  --ob-alert-fill-hover: #8f1a07;
+  --ob-focus: #0c0f12;
+  --ob-scrim: rgba(12, 15, 18, 0.55);
+  --ob-shadow-dialog: 0 0 0 2px #0c0f12, 0 24px 64px rgba(12,15,18,0.28);
+  --ob-shadow-toast: 0 0 0 2px #0c0f12, 0 10px 28px rgba(12,15,18,0.22);
+  --ob-glow-go: 0 0 0 3px rgba(10,138,67,0.18);
+}
+
+[data-ob-theme] { --ob-font-ui: var(--font-archivo), system-ui, sans-serif; --ob-font-num: var(--font-ibm-plex-mono), ui-monospace, monospace; }
+[data-ob-theme] :focus-visible { outline: 3px solid var(--ob-focus); outline-offset: 2px; }
+[data-ob-theme] ::selection { background: var(--ob-caution); color: #0c0f12; }
+
+@keyframes ob-pulse {
+  0%, 100% { box-shadow: var(--ob-glow-go); opacity: 1; }
+  50% { box-shadow: 0 0 0 0 transparent; opacity: 0.55; }
+}
+@keyframes ob-shimmer { 0% { opacity: .5 } 50% { opacity: 1 } 100% { opacity: .5 } }
+@keyframes ob-toast-in { from { transform: translateY(8px); opacity: 0 } to { transform: none; opacity: 1 } }
+@media (prefers-reduced-motion: reduce) { [data-ob-theme] * { animation: none !important; transition: none !important; } }
+
+/* ── App wiring (not in the handoff file) ───────────────────────────────── */
+/* The admin layout sets data-ob-theme on <html> while it is mounted, so the
+   page behind the admin (overscroll, short screens) takes the theme too. */
+html[data-ob-theme], html[data-ob-theme] body { background: var(--ob-bg); color: var(--ob-ink); }

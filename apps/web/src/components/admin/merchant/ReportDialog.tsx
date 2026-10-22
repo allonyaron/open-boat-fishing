@@ -98,7 +98,7 @@ export function ReportDialog({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={busy || uploading} onClick={() => onConfirm(form)}>
+          <Button variant="key" disabled={busy || uploading} onClick={() => onConfirm(form)}>
             {isEdit ? "Save changes" : "Post it"}
           </Button>
         </>
