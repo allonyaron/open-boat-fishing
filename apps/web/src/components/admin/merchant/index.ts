@@ -12,7 +12,7 @@ export { Segmented, Switch, Toggle } from "./Controls";
 export { Lamp, StatusLight, lightLabel, tripLightKind, ticketLightKind } from "./StatusLight";
 export type { LampTone, LampShape, LightKind, TripLightKind, TicketLightKind } from "./StatusLight";
 export { EmptyState, LoadingState, ErrorState } from "./States";
-export { Readouts } from "./Readouts";
+export { Readouts, ReadoutCell, ReadoutValue } from "./Readouts";
 export { useNow, fmtMoney, timeAndPeriodET } from "./clock";
 export { Dialog, CautionBox, SummaryBox } from "./Dialog";
 export * from "./icons";

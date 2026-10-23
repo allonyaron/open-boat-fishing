@@ -306,7 +306,9 @@ export function Chrome({
           <SunlightButton tall={density === "dock"} />
           <div className="flex items-center gap-2.5 pl-4 min-h-8 border-l-2 border-ob-rule">
             <Avatar name={me.name} size="sm" />
-            <span className="text-body-sm text-ob-ink-2">{me.name}</span>
+            <span className="text-body-sm text-ob-ink-2 max-w-40 truncate" title={me.name}>
+              {me.name}
+            </span>
             <button
               type="button"
               onClick={onLogout}

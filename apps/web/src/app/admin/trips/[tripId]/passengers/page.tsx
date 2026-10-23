@@ -18,6 +18,8 @@ import {
   useNow,
   useToast,
   fmtMoney,
+  ReadoutCell,
+  ReadoutValue,
   ErrorState,
   EmptyState,
   LoadingState,
@@ -204,8 +206,8 @@ export default function PassengerListPage() {
           <ErrorState onRetry={load} body={<>This trip&rsquo;s passenger list just can&rsquo;t load right now.</>} />
         ) : (
           <>
-            <div className="grid grid-cols-[2fr_1fr_1fr] max-md:grid-cols-2 bg-ob-panel border-2 border-ob-rule rounded-ob overflow-hidden">
-              <Cell className="max-md:col-span-2">
+            <div className="grid grid-cols-2 xl:grid-cols-[2fr_1fr_1fr] bg-ob-panel border-2 border-ob-rule rounded-ob overflow-hidden">
+              <ReadoutCell className="col-span-2 xl:col-span-1">
                 <div className="text-body-sm font-semibold text-ob-ink-2">Checked in</div>
                 <div className="flex items-baseline gap-2 mt-2.5 font-num leading-none">
                   <span className="text-readout-xl max-md:text-readout-l">{bookings ? checkedInCount : "—"}</span>
@@ -229,19 +231,19 @@ export default function PassengerListPage() {
                       ? `${plural(waitingCount, "person", "people")} not here yet`
                       : "Everyone’s aboard"}
                 </div>
-              </Cell>
-              <Cell>
+              </ReadoutCell>
+              <ReadoutCell>
                 <div className="text-body-sm font-semibold text-ob-ink-2">Paid for this trip</div>
-                <div className="font-num text-readout-l max-md:text-30 max-md:font-medium mt-2.5">
+                <ReadoutValue size="l" className="mt-2.5">
                   {bookings ? fmtMoney(paidCents) : "—"}
-                </div>
-              </Cell>
-              <Cell>
+                </ReadoutValue>
+              </ReadoutCell>
+              <ReadoutCell>
                 <div className="text-body-sm font-semibold text-ob-ink-2">Tickets given back</div>
-                <div className="font-num text-readout-l max-md:text-30 max-md:font-medium mt-2.5">
-                  {bookings ? refundedCount : "—"}
-                </div>
-              </Cell>
+                <ReadoutValue size="l" className="mt-2.5">
+                  {bookings ? String(refundedCount) : "—"}
+                </ReadoutValue>
+              </ReadoutCell>
             </div>
 
             <div className="sticky top-navbar z-10 -mx-1 px-1 py-2 bg-ob-bg">
@@ -330,16 +332,6 @@ export default function PassengerListPage() {
           untouched. <strong>This cannot be undone.</strong>
         </CautionBox>
       </Dialog>
-    </div>
-  );
-}
-
-function Cell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div
-      className={`px-5 pt-[18px] pb-3.5 max-md:px-3.5 max-md:pt-3.5 max-md:pb-3 shadow-[-2px_0_0_0_var(--ob-rule),0_-2px_0_0_var(--ob-rule)] ${className}`}
-    >
-      {children}
     </div>
   );
 }
