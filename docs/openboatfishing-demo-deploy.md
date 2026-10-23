@@ -11,7 +11,7 @@ Follow this checklist top-to-bottom. Everything from Step 4 onward assumes Steps
 
 ## Prerequisites
 
-- Domain `openboatfishing.com` registered (Namecheap / Cloudflare / etc.)
+- Domain `openboatfishing.com`, with DNS hosted on Cloudflare (free plan, records set to **DNS only**; see "DNS" under Step 3)
 - GitHub account with push access to this repo
 - Stripe account with Connect enabled (platform account)
 - Neon account
@@ -22,7 +22,7 @@ Follow this checklist top-to-bottom. Everything from Step 4 onward assumes Steps
 
 ## Step 1 — Register the domain + set up Neon
 
-- Register `openboatfishing.com` at your registrar of choice
+- Register `openboatfishing.com` and add it to Cloudflare, which hosts its DNS
 - In Neon: create a new project (production tier, region close to your users — likely `us-east-1`)
 - Copy the connection string — this becomes `DATABASE_URL`
 
@@ -57,7 +57,21 @@ The demo runs in Stripe test mode so anyone can book with card `4242 4242 4242 4
   - Root directory: `apps/web`
   - Build command: default (`next build`)
 - Vercel Hobby plan works for this demo deployment (2 daily crons — see cron schedule below). Upgrade to Pro later to restore hourly expiry and full-day reminder coverage.
-- Point DNS: add `openboatfishing.com` and `www.openboatfishing.com` in Vercel → domain settings; update your registrar's nameservers or A/CNAME records per Vercel's instructions
+- Add `openboatfishing.com` and `www.openboatfishing.com` in Vercel → domain settings, then create the DNS records Vercel asks for in Cloudflare (below)
+
+### DNS (Cloudflare, DNS only)
+
+Cloudflare hosts the DNS and does nothing else. Vercel serves the site and provides the CDN, TLS certificates and DDoS protection. The records:
+
+| Name                  | Type  | Content                                 | Purpose                                            |
+| --------------------- | ----- | --------------------------------------- | -------------------------------------------------- |
+| `openboatfishing.com` | CNAME | `<id>.vercel-dns-017.com` (from Vercel) | Site → Vercel (Cloudflare flattens the apex CNAME) |
+| `www`                 | CNAME | same as above                           | `www` → Vercel                                     |
+| `send`                | MX    | `feedback-smtp.us-east-1.amazonses.com` | Resend bounce/complaint handling                   |
+| `send`                | TXT   | `v=spf1 include:amazonses.com ~all`     | Resend SPF                                         |
+| `resend._domainkey`   | TXT   | DKIM key from Resend → Domains          | Resend DKIM signing                                |
+
+> **Keep the Vercel CNAMEs on "DNS only" (grey cloud). Don't turn on Cloudflare's proxy**, whatever the dashboard banner says. Behind the proxy, Vercel sees a Cloudflare edge IP instead of the visitor's. `apps/web/src/lib/rate-limit.ts` keys on `x-real-ip`, so many users would share one rate-limit bucket and get locked out of OTP and booking. Proxying also hides real traffic from Vercel's firewall and DDoS detection, adds a second cache in front of ISR, and puts a WAF in the path of the Stripe webhook.
 
 ### Environment variables (Vercel dashboard → Settings → Environment Variables)
 
