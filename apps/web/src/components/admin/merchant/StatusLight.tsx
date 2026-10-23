@@ -129,21 +129,45 @@ export function StatusLight({
 
 // ── Derivations ─────────────────────────────────────────────────────────────
 
-export type TripLightKind = Extract<LightKind, "on-sale" | "filling-up" | "sold-out" | "added" | "cancelled">;
+export type TripLightKind = Extract<
+  LightKind,
+  "on-sale" | "filling-up" | "sold-out" | "added" | "boarding" | "departed" | "cancelled"
+>;
+
+/** "Boarding now" starts this long before departure. Display only — it changes no data. */
+export const BOARDING_WINDOW_MINUTES = 30;
 
 /**
- * Derives the light for a trip row. Cancelled always wins; "Added" (a one-off
- * departure outside any weekly pattern — scheduleId is null) takes priority
- * over the sold-percentage tiers so a fresh one-off doesn't get lost among the
- * pattern's regular "On sale" rows before anyone's booked it.
+ * Derives the light for a trip row.
+ *
+ * Order: Cancelled, then the clock states — Departed (departure time has
+ * passed, the same rule that stops online sales, or the server already marks
+ * it sailed) and Boarding now (the last BOARDING_WINDOW_MINUTES before
+ * departure) — then the seat states. "Added" (a one-off departure outside any
+ * weekly pattern — scheduleId is null) takes priority over the sold-percentage
+ * tiers so a fresh one-off doesn't get lost among the pattern's regular
+ * "On sale" rows before anyone's booked it.
+ *
+ * Pass `now` to get the clock states; leave it out for seat states only.
+ * `scheduleId: undefined` (not known) never reads as Added.
  */
-export function tripLightKind(trip: {
-  status: string;
-  scheduleId: string | null;
-  capacity: number;
-  ticketsSold: number;
-}): TripLightKind {
+export function tripLightKind(
+  trip: {
+    status: string;
+    scheduleId?: string | null;
+    capacity: number;
+    ticketsSold: number;
+    startTime?: string;
+  },
+  now?: number,
+): TripLightKind {
   if (trip.status === "cancelled") return "cancelled";
+  if (trip.status === "sailed" || trip.status === "pending_settlement") return "departed";
+  if (now !== undefined && trip.startTime) {
+    const departs = new Date(trip.startTime).getTime();
+    if (now >= departs) return "departed";
+    if (now >= departs - BOARDING_WINDOW_MINUTES * 60_000) return "boarding";
+  }
   if (trip.ticketsSold >= trip.capacity) return "sold-out";
   if (trip.scheduleId === null) return "added";
   if (trip.capacity > 0 && trip.ticketsSold / trip.capacity >= 0.7) return "filling-up";

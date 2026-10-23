@@ -146,7 +146,7 @@ export function Stepper({
         onChange={(e) => onChange(e.target.value === "" ? NaN : Number(e.target.value))}
         className={`flex-1 min-w-0 min-h-tap-main px-3 bg-ob-bg text-ob-ink border-2 ${
           invalid ? "border-ob-alert" : "border-ob-control"
-        } font-num text-24 font-medium text-center`}
+        } font-num text-24 font-medium text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
       />
       <button
         type="button"

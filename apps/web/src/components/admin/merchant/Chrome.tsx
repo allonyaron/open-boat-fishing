@@ -280,7 +280,7 @@ export function Chrome({
   useEffect(() => setMenuOpen(false), [pathname]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-ob-bg text-ob-ink font-ui text-body antialiased">
+    <div className="min-h-screen flex flex-col bg-ob-bg text-ob-ink font-ui text-body antialiased print:bg-ob-panel print:min-h-0">
       <a
         href="#admin-main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[70] focus:px-4 focus:py-3 focus:bg-ob-key focus:text-ob-key-ink focus:font-bold"
@@ -301,15 +301,16 @@ export function Chrome({
         <EtClock />
         <div className="flex-1" />
         <div className="hidden md:flex items-center gap-4">
-          <Segmented label="Screen density" options={DENSITY_OPTIONS} value={density} onChange={setDensity} size="desk" />
-          <SunlightButton />
+          {/* Dock keeps every tap target at 48px, the top bar included; Desk uses the mockup's sizes. */}
+          <Segmented label="Screen density" options={DENSITY_OPTIONS} value={density} onChange={setDensity} size={density} />
+          <SunlightButton tall={density === "dock"} />
           <div className="flex items-center gap-2.5 pl-4 min-h-8 border-l-2 border-ob-rule">
             <Avatar name={me.name} size="sm" />
             <span className="text-body-sm text-ob-ink-2">{me.name}</span>
             <button
               type="button"
               onClick={onLogout}
-              className="min-h-11 px-3 text-body-sm font-bold text-ob-ink underline underline-offset-[3px] hover:text-ob-ink-2"
+              className={`${density === "dock" ? "min-h-tap-dock" : "min-h-11"} px-3 text-body-sm font-bold text-ob-ink underline underline-offset-[3px] hover:text-ob-ink-2`}
             >
               Sign out
             </button>
@@ -344,6 +345,7 @@ export function Chrome({
           className="flex-1 min-w-0 flex flex-col gap-6 pt-4 px-3 pb-12 md:pt-7 md:px-8 md:pb-16 focus:outline-none print:p-0"
         >
           {children}
+          <div className="md:hidden print:hidden px-1 text-meta text-ob-ink-3">Everything is Eastern time.</div>
         </main>
       </div>
     </div>
