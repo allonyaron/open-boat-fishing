@@ -1,73 +1,60 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { dollars } from "@openboat/utils";
-import { fmtTimeET } from "@/lib/format";
+import { fmtLongDateET, fmtTimeET } from "@/lib/format";
+import { todayET } from "@/lib/date-et";
 import {
-  Card,
-  CardRow,
   Button,
   Dialog,
+  CautionBox,
+  SummaryBox,
+  Segmented,
   StatusLight,
-  ticketLightKind,
+  tripLightKind,
+  useDensity,
+  useNow,
   useToast,
+  fmtMoney,
   ErrorState,
+  EmptyState,
+  LoadingState,
+  Lamp,
+  ChevronLeftIcon,
+  PrintIcon,
+  UndoIcon,
 } from "@/components/admin/merchant";
+import { BookingListDeskPhone, BookingListDock, BookingTableDesk, type PassengerActions, type ShownBooking } from "./PassengerViews";
+import { PrintSheet } from "./PrintSheet";
+import {
+  bookingName,
+  keepTicket,
+  ticketLabel,
+  TICKET_LABEL,
+  waitingTickets,
+  type BookingData,
+  type PassengerFilter,
+  type TicketData,
+  type TripDetail,
+} from "./types";
 
-type TicketData = {
-  id: string;
-  ticketType: "adult" | "child" | "senior";
-  priceCents: number;
-  voided: boolean;
-  passengerName: string | null;
-  checkedIn: boolean;
-  checkedInAt: string | null;
-};
-
-type BookingData = {
-  id: string;
-  confirmationCode: string;
-  customerName: string | null;
-  customerEmail: string;
-  customerPhone: string | null;
-  notes: string | null;
-  status: string;
-  totalCents: number;
-  tickets: TicketData[];
-};
-
-type TripDetail = {
-  id: string;
-  departureDate: string;
-  startTime: string;
-  endTime: string;
-  status: string;
-  vessel: { name: string; color: string };
-  product: { displayName: string };
-};
-
-const TICKET_LABEL: Record<TicketData["ticketType"], string> = { adult: "Adult", child: "Child", senior: "Senior" };
-
-function fmtLongDateET(dateStr: string): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export default function PassengerListPage() {
-  const router = useRouter();
   const params = useParams<{ tripId: string }>();
   const { showToast } = useToast();
+  const { density } = useDensity();
+  const now = useNow();
   const [trip, setTrip] = useState<TripDetail | null>(null);
   const [bookings, setBookings] = useState<BookingData[] | null>(null);
   const [error, setError] = useState(false);
   const [busyTicket, setBusyTicket] = useState<string | null>(null);
-  const [refundTarget, setRefundTarget] = useState<string | null>(null);
+  const [busyBooking, setBusyBooking] = useState<string | null>(null);
+  const [refundTarget, setRefundTarget] = useState<{ ticket: TicketData; booking: BookingData } | null>(null);
+  const [filter, setFilter] = useState<PassengerFilter>("all");
+  const [operatorName, setOperatorName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(false);
@@ -84,24 +71,60 @@ export default function PassengerListPage() {
 
   useEffect(() => {
     load();
+    // Only for the printed sheet's header.
+    fetch("/api/admin/settings/operator")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((op) => setOperatorName(op?.name ?? null))
+      .catch(() => {});
   }, [load]);
+
+  async function postCheckIn(ticketId: string, checkedIn: boolean): Promise<{ ok: boolean; error?: string }> {
+    const res = await fetch(`/api/admin/trips/${params.tripId}/checkins`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ticketId, checkedIn }),
+    });
+    const body = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true } : { ok: false, error: body.error };
+  }
 
   async function toggleCheckIn(ticketId: string, checkedIn: boolean) {
     setBusyTicket(ticketId);
     try {
-      const res = await fetch(`/api/admin/trips/${params.tripId}/checkins`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ticketId, checkedIn }),
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        showToast(body.error ?? "Couldn't update check-in.", "error");
+      const r = await postCheckIn(ticketId, checkedIn);
+      if (!r.ok) {
+        showToast(r.error ?? "Couldn't update check-in.", "error");
         return;
       }
       await load();
     } finally {
       setBusyTicket(null);
+    }
+  }
+
+  /**
+   * "All N aboard": one check-in per waiting ticket on the existing endpoint.
+   * Not all-or-nothing — if some fail, say how many made it; tapping again is
+   * safe because checking in a ticket that's already aboard changes nothing.
+   */
+  async function checkInAll(booking: BookingData) {
+    const waiting = waitingTickets(booking);
+    if (waiting.length === 0) return;
+    setBusyBooking(booking.id);
+    let done = 0;
+    try {
+      for (const t of waiting) {
+        try {
+          if ((await postCheckIn(t.id, true)).ok) done++;
+        } catch {
+          // Counted as not done; the toast below says so.
+        }
+      }
+      if (done === waiting.length) showToast(`${bookingName(booking)}: ${done} aboard.`);
+      else showToast(`Checked in ${done} of ${waiting.length}. Tap again for the rest.`, "error");
+      await load();
+    } finally {
+      setBusyBooking(null);
     }
   }
 
@@ -122,151 +145,159 @@ export default function PassengerListPage() {
     }
   }
 
-  if (error) {
-    return (
-      <ErrorState onRetry={load} body={<>This trip&rsquo;s passenger list just can&rsquo;t load right now.</>} />
-    );
-  }
+  const actions: PassengerActions = {
+    onToggle: (t) => toggleCheckIn(t.id, !t.checkedIn),
+    onRefund: (ticket, booking) => setRefundTarget({ ticket, booking }),
+    onAllAboard: checkInAll,
+    busyTicket,
+    busyBooking,
+  };
 
   const allTickets = bookings?.flatMap((b) => b.tickets) ?? [];
   const liveTickets = allTickets.filter((t) => !t.voided);
   const checkedInCount = liveTickets.filter((t) => t.checkedIn).length;
+  const waitingCount = liveTickets.length - checkedInCount;
   const paidCents = liveTickets.reduce((s, t) => s + t.priceCents, 0);
-  const refundedCount = allTickets.filter((t) => t.voided).length;
+  const refundedCount = allTickets.length - liveTickets.length;
+
+  const shown: ShownBooking[] = (bookings ?? [])
+    .map((booking) => ({ booking, tickets: booking.tickets.filter((t) => keepTicket(filter, t)) }))
+    .filter((b) => b.tickets.length > 0);
+
+  const isToday = trip ? trip.departureDate === todayET() : true;
+  const backHref = !trip || isToday ? "/admin" : `/admin/calendar?date=${trip.departureDate}`;
+  const tripKind = trip
+    ? tripLightKind({ ...trip, ticketsSold: liveTickets.length, scheduleId: undefined }, now)
+    : null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="print:hidden">
-        <button
-          onClick={() => router.push("/admin")}
-          className="text-13 font-semibold text-merchant-blue hover:underline"
+    <div className="flex flex-col gap-5">
+      <div className="print:hidden flex flex-col gap-5">
+        <Link
+          href={backHref}
+          className="self-start inline-flex items-center gap-1.5 min-h-tap-dock pl-1.5 pr-3.5 -my-2 -ml-1.5 text-body font-bold text-ob-ink no-underline rounded-ob hover:bg-ob-panel-2"
         >
-          ← Back to today
-        </button>
-      </div>
+          <ChevronLeftIcon size={20} />
+          {isToday ? "Back to today" : "Back to the calendar"}
+        </Link>
 
-      {trip && (
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-20 font-bold text-merchant-ink" style={{ letterSpacing: "-0.01em" }}>
-              {trip.product.displayName} · {trip.vessel.name}
-            </h1>
-            <div className="text-13 text-merchant-muted">
-              {fmtLongDateET(trip.departureDate)} · leaves {fmtTimeET(trip.startTime)}, back {fmtTimeET(trip.endTime)}
-            </div>
-          </div>
-          <Button variant="secondary" className="print:hidden" onClick={() => window.print()}>
-            Print the list
-          </Button>
-        </div>
-      )}
-
-      <div className="grid gap-3 print:hidden" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-        <Card>
-          <div className="p-3.5">
-            <div className="text-13 text-merchant-muted">Checked in</div>
-            <div className="text-22 font-bold text-merchant-ink tabular-nums mt-0.5">
-              {checkedInCount} of {liveTickets.length} aboard
-            </div>
-          </div>
-        </Card>
-        <Card>
-          <div className="p-3.5">
-            <div className="text-13 text-merchant-muted">Paid for this trip</div>
-            <div className="text-22 font-bold text-merchant-ink tabular-nums mt-0.5">{dollars(paidCents)}</div>
-          </div>
-        </Card>
-        <Card>
-          <div className="p-3.5">
-            <div className="text-13 text-merchant-muted">Tickets given back</div>
-            <div className="text-22 font-bold text-merchant-ink tabular-nums mt-0.5">{refundedCount}</div>
-          </div>
-        </Card>
-      </div>
-
-      <Card>
-        {!bookings ? (
-          <CardRow className="text-13 text-merchant-muted">Loading…</CardRow>
-        ) : bookings.length === 0 ? (
-          <CardRow className="text-center py-8">
-            <div className="text-14 font-semibold text-merchant-ink">Nobody has booked this trip yet.</div>
-            <div className="text-13 text-merchant-muted mt-1">Seats are open on your website right now.</div>
-          </CardRow>
-        ) : (
-          bookings.map((booking) => (
-            <CardRow key={booking.id}>
-              <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-14 font-bold text-merchant-ink">{booking.customerName ?? booking.customerEmail}</span>
-                  <span className="text-12 text-merchant-faint tabular-nums">{booking.confirmationCode}</span>
-                </div>
-                <div className="text-13 text-merchant-muted">
-                  {[booking.customerPhone, booking.customerEmail].filter(Boolean).join(" · ")}
-                </div>
+        {trip && (
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="flex-[1_1_420px] min-w-0">
+              {tripKind && <StatusLight kind={tripKind} className="mb-2" />}
+              <h1 className="text-title-page max-md:text-26 [text-wrap:balance]">
+                {trip.product.displayName} · {trip.vessel.name}
+              </h1>
+              <div className="text-body text-ob-ink-2 mt-1.5">
+                {fmtLongDateET(trip.departureDate)} · leaves{" "}
+                <span className="font-num whitespace-nowrap">{fmtTimeET(trip.startTime)}</span>, back{" "}
+                <span className="font-num whitespace-nowrap">{fmtTimeET(trip.endTime)}</span>
               </div>
-              {booking.notes && (
-                <div className="inline-block rounded-lg bg-merchant-amber-soft text-merchant-amber-deep text-13 px-2.5 py-1.5 mb-2">
-                  {booking.notes}
-                </div>
-              )}
-              <div className="flex flex-col gap-2">
-                {booking.tickets.map((ticket) => {
-                  const pill = ticketLightKind(ticket);
-                  const label = ticket.passengerName
-                    ? `${ticket.passengerName} · ${TICKET_LABEL[ticket.ticketType]}`
-                    : `${TICKET_LABEL[ticket.ticketType]} ticket`;
-                  const busy = busyTicket === ticket.id;
-                  return (
-                    <div
-                      key={ticket.id}
-                      className={`flex flex-wrap items-center justify-between gap-2 rounded-[10px] bg-merchant-fill px-3 py-2.5 ${
-                        ticket.voided ? "opacity-70" : ""
-                      }`}
-                    >
-                      <div className={`text-13 ${ticket.voided ? "line-through text-merchant-faint" : "text-merchant-ink"}`}>
-                        {label}{" "}
-                        <span className={ticket.voided ? "line-through" : "text-merchant-faint"}>
-                          {dollars(ticket.priceCents)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 print:hidden">
-                        <StatusLight kind={pill} />
-                        <Button
-                          variant={ticket.checkedIn ? "secondary" : "strong"}
-                          disabled={busy}
-                          onClick={() =>
-                            ticket.voided
-                              ? showToast("This ticket was refunded — nothing to check in.")
-                              : toggleCheckIn(ticket.id, !ticket.checkedIn)
-                          }
-                        >
-                          {ticket.checkedIn ? "Undo" : "Aboard"}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          disabled={busy}
-                          onClick={() =>
-                            ticket.voided
-                              ? showToast("This ticket was already refunded.")
-                              : setRefundTarget(ticket.id)
-                          }
-                        >
-                          Refund
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardRow>
-          ))
+            </div>
+            <Button variant="secondary" size="dock" icon={<PrintIcon />} onClick={() => window.print()} disabled={!bookings}>
+              Print the list
+            </Button>
+          </div>
         )}
-      </Card>
+
+        {error ? (
+          <ErrorState onRetry={load} body={<>This trip&rsquo;s passenger list just can&rsquo;t load right now.</>} />
+        ) : (
+          <>
+            <div className="grid grid-cols-[2fr_1fr_1fr] max-md:grid-cols-2 bg-ob-panel border-2 border-ob-rule rounded-ob overflow-hidden">
+              <Cell className="max-md:col-span-2">
+                <div className="text-body-sm font-semibold text-ob-ink-2">Checked in</div>
+                <div className="flex items-baseline gap-2 mt-2.5 font-num leading-none">
+                  <span className="text-readout-xl max-md:text-readout-l">{bookings ? checkedInCount : "—"}</span>
+                  <span className="text-22 text-ob-ink-3">/{bookings ? liveTickets.length : "—"}</span>
+                  <span className="font-ui text-18 font-bold text-ob-ink-2">aboard</span>
+                </div>
+                <div
+                  role="img"
+                  aria-label={`${checkedInCount} of ${liveTickets.length} aboard`}
+                  className="h-2.5 mt-3 bg-ob-panel-2 shadow-[inset_0_0_0_1px_var(--ob-hair)]"
+                >
+                  <div
+                    className="h-full bg-ob-go"
+                    style={{ width: `${liveTickets.length ? Math.round((checkedInCount / liveTickets.length) * 100) : 0}%` }}
+                  />
+                </div>
+                <div className="text-body-sm text-ob-ink-2 mt-2">
+                  {!bookings
+                    ? " "
+                    : waitingCount
+                      ? `${plural(waitingCount, "person", "people")} not here yet`
+                      : "Everyone’s aboard"}
+                </div>
+              </Cell>
+              <Cell>
+                <div className="text-body-sm font-semibold text-ob-ink-2">Paid for this trip</div>
+                <div className="font-num text-readout-l max-md:text-30 max-md:font-medium mt-2.5">
+                  {bookings ? fmtMoney(paidCents) : "—"}
+                </div>
+              </Cell>
+              <Cell>
+                <div className="text-body-sm font-semibold text-ob-ink-2">Tickets given back</div>
+                <div className="font-num text-readout-l max-md:text-30 max-md:font-medium mt-2.5">
+                  {bookings ? refundedCount : "—"}
+                </div>
+              </Cell>
+            </div>
+
+            <div className="sticky top-navbar z-10 -mx-1 px-1 py-2 bg-ob-bg">
+              <Segmented
+                label="Show"
+                size="dock"
+                fill
+                className="bg-ob-panel md:max-w-[560px]"
+                value={filter}
+                onChange={setFilter}
+                options={[
+                  { value: "all", label: "Everyone", count: liveTickets.length },
+                  { value: "waiting", label: "Not here", count: waitingCount },
+                  { value: "aboard", label: "Aboard", count: checkedInCount },
+                ]}
+              />
+            </div>
+
+            {!bookings ? (
+              <div className="bg-ob-panel border-2 border-ob-rule rounded-ob">
+                <LoadingState variant="blocks" label="Loading who’s coming…" />
+              </div>
+            ) : bookings.length === 0 ? (
+              <div className="bg-ob-panel border-2 border-ob-rule rounded-ob">
+                <EmptyState title="Nobody has booked this trip yet." body="Seats are open on your website right now." />
+              </div>
+            ) : shown.length === 0 ? (
+              <div className="flex items-center gap-2.5 px-5 py-7 bg-ob-panel border-2 border-ob-rule rounded-ob">
+                <Lamp tone="go" />
+                <span className="text-18 font-extrabold">
+                  {filter === "waiting" ? "Everyone’s aboard." : "Nobody is aboard yet."}
+                </span>
+              </div>
+            ) : density === "dock" ? (
+              <BookingListDock shown={shown} actions={actions} />
+            ) : (
+              <>
+                <div className="max-md:hidden">
+                  <BookingTableDesk shown={shown} actions={actions} />
+                </div>
+                <div className="md:hidden">
+                  <BookingListDeskPhone shown={shown} actions={actions} />
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {trip && bookings && <PrintSheet trip={trip} bookings={bookings} operatorName={operatorName} />}
 
       <Dialog
         open={!!refundTarget}
         onClose={() => setRefundTarget(null)}
         title="Refund one ticket"
+        danger
         footer={
           <>
             <Button variant="secondary" onClick={() => setRefundTarget(null)} disabled={!!busyTicket}>
@@ -274,19 +305,41 @@ export default function PassengerListPage() {
             </Button>
             <Button
               variant="danger-confirm"
+              icon={<UndoIcon />}
               disabled={!!busyTicket}
-              onClick={() => refundTarget && submitRefund(refundTarget)}
+              onClick={() => refundTarget && submitRefund(refundTarget.ticket.id)}
             >
-              Refund this ticket
+              Refund this ticket{refundTarget ? ` · ${dollars(refundTarget.ticket.priceCents)}` : ""}
             </Button>
           </>
         }
       >
-        <p className="text-13 text-merchant-muted">
-          The amount goes back to the original card in a few days. The seat returns to sale. The rest of the booking
-          is untouched. This cannot be undone.
-        </p>
+        {refundTarget && (
+          <SummaryBox
+            title={
+              refundTarget.ticket.passengerName
+                ? `${refundTarget.ticket.passengerName} · ${TICKET_LABEL[refundTarget.ticket.ticketType]}`
+                : ticketLabel(refundTarget.ticket)
+            }
+            sub={`Booking ${refundTarget.booking.confirmationCode} · ${bookingName(refundTarget.booking)}`}
+            aside={dollars(refundTarget.ticket.priceCents)}
+          />
+        )}
+        <CautionBox>
+          The amount goes back to the original card in a few days. The seat returns to sale. The rest of the booking is
+          untouched. <strong>This cannot be undone.</strong>
+        </CautionBox>
       </Dialog>
+    </div>
+  );
+}
+
+function Cell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={`px-5 pt-[18px] pb-3.5 max-md:px-3.5 max-md:pt-3.5 max-md:pb-3 shadow-[-2px_0_0_0_var(--ob-rule),0_-2px_0_0_var(--ob-rule)] ${className}`}
+    >
+      {children}
     </div>
   );
 }

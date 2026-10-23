@@ -113,7 +113,20 @@ export const PrintIcon = ({ size = 18 }: IconProps) => (
 );
 
 export const CheckIcon = ({ size = 18 }: IconProps) => (
-  <Svg size={size} stroke={2.5}>
+  <Svg size={size} stroke={3}>
     <path d="M20 6 9 17l-5-5" />
+  </Svg>
+);
+
+export const CheckAllIcon = ({ size = 18 }: IconProps) => (
+  <Svg size={size} stroke={2.5}>
+    <path d="M18 6 7 17l-5-5M22 10l-7.5 7.5L13 16" />
+  </Svg>
+);
+
+export const NoteIcon = ({ size = 18 }: IconProps) => (
+  <Svg size={size}>
+    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+    <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
   </Svg>
 );

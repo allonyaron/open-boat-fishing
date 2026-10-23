@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { dollars } from "@openboat/utils";
 import { fmtTimeET } from "@/lib/format";
-import { Card, Button, useToast, ErrorState } from "@/components/admin/merchant";
+import { Card, useToast, ErrorState } from "@/components/admin/merchant";
 
 type OperatorInfo = { stripeAccountId: string | null; stripeOnboardingComplete: boolean };
 

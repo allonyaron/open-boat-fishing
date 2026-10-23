@@ -16,10 +16,11 @@ export type ButtonVariant = "key" | "strong" | "secondary" | "danger" | "danger-
 
 /**
  * - auto: follows density — Dock 48px, Desk 36px.
+ * - dock: 48px in both densities (page-head actions, as the Desk frames show them).
  * - field: 52px, dialog footers (the default inside one; lines up with 52px inputs).
  * - main: 56px, the main action on a phone screen.
  */
-export type ButtonSize = "auto" | "field" | "main";
+export type ButtonSize = "auto" | "dock" | "field" | "main";
 
 export const BUTTON_VARIANT_CLASSES: Record<ButtonVariant, string> = {
   key: "bg-ob-key text-ob-key-ink border-ob-key hover:bg-ob-key-hover hover:border-ob-key-hover",
@@ -37,14 +38,15 @@ const BASE =
 export function buttonSizeClasses(size: ButtonSize, density: "dock" | "desk"): string {
   if (size === "main") return "min-h-tap-main px-5 text-body";
   if (size === "field") return "min-h-field px-5 text-body";
+  if (size === "dock") return "min-h-tap-dock px-[18px] text-body";
   return density === "dock" ? "min-h-tap-dock px-4 text-body" : "min-h-tap-desk px-3 text-body-sm";
 }
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
-  /** Leading icon. Danger buttons get the stop icon unless another is given. */
-  icon?: ReactNode;
+  /** Leading icon. Danger buttons get the stop icon unless another is given; `false` = none (Desk tables). */
+  icon?: ReactNode | false;
   /** Trailing icon (e.g. a chevron on "Post the report ›"). */
   iconAfter?: ReactNode;
 };
@@ -56,7 +58,7 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
   const { density } = useDensity();
   const inFooter = useInDialogFooter();
   const resolvedSize = size ?? (inFooter ? "field" : "auto");
-  const lead = icon ?? (variant === "danger" || variant === "danger-confirm" ? <StopIcon /> : null);
+  const lead = icon === false ? null : icon ?? (variant === "danger" || variant === "danger-confirm" ? <StopIcon /> : null);
   return (
     <button
       ref={ref}
