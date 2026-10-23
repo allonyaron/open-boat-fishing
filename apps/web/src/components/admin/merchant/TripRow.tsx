@@ -136,7 +136,9 @@ function DockRowWide({ row, actions }: { row: Row; actions: TripRowActions }) {
   return (
     <div
       role="listitem"
-      className={`grid items-center gap-x-5 gap-y-3 px-5 py-4 min-h-[92px] border-t border-ob-hair first:border-t-0 grid-cols-[104px_minmax(0,1.3fr)_minmax(150px,1fr)_150px] min-[1200px]:grid-cols-[104px_minmax(0,1.3fr)_minmax(150px,1fr)_150px_auto] ${rowBg(row)}`}
+      // Wide (1360px+, the 1440 frame): one row of five columns. Tablets and
+      // small laptops: time · trip · status, then the seat gauge, then the buttons.
+      className={`grid items-center gap-x-5 gap-y-3 px-5 py-4 min-h-[92px] border-t border-ob-hair first:border-t-0 grid-cols-[104px_minmax(0,1fr)_auto] min-[1360px]:grid-cols-[104px_minmax(0,1.3fr)_minmax(170px,1fr)_150px_auto] ${rowBg(row)}`}
     >
       <div>
         <div className={`flex items-baseline gap-1 ${timeInk(row)}`}>
@@ -152,7 +154,7 @@ function DockRowWide({ row, actions }: { row: Row; actions: TripRowActions }) {
           {trip.vessel.name}
         </div>
       </div>
-      <div>
+      <div className="col-start-2 col-span-2 row-start-2 max-w-[360px] min-[1360px]:col-start-auto min-[1360px]:col-span-1 min-[1360px]:row-start-auto min-[1360px]:max-w-none">
         {row.cancelled ? (
           <CancelledNote row={row} />
         ) : (
@@ -170,10 +172,10 @@ function DockRowWide({ row, actions }: { row: Row; actions: TripRowActions }) {
           </>
         )}
       </div>
-      <div>
+      <div className="col-start-3 row-start-1 min-[1360px]:col-start-auto min-[1360px]:row-start-auto">
         <StatusLight kind={row.kind} />
       </div>
-      <div className="col-span-4 min-[1200px]:col-span-1 flex gap-2 justify-end min-[1200px]:min-w-[330px]">
+      <div className="col-span-3 row-start-3 flex gap-2 justify-end empty:hidden min-[1360px]:col-span-1 min-[1360px]:row-start-auto min-[1360px]:min-w-[330px]">
         {!row.cancelled && (
           <>
             <Button variant="strong" icon={<PeopleIcon />} onClick={() => actions.onWhosComing(trip.id)}>
