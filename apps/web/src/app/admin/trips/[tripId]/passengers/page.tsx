@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { dollars } from "@openboat/utils";
 import { fmtLongDateET, fmtTimeET } from "@/lib/format";
 import { todayET } from "@/lib/date-et";
 import {
@@ -139,7 +138,7 @@ export default function PassengerListPage() {
         showToast(body.error ?? "Couldn't refund this ticket.", "error");
         return;
       }
-      showToast(`Refunded ${dollars(body.refundedCents)}. The seat is back on sale.`);
+      showToast(`Refunded ${fmtMoney(body.refundedCents)}. The seat is back on sale.`);
       setRefundTarget(null);
       await load();
     } finally {
@@ -311,7 +310,7 @@ export default function PassengerListPage() {
               disabled={!!busyTicket}
               onClick={() => refundTarget && submitRefund(refundTarget.ticket.id)}
             >
-              Refund this ticket{refundTarget ? ` · ${dollars(refundTarget.ticket.priceCents)}` : ""}
+              Refund this ticket{refundTarget ? ` · ${fmtMoney(refundTarget.ticket.priceCents)}` : ""}
             </Button>
           </>
         }
@@ -324,7 +323,7 @@ export default function PassengerListPage() {
                 : ticketLabel(refundTarget.ticket)
             }
             sub={`Booking ${refundTarget.booking.confirmationCode} · ${bookingName(refundTarget.booking)}`}
-            aside={dollars(refundTarget.ticket.priceCents)}
+            aside={fmtMoney(refundTarget.ticket.priceCents)}
           />
         )}
         <CautionBox>

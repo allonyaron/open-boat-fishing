@@ -1,8 +1,7 @@
 "use client";
 
-import { dollars } from "@openboat/utils";
 import { fmtTimeET } from "@/lib/format";
-import { Button, StatusLight, useDensity, ticketLightKind, CheckAllIcon, CheckIcon, NoteIcon, UndoIcon } from "@/components/admin/merchant";
+import { Button, StatusLight, useDensity, fmtMoney, ticketLightKind, CheckAllIcon, CheckIcon, NoteIcon, UndoIcon } from "@/components/admin/merchant";
 import {
   bookingName,
   telHref,
@@ -124,7 +123,7 @@ function TicketRowDock({
         <div className={`flex items-baseline gap-2.5 ${ticket.voided ? "line-through" : ""}`}>
           <span className={`text-title-row ${ticket.voided ? "text-ob-ink-3" : "text-ob-ink"}`}>{ticketLabel(ticket)}</span>
           <span className="text-body-sm text-ob-ink-2">{ticketTypeLabel(ticket)}</span>
-          <span className="font-num text-body-sm text-ob-ink-3 ml-auto">{dollars(ticket.priceCents)}</span>
+          <span className="font-num text-body-sm text-ob-ink-3 ml-auto">{fmtMoney(ticket.priceCents)}</span>
         </div>
       </div>
       {ticket.voided ? (
@@ -223,7 +222,7 @@ function BookingRowsDesk({
           <tr key={t.id} className="border-t border-ob-hair">
             <td className={`py-1 pl-8 pr-4 ${t.voided ? "text-ob-ink-3" : "text-ob-ink"} ${strike}`}>{ticketLabel(t)}</td>
             <td className={`py-1 px-3 text-ob-ink-2 ${strike}`}>{ticketTypeLabel(t)}</td>
-            <td className={`py-1 px-3 font-num text-right ${strike}`}>{dollars(t.priceCents)}</td>
+            <td className={`py-1 px-3 font-num text-right ${strike}`}>{fmtMoney(t.priceCents)}</td>
             <td className="py-1 px-3 whitespace-nowrap">
               <span className="inline-flex items-center gap-2">
                 <StatusLight kind={ticketLightKind(t)} />
@@ -295,7 +294,7 @@ export function BookingListDeskPhone({ shown, actions }: { shown: ShownBooking[]
                   </div>
                   <div className="flex items-center gap-1.5 text-meta text-ob-ink-2">
                     <StatusLight kind={kind} dense className="[&>span:last-child]:text-meta" />
-                    <span>· {dollars(t.priceCents)}</span>
+                    <span>· {fmtMoney(t.priceCents)}</span>
                   </div>
                 </div>
                 {!t.voided &&
