@@ -101,10 +101,6 @@ const LIGHTS: Record<LightKind, LightSpec> = {
   "paid-out": { label: "Paid out", tone: "go", shape: "filled", word: "text-ob-go-ink" },
 };
 
-export function lightLabel(kind: LightKind): string {
-  return LIGHTS[kind].label;
-}
-
 /** A status light plus its word. `dense` = the 10px lamp used in Desk tables. */
 export function StatusLight({
   kind,

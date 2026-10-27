@@ -70,7 +70,7 @@ function EtClock() {
   );
 }
 
-function Wordmark() {
+export function Wordmark() {
   return (
     <div className="flex items-center gap-2.5">
       <span aria-hidden="true" className="w-3.5 h-3.5 bg-ob-key rounded-ob" />
@@ -79,7 +79,7 @@ function Wordmark() {
   );
 }
 
-function SunlightButton({ tall }: { tall?: boolean }) {
+export function SunlightButton({ tall }: { tall?: boolean }) {
   const { theme, setTheme } = useTheme();
   const on = theme === "sunlight";
   return (

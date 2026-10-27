@@ -492,10 +492,11 @@ function TurnedOff() {
 function TripTypes({ products, onChange }: { products: Product[]; onChange: (p: Product) => void }) {
   const { density } = useDensity();
   const cellY = density === "dock" ? "py-3" : "py-1.5";
+  // The table needs ~950px; below 1280 (tablets, small laptops) use the cards.
   const th = "py-2.5 px-3 text-meta font-bold text-ob-ink-2 whitespace-nowrap";
   return (
     <>
-      <table className="w-full border-collapse text-body-sm max-md:hidden">
+      <table className="w-full border-collapse text-body-sm max-xl:hidden">
         <thead>
           <tr className="bg-ob-panel-2 text-left">
             <th scope="col" className={`${th} pl-5`}>Trip</th>
@@ -541,7 +542,7 @@ function TripTypes({ products, onChange }: { products: Product[]; onChange: (p: 
           ))}
         </tbody>
       </table>
-      <div role="list" className="md:hidden">
+      <div role="list" className="xl:hidden">
         {products.map((p) => (
           <div role="listitem" key={p.id} className="flex flex-col gap-2 px-4 py-3.5 border-t border-ob-hair first:border-t-0">
             <div className="flex items-baseline justify-between gap-3">
