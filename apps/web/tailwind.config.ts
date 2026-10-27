@@ -43,38 +43,6 @@ const config: Config = {
         "focus-flash": "#dce5ea",
         // ── Admin console v2 (design_handoff_admin_console_v2) ─────────────
         ...obTokens.colors,
-        // Interim bridge: the v1 "Merchant" palette now resolves to v2 tokens so
-        // admin screens not yet rebuilt stay readable in both themes. Remove it
-        // once no admin file uses a merchant-* class.
-        merchant: {
-          ink: "var(--ob-ink)",
-          page: "var(--ob-bg)",
-          surface: "var(--ob-panel)",
-          chrome: "var(--ob-bg)",
-          "chrome-mid": "var(--ob-panel-2)",
-          "chrome-light": "var(--ob-control)",
-          hairline: "var(--ob-hair)",
-          control: "var(--ob-control)",
-          input: "var(--ob-control)",
-          muted: "var(--ob-ink-2)",
-          faint: "var(--ob-ink-3)",
-          disabled: "var(--ob-ink-3)",
-          fill: "var(--ob-panel-2)",
-          "fill-2": "var(--ob-panel-2)",
-          "fill-3": "var(--ob-panel-2)",
-          blue: "var(--ob-ink)",
-          "blue-tint": "var(--ob-panel-2)",
-          "blue-deep": "var(--ob-ink)",
-          green: "var(--ob-go-ink)",
-          "green-tint": "var(--ob-go-tint)",
-          amber: "var(--ob-caution)",
-          "amber-tint": "var(--ob-caution-tint)",
-          "amber-soft": "var(--ob-caution-tint)",
-          "amber-deep": "var(--ob-caution-ink)",
-          red: "var(--ob-alert-ink)",
-          "red-tint": "var(--ob-alert-tint)",
-          teal: "var(--ob-go-tint)",
-        },
       },
       fontFamily: {
         grotesk: ["var(--font-space-grotesk)", "sans-serif"],

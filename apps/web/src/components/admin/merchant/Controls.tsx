@@ -121,8 +121,6 @@ export function Switch({
   );
 }
 
-/** v1 name. */
-export const Toggle = Switch;
 
 /** "Active" + an Off/On switch, with an optional help line — Boat, Trip type and Person dialogs. */
 export function ActiveSwitch({

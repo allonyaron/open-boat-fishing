@@ -32,7 +32,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         role="status"
         aria-live="polite"
-        className="print:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex flex-col items-center gap-2 pointer-events-none w-max max-w-[min(520px,calc(100vw-32px))]"
+        className="ob-toast-stack print:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex flex-col items-center gap-2 pointer-events-none w-max max-w-[min(520px,calc(100vw-32px))]"
       >
         {toasts.map((t) => (
           <div

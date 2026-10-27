@@ -84,6 +84,13 @@
    page behind the admin (overscroll, short screens) takes the theme too. */
 html[data-ob-theme], html[data-ob-theme] body { background: var(--ob-bg); color: var(--ob-ink); }
 
+/* Phones: while a dialog / bottom sheet (or the menu) is open, toasts move
+   from the bottom to just under the 60px top bar so they never cover the
+   sheet's buttons. */
+@media (max-width: 767.98px) {
+  html:has([aria-modal="true"]) .ob-toast-stack { top: 72px; bottom: auto; }
+}
+
 /* Print: always black on white, whatever the screen theme — the Sunlight
    values, repeated here because a selector list can't sit inside @media. */
 @media print {

@@ -72,18 +72,3 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
     </button>
   );
 });
-
-/** Inline text action ("Change", "Pause"). Kept for screens still on the v1 layout. */
-export const TextButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>(
-  function TextButton({ className = "", type = "button", ...rest }, ref) {
-    const { density } = useDensity();
-    return (
-      <button
-        ref={ref}
-        type={type}
-        className={`inline-flex items-center ${density === "dock" ? "min-h-tap-dock" : "min-h-tap-desk"} text-body-sm font-bold text-ob-ink underline underline-offset-[3px] hover:text-ob-ink-2 disabled:opacity-45 disabled:pointer-events-none ${className}`}
-        {...rest}
-      />
-    );
-  },
-);

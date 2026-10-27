@@ -70,7 +70,8 @@ export default function TodayPage() {
     load();
     fetch("/api/admin/settings/products")
       .then((r) => (r.ok ? r.json() : []))
-      .then(setProducts)
+      // Turned-off trip types aren't offered for new departures.
+      .then((all) => setProducts(all.filter((p: ProductOption & { active: boolean }) => p.active)))
       .catch(() => {});
   }, [load]);
 
