@@ -2,8 +2,9 @@
 
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { Lamp } from "./StatusLight";
+import { StopIcon } from "./icons";
 
-/** done = green light (it worked); error = red light (it couldn't). */
+/** done = green square (it worked); error = red stop sign (it couldn't). */
 export type ToastKind = "done" | "error";
 
 type ToastItem = { id: number; message: string; kind: ToastKind };
@@ -39,9 +40,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             className="pointer-events-auto flex items-center gap-3 px-[18px] py-3.5 bg-ob-panel text-ob-ink text-body rounded-ob shadow-toast animate-ob-toast-in"
           >
-            <Lamp tone={t.kind === "error" ? "alert" : "go"} />
+            {/* Shape as well as colour: a filled square for done, the stop sign for an error. */}
+            {t.kind === "error" ? (
+              <span className="flex-none text-ob-alert">
+                <StopIcon size={18} />
+              </span>
+            ) : (
+              <Lamp tone="go" />
+            )}
             <span className="[text-wrap:pretty]">
-              {/* The red lamp is the only visual cue on a server message; say it in words too. */}
+              {/* A server message may not say it failed; say it in words for screen readers too. */}
               {t.kind === "error" && <span className="sr-only">Couldn&rsquo;t do that: </span>}
               {t.message}
             </span>
