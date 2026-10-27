@@ -2,9 +2,24 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { dollars } from "@openboat/utils";
 import { fmtTimeET } from "@/lib/format";
-import { Card, useToast, ErrorState } from "@/components/admin/merchant";
+import {
+  Panel,
+  Segmented,
+  StatusLight,
+  Lamp,
+  useToast,
+  useDensity,
+  fmtMoney,
+  ReadoutCell,
+  ReadoutValue,
+  ErrorState,
+  EmptyState,
+  LoadingState,
+  BoatSwatch,
+  ExternalIcon,
+  type LightKind,
+} from "@/components/admin/merchant";
 
 type OperatorInfo = { stripeAccountId: string | null; stripeOnboardingComplete: boolean };
 
@@ -42,29 +57,24 @@ const PERIODS = [
   { label: "12 months", days: 365 },
 ];
 
-const LEDGER_STATUS: Record<RevenueTrip["status"], { label: string; bg: string; fg: string }> = {
-  scheduled: { label: "Coming up", bg: "#e3e3e3", fg: "#4a4a4a" },
-  pending_settlement: { label: "Just sailed", bg: "#ffd6a4", fg: "#5e4200" },
-  sailed: { label: "Sailed", bg: "#cdfee1", fg: "#0c5132" },
-  cancelled: { label: "Cancelled", bg: "#fee9e8", fg: "#8e1f0b" },
+const LEDGER_LIGHT: Record<RevenueTrip["status"], LightKind> = {
+  scheduled: "coming-up",
+  pending_settlement: "just-sailed",
+  sailed: "sailed",
+  cancelled: "cancelled",
 };
 
-function LedgerStatusPill({ status }: { status: RevenueTrip["status"] }) {
-  const s = LEDGER_STATUS[status];
-  return (
-    <span
-      className="inline-flex items-center rounded-full px-2.5 py-0.5 text-12 font-semibold"
-      style={{ backgroundColor: s.bg, color: s.fg }}
-    >
-      {s.label}
-    </span>
-  );
+/** "Oct 24". dateStr is YYYY-MM-DD. */
+function fmtShortMonthDay(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 export default function MoneyPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { showToast } = useToast();
+  const { density } = useDensity();
 
   const [operator, setOperator] = useState<OperatorInfo | null>(null);
   const [revenue, setRevenue] = useState<RevenueResponse | null>(null);
@@ -106,160 +116,201 @@ export default function MoneyPage() {
     router.replace("/admin/money");
   }, [searchParams, announcedStripeParam, showToast, router]);
 
-  if (error) {
-    return (
-      <ErrorState onRetry={() => load(days)} body={<>Money just can&rsquo;t load right now.</>} />
-    );
-  }
-
   const connected = !!operator?.stripeAccountId;
+  const cellY = density === "dock" ? "py-3" : "py-1.5";
   const totals = revenue?.totals;
 
+  const buckets = [
+    {
+      label: "Earned",
+      lamp: <Lamp tone="go" />,
+      cents: totals?.earnedCents,
+      count: totals?.earnedCount ?? 0,
+      sub: "sailed, grace cleared",
+    },
+    {
+      label: "Held until they sail",
+      lamp: <Lamp tone="ink" shape="hollow" />,
+      cents: totals?.heldCents,
+      count: totals?.heldCount ?? 0,
+      sub: "in the grace window",
+    },
+    {
+      label: "Given back",
+      lamp: <Lamp tone="alert" />,
+      cents: totals?.reversedCents,
+      count: totals?.reversedCount ?? 0,
+      sub: "cancellations and refunds",
+    },
+  ];
+
+  const money = (cents: number, tone: "go" | "alert" | null) =>
+    cents > 0 ? (
+      <span className={tone === "go" ? "text-ob-go-ink" : tone === "alert" ? "text-ob-alert-ink" : ""}>{fmtMoney(cents)}</span>
+    ) : (
+      <span className="text-ob-ink-3">—</span>
+    );
+
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-20 font-bold text-merchant-ink" style={{ letterSpacing: "-0.01em" }}>
-        Money
-      </h1>
-
-      {operator &&
-        (connected ? (
-          <div className="rounded-xl border border-merchant-hairline bg-merchant-green-tint px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-14 font-semibold text-merchant-green">Payouts are on</div>
-              <div className="text-13 text-merchant-green mt-0.5">
-                Connected to Stripe account {operator.stripeAccountId}.
-              </div>
-            </div>
-            <a
-              href="https://dashboard.stripe.com"
-              target="_blank"
-              rel="noreferrer"
-              className="flex-shrink-0 inline-flex items-center justify-center rounded-lg bg-ob-key text-ob-key-ink text-13 font-semibold px-3.5"
-              style={{ minHeight: "38px" }}
-            >
-              Open Stripe
-            </a>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-merchant-hairline bg-merchant-amber-soft px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-14 font-semibold text-merchant-amber-deep">Payouts aren&rsquo;t set up yet</div>
-              <div className="text-13 text-merchant-amber-deep mt-0.5">
-                Customers can book, but nothing can reach your bank until you finish with Stripe.
-              </div>
-            </div>
-            <a
-              href="/api/stripe/connect/start"
-              className="flex-shrink-0 inline-flex items-center justify-center rounded-lg bg-ob-key text-ob-key-ink text-13 font-semibold px-3.5"
-              style={{ minHeight: "38px" }}
-            >
-              Set up payouts
-            </a>
-          </div>
-        ))}
-
-      <div className="flex justify-end">
-        <div className="inline-flex rounded-lg bg-merchant-fill-3 p-0.5">
-          {PERIODS.map((p) => (
-            <button
-              key={p.days}
-              onClick={() => setDays(p.days)}
-              className={`rounded-md px-2.5 py-1 text-12 font-semibold transition-colors ${
-                days === p.days ? "bg-ob-key text-ob-key-ink" : "text-merchant-muted"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h1 className="text-title-page">Money</h1>
+        <Segmented
+          label="Period"
+          size="dock"
+          fill
+          className="bg-ob-panel w-[420px] max-md:w-full"
+          value={String(days)}
+          onChange={(v) => setDays(Number(v))}
+          options={PERIODS.map((p) => ({ value: String(p.days), label: p.label }))}
+        />
       </div>
 
-      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-        <Card>
-          <div className="p-3.5" style={{ borderLeft: "4px solid #0c5132" }}>
-            <div className="text-13 text-merchant-muted">Earned</div>
-            <div className="text-22 font-bold text-merchant-green tabular-nums mt-0.5">
-              {totals ? dollars(totals.earnedCents) : "—"}
-            </div>
-            <div className="text-12 text-merchant-faint mt-0.5">
-              {totals ? totals.earnedCount : 0} tickets · sailed, grace cleared
-            </div>
-          </div>
-        </Card>
-        <Card>
-          <div className="p-3.5" style={{ borderLeft: "4px solid #303030" }}>
-            <div className="text-13 text-merchant-muted">Held until they sail</div>
-            <div className="text-22 font-bold text-merchant-ink tabular-nums mt-0.5">
-              {totals ? dollars(totals.heldCents) : "—"}
-            </div>
-            <div className="text-12 text-merchant-faint mt-0.5">
-              {totals ? totals.heldCount : 0} tickets · in the grace window
-            </div>
-          </div>
-        </Card>
-        <Card>
-          <div className="p-3.5" style={{ borderLeft: "4px solid #8e1f0b" }}>
-            <div className="text-13 text-merchant-muted">Given back</div>
-            <div className="text-22 font-bold text-merchant-red tabular-nums mt-0.5">
-              {totals ? dollars(totals.reversedCents) : "—"}
-            </div>
-            <div className="text-12 text-merchant-faint mt-0.5">
-              {totals ? totals.reversedCount : 0} tickets · cancellations and refunds
-            </div>
-          </div>
-        </Card>
-      </div>
+      {error ? (
+        <ErrorState onRetry={() => load(days)} body={<>Money just can&rsquo;t load right now.</>} />
+      ) : (
+        <>
+          {operator &&
+            (connected ? (
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4 bg-ob-panel border-2 border-ob-rule rounded-ob max-md:px-4">
+                <div className="flex-[1_1_260px] min-w-0">
+                  <div className="flex items-center gap-2.5 text-17 font-extrabold text-ob-go-ink">
+                    <Lamp tone="go" />
+                    Payouts are on
+                  </div>
+                  <div className="text-body-sm text-ob-ink-2">
+                    Connected to Stripe account{" "}
+                    <span className="font-num text-ob-ink [overflow-wrap:anywhere]">{operator.stripeAccountId}</span>.
+                  </div>
+                </div>
+                <a
+                  href="https://dashboard.stripe.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 min-h-tap-dock px-[18px] text-ob-ink border-2 border-ob-control rounded-ob text-body font-bold no-underline hover:bg-ob-panel-2 max-md:w-full"
+                >
+                  Open Stripe
+                  <ExternalIcon />
+                  <span className="sr-only">(opens in a new tab)</span>
+                </a>
+              </div>
+            ) : (
+              <div
+                role="status"
+                className="flex flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4 bg-ob-caution-tint border-2 border-ob-caution rounded-ob max-md:px-4"
+              >
+                <div className="flex-[1_1_260px] min-w-0">
+                  <div className="flex items-center gap-2.5 text-17 font-extrabold">
+                    <Lamp tone="caution" />
+                    Payouts aren&rsquo;t set up yet
+                  </div>
+                  <div className="text-body-sm text-ob-ink-2">
+                    Customers can book, but nothing can reach your bank until you finish with Stripe.
+                  </div>
+                </div>
+                <a
+                  href="/api/stripe/connect/start"
+                  className="inline-flex items-center justify-center min-h-tap-dock px-5 bg-ob-key text-ob-key-ink border-2 border-ob-key rounded-ob text-body font-bold no-underline hover:bg-ob-key-hover max-md:w-full"
+                >
+                  Set up payouts
+                </a>
+              </div>
+            ))}
 
-      <Card>
-        {!revenue ? (
-          <div className="px-4 py-8 text-center text-13 text-merchant-muted">Loading…</div>
-        ) : revenue.trips.length === 0 ? (
-          <div className="px-4 py-8 text-center text-13 text-merchant-muted">
-            No trips in this period.
+          <div className="grid grid-cols-3 max-lg:grid-cols-1 bg-ob-panel border-2 border-ob-rule rounded-ob overflow-hidden">
+            {buckets.map((b) => (
+              <ReadoutCell key={b.label}>
+                <div className="flex items-center gap-2.5">
+                  {b.lamp}
+                  <span className="text-body font-bold">{b.label}</span>
+                </div>
+                <ReadoutValue className="mt-2">{b.cents === undefined ? "—" : fmtMoney(b.cents)}</ReadoutValue>
+                <div className="text-body-sm text-ob-ink-2">
+                  <span className="font-num text-ob-ink">{b.count}</span> tickets · {b.sub}
+                </div>
+              </ReadoutCell>
+            ))}
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] text-13">
-              <thead>
-                <tr className="bg-merchant-fill text-left">
-                  {["Trip", "Earned", "Held", "Given back", "Status"].map((h) => (
-                    <th key={h} className="px-4 py-2 text-12 font-semibold text-merchant-muted">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {revenue.trips.map((t) => (
-                  <tr key={t.tripId} className="border-t border-merchant-hairline">
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: t.vesselColor }} />
-                        <span className="font-semibold text-merchant-ink">{t.productName}</span>
-                        <span className="text-merchant-faint">
-                          {t.departureDate.slice(5)} · {fmtTimeET(t.startTime)}
+
+          <Panel aria-labelledby="mo-l">
+            <div className="px-5 py-4 border-b-2 border-ob-rule max-md:px-4">
+              <h2 id="mo-l" className="text-title-panel">
+                Trip by trip
+              </h2>
+            </div>
+            {!revenue ? (
+              <LoadingState label="Loading…" rows={3} />
+            ) : revenue.trips.length === 0 ? (
+              <EmptyState title="No trips in this period." />
+            ) : (
+              <>
+                <table className="w-full border-collapse text-body-sm max-md:hidden">
+                  <thead>
+                    <tr className="bg-ob-panel-2 text-left">
+                      <th scope="col" className="py-2.5 pl-5 pr-3 text-meta font-bold text-ob-ink-2">Trip</th>
+                      <th scope="col" className="py-2.5 px-3 text-meta font-bold text-ob-ink-2 text-right">Earned</th>
+                      <th scope="col" className="py-2.5 px-3 text-meta font-bold text-ob-ink-2 text-right">Held</th>
+                      <th scope="col" className="py-2.5 px-3 text-meta font-bold text-ob-ink-2 text-right">Given back</th>
+                      <th scope="col" className="py-2.5 pl-3 pr-5 text-meta font-bold text-ob-ink-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {revenue.trips.map((t) => (
+                      <tr key={t.tripId} className="border-t border-ob-hair">
+                        <td className={`${cellY} pl-5 pr-3`}>
+                          <div className="flex items-center gap-2.5">
+                            <BoatSwatch color={t.vesselColor} />
+                            <span className="font-bold">{t.productName}</span>
+                            <span className="font-num text-ob-ink-2 whitespace-nowrap">
+                              {fmtShortMonthDay(t.departureDate)} · {fmtTimeET(t.startTime)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className={`${cellY} px-3 font-num text-right`}>{money(t.earnedCents, "go")}</td>
+                        <td className={`${cellY} px-3 font-num text-right`}>{money(t.heldCents, null)}</td>
+                        <td className={`${cellY} px-3 font-num text-right`}>{money(t.reversedCents, "alert")}</td>
+                        <td className={`${cellY} pl-3 pr-5 whitespace-nowrap`}>
+                          <StatusLight kind={LEDGER_LIGHT[t.status]} dense />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div role="list" className="md:hidden">
+                  {revenue.trips.map((t) => (
+                    <div role="listitem" key={t.tripId} className="flex flex-col gap-1.5 px-4 py-3 border-t border-ob-hair first:border-t-0">
+                      <div className="flex items-center justify-between gap-2.5">
+                        <span className="flex items-center gap-2 min-w-0 text-body font-bold">
+                          <BoatSwatch color={t.vesselColor} />
+                          <span className="truncate">{t.productName}</span>
                         </span>
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 tabular-nums text-merchant-green">
-                      {t.earnedCents > 0 ? dollars(t.earnedCents) : "—"}
-                    </td>
-                    <td className="px-4 py-2.5 tabular-nums text-merchant-ink">
-                      {t.heldCents > 0 ? dollars(t.heldCents) : "—"}
-                    </td>
-                    <td className="px-4 py-2.5 tabular-nums text-merchant-red">
-                      {t.reversedCents > 0 ? dollars(t.reversedCents) : "—"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <LedgerStatusPill status={t.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+                        <StatusLight kind={LEDGER_LIGHT[t.status]} dense className="flex-none [&>span:last-child]:text-meta" />
+                      </div>
+                      <div className="font-num text-meta text-ob-ink-2">
+                        {fmtShortMonthDay(t.departureDate)} · {fmtTimeET(t.startTime)}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-meta">
+                        <div>
+                          <div className="text-ob-ink-3">Earned</div>
+                          <div className="font-num text-body">{money(t.earnedCents, "go")}</div>
+                        </div>
+                        <div>
+                          <div className="text-ob-ink-3">Held</div>
+                          <div className="font-num text-body">{money(t.heldCents, null)}</div>
+                        </div>
+                        <div>
+                          <div className="text-ob-ink-3">Given back</div>
+                          <div className="font-num text-body">{money(t.reversedCents, "alert")}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </Panel>
+        </>
+      )}
     </div>
   );
 }

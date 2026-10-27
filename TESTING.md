@@ -147,69 +147,66 @@ On `/booking/delivery` you see:
 
 **URL: `http://localhost:3000/admin`**
 
+The top bar has **Dock view / Desk view** (big buttons vs compact tables) and **Sunlight** (high-contrast light theme). Both are remembered per device. Under 768px the side nav moves into the **Menu** button.
+
 ### Step 1 — Log in
 
 1. Go to `http://localhost:3000/admin/login`.
 2. Email: **`admin@example.com`**
 3. Password: **`changeme`**
-4. Click **"Sign in"** → redirects to `/admin/trips`.
+4. Click **"Sign in"** → lands on **Today** (`/admin`).
 
-### Step 2 — Trips list (`/admin/trips`)
+### Step 2 — Today (`/admin`)
 
-1. You see a table of all trips with:
-   - Vessel color badge + name
-   - Trip name and date
-   - Seat progress bar (e.g. "23/29 sold")
-   - Status badge: Scheduled / Pending / Sailed / Cancelled
-2. The trip you just booked should show updated seat counts.
-3. Click the row for that trip → goes to the trip manifest.
+1. Readouts: trips going out, people booked, seats still for sale, taken in today.
+2. **Today's departures**: each trip shows a status light — On sale, Filling up (70%+), Sold out, Added (a one-off), Boarding now (the 30 minutes before departure), Departed, or Cancelled (with its reason).
+3. The trip you just booked should show the updated seat count.
+4. **Coming up** lists the next three days; click one to open it on the Calendar.
 
-### Step 3 — Trip manifest (`/admin/trips/[tripId]`)
+### Step 3 — Passenger list (`/admin/trips/[tripId]/passengers`)
 
-1. You see the trip header: vessel, departure time, capacity, seats remaining, status.
-2. Below that: a passenger list grouped by booking.
-3. Each booking shows: customer name, email, confirmation code, total paid.
-4. Each ticket row shows: ticket type, price, fee status (held/earned/reversed), check-in status.
+1. Click **"Who's coming"** (Desk view: **"List"**) on a trip.
+2. You see: checked-in gauge, paid for this trip, tickets given back, and an **Everyone / Not here / Aboard** filter.
+3. Bookings are grouped with name, confirmation code, tap-to-call phone and email; each ticket has **Aboard / Undo** and **Refund**.
+4. **"All N aboard"** checks in every waiting ticket on a booking.
+5. **"Print the list"** opens the print dialog with a black-on-white sheet.
 
 ### Step 4 — Edit capacity
 
-1. Find the capacity line near the top (e.g. "29 seats · 6 sold").
-2. Click **"Edit capacity (29)"**.
-3. An inline input appears. Type a new number (e.g. `35`).
-4. Click **"Save"** → capacity updates, `seatsRemaining` adjusts by the delta.
-5. Try typing a number *less than* tickets sold (e.g. `2`) → you should get a validation error.
+1. On Today or the Calendar, click **"Seats"** on a trip.
+2. Use the −/+ stepper (or type) to set seats, and optionally a per-trip online-sales cutoff.
+3. Click **"Save"** → toast "Trip updated — N seats."
+4. Try fewer seats than are sold → the save is refused with the server's message.
 
 ### Step 5 — Per-ticket refund
 
-1. Find a ticket row in the manifest.
-2. Click the refund icon on the right side of the row.
-3. A confirmation appears. Confirm the refund.
-4. In Terminal 2, you may see Stripe activity.
-5. The ticket updates to show `reversed` fee status and `voided`.
+1. In the passenger list, click **"Refund"** on a ticket.
+2. Confirm with **"Refund this ticket · $NN"**.
+3. In Terminal 2, you may see Stripe activity.
+4. The ticket shows **Refunded** and "Seat is back on sale"; the fee is reversed (see Money).
 
-### Step 6 — Revenue page (`/admin/revenue`)
+### Step 6 — Money (`/admin/money`)
 
-1. Click **"Revenue"** in the nav → `/admin/revenue`.
-2. You see summary cards: Earned / Held / Reversed (in dollars).
-3. Below: a per-trip breakdown table.
-4. Try the **30 / 90 / 365 day** range selector — the numbers update.
+1. Click **"Money"** in the nav.
+2. A banner says whether payouts are on (Stripe connected) or not set up yet.
+3. Readouts: **Earned / Held until they sail / Given back**, then a trip-by-trip ledger.
+4. Try the **30 days / 90 days / 12 months** switch — the numbers update.
 
 **Note:** fees show as "Held" until the trip is `sailed` and the settle grace window (48h) passes. To see "Earned" fees immediately, you'd need a sailed trip — covered in the fishing report section below.
 
 ### Step 7 — Trip cancellation
 
-1. Go back to the manifest for your booked trip.
-2. Click **"Cancel Trip"** (appears if status is not already cancelled).
-3. A modal appears — optionally enter a cancellation reason (e.g. "weather").
-4. Click **"Confirm Cancellation"**.
-5. What happens automatically:
+1. On Today or the Calendar, click **"Cancel"** on your booked trip.
+2. Pick a reason (Weather, Engine or boat trouble, Not enough people booked, or Other) — the confirm button stays disabled until you do.
+3. Click **"Cancel and refund (N)"**.
+4. What happens automatically:
    - All tickets are refunded via Stripe
    - All fees reversed (`fee_status → reversed`)
    - Seats restored to inventory
    - A push notification fires to every passenger email
    - Trip status → `cancelled`
-6. In Terminal 2 you'll see the refund webhook events.
-7. The manifest refreshes showing all tickets as voided.
+5. In Terminal 2 you'll see the refund webhook events.
+6. The trip row shows **Cancelled** and "Trip is off · <reason> · N people refunded".
 
 ---
 
@@ -225,20 +222,20 @@ Fishing reports can only be posted on trips with status `sailed` or `pending_set
 pnpm db:studio
 ```
 
-Open `http://localhost:4983` → find the `trips` table → find any `scheduled` trip → edit `startTime` to a past timestamp → save. Then reload its manifest page in the admin dashboard — the status transitions lazily on page load.
+Open `http://localhost:4983` → find the `trips` table → find any `scheduled` trip → edit `startTime` to a past timestamp → save. The settle job moves it to `pending_settlement` (or run `seed-sailed-trip.ts`, which marks today's trip as sailed).
 
 **Option B:** Use the seed to ensure today has a trip, wait until its departure time passes.
 
 ### Step 2 — Post a fishing report
 
-1. Open the manifest page for a `sailed` or `pending_settlement` trip.
-2. Scroll down — you'll see a **"Fishing Report"** section.
-3. Fill in:
-   - **Catch summary:** e.g. "Good action on fluke today, 4–8 lb fish running strong."
-   - **Fish counts:** Click "Add species" → enter species (e.g. `Fluke`) and count (e.g. `23`). Add another (e.g. `Sea Bass`, `7`).
-   - **Photos:** Click "Upload photos" → select an image from your computer.
-4. Click **"Post Report"**.
-5. A green "Saved" confirmation appears.
+1. Go to **Reports** (`/admin/reports`). Trips from the last 5 days that still need a report are under **"Waiting on a report"** — click **"Post the report"**.
+   - For an older trip: pick its day on the **Calendar**, open **"Who's coming"**, then **"Post the report"** (or **"Change the report"** if one exists).
+2. Fill in:
+   - **Summary:** e.g. "Good action on fluke today, 4–8 lb fish running strong."
+   - **Fish counts:** Click "Add a species" → enter species (e.g. `Fluke`) and count (e.g. `23`). Add another (e.g. `Sea Bass`, `7`).
+   - **Photos:** Click "Add photos" → select an image from your computer.
+3. Click **"Post it"** → toast "Posted. It's live on your Fishing Reports page."
+4. The report moves to **"On your website now"**, where **"Change it"** edits it.
 
 ### Step 3 — View the public report
 

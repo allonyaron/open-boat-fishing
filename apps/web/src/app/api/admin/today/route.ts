@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
       capacity: trips.capacity,
       onlineCutoffMinutes: trips.onlineCutoffMinutes,
       status: trips.status,
+      cancellationReason: trips.cancellationReason,
       vessel: { name: vessels.name, color: vessels.color },
       product: { displayName: products.displayName },
       ticketsSold: sql<number>`(

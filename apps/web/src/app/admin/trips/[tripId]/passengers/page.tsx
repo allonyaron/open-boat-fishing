@@ -25,6 +25,10 @@ import {
   Lamp,
   ChevronLeftIcon,
   PrintIcon,
+  PencilIcon,
+  ReportDialog,
+  type ReportFormInput,
+  cancelReasonLabel,
   UndoIcon,
 } from "@/components/admin/merchant";
 import { BookingListDeskPhone, BookingListDock, BookingTableDesk, type PassengerActions, type ShownBooking } from "./PassengerViews";
@@ -56,6 +60,10 @@ export default function PassengerListPage() {
   const [refundTarget, setRefundTarget] = useState<{ ticket: TicketData; booking: BookingData } | null>(null);
   const [filter, setFilter] = useState<PassengerFilter>("all");
   const [operatorName, setOperatorName] = useState<string | null>(null);
+  // The trip's fishing report: undefined = not loaded (or not a sailed trip), null = none yet.
+  const [report, setReport] = useState<ReportFormInput | null | undefined>(undefined);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError(false);
@@ -65,6 +73,18 @@ export default function PassengerListPage() {
       const body = await res.json();
       setTrip(body.trip);
       setBookings(body.bookings);
+      // A report can be posted for any trip that has sailed, however long ago.
+      if (body.trip.status === "sailed" || body.trip.status === "pending_settlement") {
+        const r = await fetch(`/api/admin/trips/${params.tripId}/report`);
+        if (r.ok) {
+          const rep = await r.json();
+          setReport({ catchSummary: rep.catchSummary ?? "", fishCounts: rep.fishCounts ?? [], photoUrls: rep.photoUrls ?? [] });
+        } else {
+          setReport(null);
+        }
+      } else {
+        setReport(undefined);
+      }
     } catch {
       setError(true);
     }
@@ -146,6 +166,31 @@ export default function PassengerListPage() {
     }
   }
 
+  async function submitReport(input: ReportFormInput) {
+    setReportBusy(true);
+    try {
+      const res = await fetch(`/api/admin/trips/${params.tripId}/report`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          catchSummary: input.catchSummary || undefined,
+          fishCounts: input.fishCounts,
+          photoUrls: input.photoUrls,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        showToast(body.error ?? "Couldn't save the report.", "error");
+        return;
+      }
+      showToast("Posted. It's live on your Fishing Reports page.");
+      setReportOpen(false);
+      await load();
+    } finally {
+      setReportBusy(false);
+    }
+  }
+
   const actions: PassengerActions = {
     onToggle: (t) => toggleCheckIn(t.id, !t.checkedIn),
     onRefund: (ticket, booking) => setRefundTarget({ ticket, booking }),
@@ -185,7 +230,17 @@ export default function PassengerListPage() {
         {trip && (
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="flex-[1_1_420px] min-w-0">
-              {tripKind && <StatusLight kind={tripKind} className="mb-2" />}
+              {tripKind && (
+                <StatusLight
+                  kind={tripKind}
+                  label={
+                    tripKind === "cancelled" && cancelReasonLabel(trip.cancellationReason)
+                      ? `Cancelled · ${cancelReasonLabel(trip.cancellationReason)}`
+                      : undefined
+                  }
+                  className="mb-2"
+                />
+              )}
               <h1 className="text-title-page max-md:text-26 [text-wrap:balance]">
                 {trip.product.displayName} · {trip.vessel.name}
               </h1>
@@ -195,9 +250,29 @@ export default function PassengerListPage() {
                 <span className="font-num whitespace-nowrap">{fmtTimeET(trip.endTime)}</span>
               </div>
             </div>
-            <Button variant="secondary" size="dock" icon={<PrintIcon />} onClick={() => window.print()} disabled={!bookings}>
-              Print the list
-            </Button>
+            <div className="flex flex-wrap gap-3 max-md:w-full">
+              {report !== undefined && (
+                <Button
+                  variant="secondary"
+                  size="dock"
+                  icon={<PencilIcon />}
+                  className="max-md:flex-1"
+                  onClick={() => setReportOpen(true)}
+                >
+                  {report ? "Change the report" : "Post the report"}
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                size="dock"
+                icon={<PrintIcon />}
+                className="max-md:flex-1"
+                onClick={() => window.print()}
+                disabled={!bookings}
+              >
+                Print the list
+              </Button>
+            </div>
           </div>
         )}
 
@@ -293,6 +368,18 @@ export default function PassengerListPage() {
       </div>
 
       {trip && bookings && <PrintSheet trip={trip} bookings={bookings} operatorName={operatorName} />}
+
+      {trip && (
+        <ReportDialog
+          open={reportOpen}
+          busy={reportBusy}
+          tripId={trip.id}
+          tripLabel={`${trip.product.displayName} · ${trip.vessel.name} — ${fmtLongDateET(trip.departureDate)} · ${fmtTimeET(trip.startTime)} trip`}
+          initial={report ?? undefined}
+          onClose={() => setReportOpen(false)}
+          onConfirm={submitReport}
+        />
+      )}
 
       <Dialog
         open={!!refundTarget}

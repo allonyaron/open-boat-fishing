@@ -14,6 +14,7 @@ import {
   EmptyState,
   LoadingState,
   PlusIcon,
+  BoatSwatch,
   type ProductOption,
   type SchedulePatternInput,
 } from "@/components/admin/merchant";
@@ -230,7 +231,7 @@ export default function WeeklySchedulePage() {
             return (
               <Panel key={g.vessel.id} aria-labelledby={`boat-${g.vessel.id}`}>
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-5 py-3 border-b-2 border-ob-rule max-md:px-4">
-                  <span aria-hidden="true" className="w-5 h-[5px]" style={{ backgroundColor: g.vessel.color }} />
+                  <BoatSwatch color={g.vessel.color} size="lg" />
                   <h2 id={`boat-${g.vessel.id}`} className="text-18 font-extrabold">
                     {g.vessel.name}
                   </h2>
@@ -381,7 +382,7 @@ function PatternTableDesk({ schedules, actions }: { schedules: Schedule[]; actio
               <tr key={s.id} className={`border-t border-ob-hair ${dim}`}>
                 <td className="py-1.5 pl-4 pr-3 whitespace-nowrap">
                   <span className="inline-flex items-center gap-2">
-                    <span aria-hidden="true" className="w-3.5 h-1" style={{ backgroundColor: s.vessel.color }} />
+                    <BoatSwatch color={s.vessel.color} size="sm" />
                     {s.vessel.name}
                   </span>
                 </td>
