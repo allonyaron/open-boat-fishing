@@ -7,9 +7,15 @@ import { DensityProvider, ThemeProvider, ToastProvider, Chrome } from "@/compone
 
 type Me = { staffId: string; name: string; role: string } | null;
 
+// Runs as the server-rendered page is parsed, before anything paints, so a
+// Sunlight device never flashes the dark Console theme while React loads.
+// ThemeProvider takes over once hydrated (and removes the attribute when the admin unmounts).
+const THEME_BOOT = `try{var t=localStorage.getItem("openboat_admin_theme")==="sunlight"?"sunlight":"console";var d=document.documentElement;d.dataset.obTheme=t;d.style.colorScheme=t==="sunlight"?"light":"dark"}catch(e){}`;
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
+      <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} suppressHydrationWarning />
       <DensityProvider>
         <AdminShell>{children}</AdminShell>
       </DensityProvider>
