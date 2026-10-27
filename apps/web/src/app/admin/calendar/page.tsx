@@ -22,6 +22,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   PlusIcon,
+  BoatSwatch,
 } from "@/components/admin/merchant";
 
 type DialogState =
@@ -430,7 +431,7 @@ function MonthGrid({
                     key={t.id}
                     className={`flex items-center gap-1.5 text-meta leading-tight whitespace-nowrap overflow-hidden ${dim ? "text-ob-ink-3" : "text-ob-ink"}`}
                   >
-                    <span aria-hidden="true" className="w-2.5 h-1 flex-none" style={{ backgroundColor: t.vessel.color }} />
+                    <BoatSwatch color={t.vessel.color} size="xs" />
                     <span className="font-num">{fmtTimeCompactET(t.startTime)}</span>
                     <span className="truncate">{t.vessel.name}</span>
                   </div>

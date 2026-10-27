@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
-import { Input, Label, Select } from "./Input";
-import { Toggle } from "./Controls";
+import { HelpText, Input, Label, Select } from "./Input";
+import { ActiveSwitch, Switch } from "./Controls";
 
 export type VesselOption = { id: string; name: string };
 
@@ -17,6 +17,8 @@ export type TripTypeInput = {
   seniorPriceCents: number;
   whatToBring: string; // comma-separated in the form, split on submit
   showRemaining: boolean;
+  /** Edit only: false = turned off (left out of new schedule patterns; nothing else changes). */
+  active?: boolean;
 };
 
 const DEFAULTS: Omit<TripTypeInput, "vesselId"> = {
@@ -62,6 +64,27 @@ export function TripTypeDialog({
   const isEdit = !!initial;
   const canSave = form.displayName.trim().length > 0 && form.category.trim().length > 0 && !!form.vesselId;
 
+  const price = (id: string, label: string, key: "adultPriceCents" | "childPriceCents" | "seniorPriceCents") => (
+    <div>
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <span aria-hidden="true" className="absolute left-3.5 top-1/2 -translate-y-1/2 font-num text-18 text-ob-ink-3">
+          $
+        </span>
+        <Input
+          id={id}
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step="0.01"
+          className="pl-8"
+          value={dollarsToInput(form[key])}
+          onChange={(e) => setForm((f) => ({ ...f, [key]: inputToCents(e.target.value) }))}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <Dialog
       open={open}
@@ -73,109 +96,85 @@ export function TripTypeDialog({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="key" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
+          <Button variant="key" className="px-6" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
             {isEdit ? "Save trip type" : "Add trip type"}
           </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label htmlFor="tt-name">Name</Label>
-            <Input
-              id="tt-name"
-              value={form.displayName}
-              onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-              placeholder="Half Day Fluke"
-            />
-          </div>
-          <div>
-            <Label htmlFor="tt-fish">Fish</Label>
-            <Input
-              id="tt-fish"
-              value={form.category}
-              onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-              placeholder="Fluke"
-            />
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
         <div>
-          <Label htmlFor="tt-boat">Boat</Label>
-          <Select
-            id="tt-boat"
-            value={form.vesselId}
-            disabled={isEdit}
-            onChange={(e) => setForm((f) => ({ ...f, vesselId: e.target.value }))}
-            className={isEdit ? "bg-merchant-fill text-merchant-faint" : ""}
-          >
-            {vessels.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </Select>
-          {isEdit && <p className="mt-1 text-12 text-merchant-faint">The boat can&rsquo;t be changed after the trip type is created.</p>}
-        </div>
-        <div>
-          <div className="text-13 text-merchant-ink mb-1.5">Prices</div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <Label htmlFor="tt-adult">Adult</Label>
-              <Input
-                id="tt-adult"
-                type="number"
-                min={0}
-                step="0.01"
-                value={dollarsToInput(form.adultPriceCents)}
-                onChange={(e) => setForm((f) => ({ ...f, adultPriceCents: inputToCents(e.target.value) }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="tt-child">Child</Label>
-              <Input
-                id="tt-child"
-                type="number"
-                min={0}
-                step="0.01"
-                value={dollarsToInput(form.childPriceCents)}
-                onChange={(e) => setForm((f) => ({ ...f, childPriceCents: inputToCents(e.target.value) }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="tt-senior">Senior</Label>
-              <Input
-                id="tt-senior"
-                type="number"
-                min={0}
-                step="0.01"
-                value={dollarsToInput(form.seniorPriceCents)}
-                onChange={(e) => setForm((f) => ({ ...f, seniorPriceCents: inputToCents(e.target.value) }))}
-              />
-            </div>
-          </div>
-        </div>
-        <div>
-          <Label htmlFor="tt-bring">What to bring</Label>
+          <Label htmlFor="tt-name">Name</Label>
           <Input
-            id="tt-bring"
-            value={form.whatToBring}
-            onChange={(e) => setForm((f) => ({ ...f, whatToBring: e.target.value }))}
-            placeholder="Polarized sunglasses, motion sickness meds, cash for the mate"
+            id="tt-name"
+            value={form.displayName}
+            onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+            placeholder="Half Day Fluke"
           />
-          <p className="mt-1 text-12 text-merchant-faint">Comma-separated.</p>
         </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-13 text-merchant-ink">Show seats left on the website</div>
-          </div>
-          <Toggle
-            checked={form.showRemaining}
-            onChange={(v) => setForm((f) => ({ ...f, showRemaining: v }))}
-            label="Show seats left"
+        <div>
+          <Label htmlFor="tt-fish">Fish</Label>
+          <Input
+            id="tt-fish"
+            value={form.category}
+            onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+            placeholder="Fluke"
           />
         </div>
       </div>
+      <div>
+        <Label htmlFor="tt-boat">Boat</Label>
+        <Select
+          id="tt-boat"
+          value={form.vesselId}
+          disabled={isEdit}
+          aria-describedby={isEdit ? "tt-boat-help" : undefined}
+          onChange={(e) => setForm((f) => ({ ...f, vesselId: e.target.value }))}
+        >
+          {vessels.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+            </option>
+          ))}
+        </Select>
+        {isEdit && <HelpText id="tt-boat-help">The boat can&rsquo;t be changed after the trip type is created.</HelpText>}
+      </div>
+      <fieldset className="border-0 m-0 p-0">
+        <legend className="text-body-sm font-bold mb-1.5 p-0">Prices</legend>
+        <div className="grid grid-cols-3 gap-3">
+          {price("tt-adult", "Adult", "adultPriceCents")}
+          {price("tt-child", "Child", "childPriceCents")}
+          {price("tt-senior", "Senior", "seniorPriceCents")}
+        </div>
+      </fieldset>
+      <div>
+        <Label htmlFor="tt-bring">What to bring</Label>
+        <Input
+          id="tt-bring"
+          value={form.whatToBring}
+          onChange={(e) => setForm((f) => ({ ...f, whatToBring: e.target.value }))}
+          placeholder="Polarized sunglasses, motion sickness meds, cash for the mate"
+        />
+        <HelpText>Comma-separated.</HelpText>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <span id="tt-shown-label" className="text-body-sm font-bold">
+          Show seats left on the website
+        </span>
+        <Switch
+          checked={form.showRemaining}
+          onChange={(v) => setForm((f) => ({ ...f, showRemaining: v }))}
+          labelledBy="tt-shown-label"
+        />
+      </div>
+      {isEdit && (
+        <ActiveSwitch
+          id="tt-active"
+          checked={form.active ?? true}
+          onChange={(v) => setForm((f) => ({ ...f, active: v }))}
+          help="Turned off, this trip type isn't offered for new schedule patterns. Its trips and bookings don't change."
+        />
+      )}
     </Dialog>
   );
 }

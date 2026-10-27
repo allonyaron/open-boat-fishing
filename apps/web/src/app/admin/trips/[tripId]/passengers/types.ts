@@ -27,6 +27,7 @@ export type TripDetail = {
   endTime: string;
   capacity: number;
   status: string;
+  cancellationReason: string | null;
   vessel: { name: string; color: string };
   product: { displayName: string };
 };

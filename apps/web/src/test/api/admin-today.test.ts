@@ -236,4 +236,33 @@ describe("GET /api/admin/today", () => {
       await testDb.delete(trips).where(eq(trips.id, sailedTrip.id));
     }
   });
+
+  it("includes each trip's cancellation reason (null when it isn't cancelled)", async () => {
+    const today = todayET();
+    const [cancelled] = await testDb
+      .insert(trips)
+      .values({
+        operatorId: ctx.operatorId,
+        scheduleId: null,
+        vesselId: ctx.vesselId,
+        productId: ctx.productId,
+        departureDate: today,
+        startTime: new Date(`${today}T20:00:00Z`),
+        endTime: new Date(`${today}T23:00:00Z`),
+        capacity: 20,
+        seatsRemaining: 20,
+        status: "cancelled",
+        cancellationReason: "weather",
+      })
+      .returning({ id: trips.id });
+
+    try {
+      const { GET } = await import("@/app/api/admin/today/route");
+      const body = await (await GET(getReq())).json();
+      expect(body.trips.find((t: { id: string }) => t.id === cancelled.id)?.cancellationReason).toBe("weather");
+      expect(body.trips.find((t: { id: string }) => t.id === ctx.tripId)?.cancellationReason).toBeNull();
+    } finally {
+      await testDb.delete(trips).where(eq(trips.id, cancelled.id));
+    }
+  });
 });

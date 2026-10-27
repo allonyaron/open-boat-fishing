@@ -5,6 +5,8 @@ import { useDensity } from "./DensityContext";
 import { StatusLight, tripLightKind, type TripLightKind } from "./StatusLight";
 import { Button } from "./Button";
 import { PeopleIcon } from "./icons";
+import { BoatSwatch } from "./BoatSwatch";
+import { cancelReasonLabel } from "./TripDialogs";
 import { timeAndPeriodET, useNow } from "./clock";
 
 export type TripRowData = {
@@ -22,6 +24,8 @@ export type TripRowData = {
   product: { displayName: string };
   /** Only meaningful when status === "cancelled" — how many people were refunded. */
   refundedCount?: number;
+  /** Only meaningful when status === "cancelled" — weather / mechanical / low_bookings / other. */
+  cancellationReason?: string | null;
 };
 
 export type TripRowActions = {
@@ -76,20 +80,16 @@ function Gauge({ row, thin = false }: { row: Row; thin?: boolean }) {
   );
 }
 
-function BoatSwatch({ row, size = "md" }: { row: Row; size?: "md" | "sm" }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={`flex-none ${size === "md" ? "w-4 h-1" : "w-3.5 h-1"} ${row.cancelled ? "bg-ob-ink-3" : ""}`}
-      style={row.cancelled ? undefined : { backgroundColor: row.trip.vessel.color }}
-    />
-  );
+function RowSwatch({ row, size = "md" }: { row: Row; size?: "md" | "sm" }) {
+  return <BoatSwatch color={row.trip.vessel.color} size={size} muted={row.cancelled} />;
 }
 
 function CancelledNote({ row }: { row: Row }) {
+  const reason = cancelReasonLabel(row.trip.cancellationReason);
   return (
     <div className="text-body-sm text-ob-ink-2">
-      Trip is off · <span className="font-num">{row.refunded}</span> {row.refunded === 1 ? "person" : "people"} refunded
+      Trip is off{reason ? ` · ${reason}` : ""} · <span className="font-num">{row.refunded}</span>{" "}
+      {row.refunded === 1 ? "person" : "people"} refunded
     </div>
   );
 }
@@ -150,7 +150,7 @@ function DockRowWide({ row, actions }: { row: Row; actions: TripRowActions }) {
       <div className="min-w-0">
         <div className={`text-title-row ${productCls(row)}`}>{trip.product.displayName}</div>
         <div className="flex items-center gap-2 text-body-sm text-ob-ink-2 mt-0.5">
-          <BoatSwatch row={row} />
+          <RowSwatch row={row} />
           {trip.vessel.name}
         </div>
       </div>
@@ -212,7 +212,7 @@ function DockCardPhone({ row, actions }: { row: Row; actions: TripRowActions }) 
       <div>
         <div className={`text-title-row ${productCls(row)}`}>{trip.product.displayName}</div>
         <div className="flex items-center gap-2 text-body-sm text-ob-ink-2">
-          <BoatSwatch row={row} />
+          <RowSwatch row={row} />
           {trip.vessel.name}
         </div>
       </div>
@@ -284,14 +284,17 @@ function DeskTable({ rows, actions }: { rows: Row[]; actions: TripRowActions }) 
               <td className="py-1.5 px-3 font-num text-ob-ink-2 whitespace-nowrap">{fmtTimeET(trip.endTime)}</td>
               <td className="py-1.5 px-3 whitespace-nowrap">
                 <span className="inline-flex items-center gap-2">
-                  <BoatSwatch row={row} size="sm" />
+                  <RowSwatch row={row} size="sm" />
                   {trip.vessel.name}
                 </span>
               </td>
               <td className={`py-1.5 px-3 ${productCls(row)}`}>{trip.product.displayName}</td>
               <td className="py-1.5 px-3 whitespace-nowrap">
                 {row.cancelled ? (
-                  <span className="text-ob-ink-2">{row.refunded} refunded</span>
+                  <span className="text-ob-ink-2">
+                    {cancelReasonLabel(trip.cancellationReason) ? `${cancelReasonLabel(trip.cancellationReason)} · ` : ""}
+                    {row.refunded} refunded
+                  </span>
                 ) : (
                   <span className="inline-flex items-center gap-2.5">
                     <span className="font-num tabular-nums min-w-16">

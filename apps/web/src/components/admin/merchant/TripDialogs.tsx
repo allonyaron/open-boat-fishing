@@ -12,11 +12,18 @@ export type ProductOption = { id: string; displayName: string; vessel: { name: s
 /** The trip a dialog is about — enough for its summary line. */
 export type DialogTrip = Pick<TripRowData, "startTime" | "ticketsSold" | "product" | "vessel">;
 
-const CANCEL_REASONS = [
-  { value: "weather", label: "Weather — it isn't safe to go out" },
-  { value: "mechanical", label: "Engine or boat trouble" },
-  { value: "low_bookings", label: "Not enough people booked" },
+export const CANCEL_REASONS = [
+  { value: "weather", label: "Weather — it isn't safe to go out", short: "Weather" },
+  { value: "mechanical", label: "Engine or boat trouble", short: "Engine or boat trouble" },
+  { value: "low_bookings", label: "Not enough people booked", short: "Not enough people booked" },
+  { value: "other", label: "Other", short: "Other" },
 ];
+
+/** The short reason for a cancelled trip's row ("Weather"); unknown values show as stored. */
+export function cancelReasonLabel(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  return CANCEL_REASONS.find((r) => r.value === reason)?.short ?? reason;
+}
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -33,9 +40,10 @@ export function CancelDialog({
   onClose: () => void;
   onConfirm: (reason: string) => void;
 }) {
-  const [reason, setReason] = useState(CANCEL_REASONS[0].value);
+  // Nothing pre-selected: a reason has to be picked on purpose.
+  const [reason, setReason] = useState("");
   useEffect(() => {
-    if (open) setReason(CANCEL_REASONS[0].value);
+    if (open) setReason("");
   }, [open]);
   const booked = trip?.ticketsSold ?? 0;
   return (
@@ -49,7 +57,7 @@ export function CancelDialog({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Keep the trip
           </Button>
-          <Button variant="danger-confirm" onClick={() => onConfirm(reason)} disabled={busy}>
+          <Button variant="danger-confirm" onClick={() => onConfirm(reason)} disabled={busy || !reason}>
             Cancel and refund{booked > 0 ? ` (${booked})` : ""}
           </Button>
         </>

@@ -112,7 +112,9 @@ export function Switch({
       <span aria-hidden="true" className={`${seg} ${checked ? "text-ob-ink-3" : "bg-ob-ink-2 text-ob-panel"}`}>
         Off
       </span>
-      <span aria-hidden="true" className={`${seg} ${checked ? "bg-ob-go text-ob-key-ink" : "text-ob-ink-3"}`}>
+      {/* go-ink, not go: identical in Console, and in Sunlight the darker green
+          keeps white text at ~7:1 (white on go is 4.4:1). */}
+      <span aria-hidden="true" className={`${seg} ${checked ? "bg-ob-go-ink text-ob-key-ink" : "text-ob-ink-3"}`}>
         On
       </span>
     </button>
@@ -121,3 +123,28 @@ export function Switch({
 
 /** v1 name. */
 export const Toggle = Switch;
+
+/** "Active" + an Off/On switch, with an optional help line — Boat, Trip type and Person dialogs. */
+export function ActiveSwitch({
+  id,
+  checked,
+  onChange,
+  help,
+}: {
+  id: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  help?: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-4">
+        <span id={`${id}-label`} className="text-body-sm font-bold">
+          Active
+        </span>
+        <Switch id={id} checked={checked} onChange={onChange} labelledBy={`${id}-label`} />
+      </div>
+      {help && <p className="mt-1.5 text-meta text-ob-ink-3">{help}</p>}
+    </div>
+  );
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button, Lamp } from "@/components/admin/merchant";
 
 export function ClearDemoCustomers() {
   const [state, setState] = useState<"idle" | "confirming" | "loading" | "done" | "error">(
@@ -30,44 +31,40 @@ export function ClearDemoCustomers() {
   }
 
   return (
-    <div className="mt-8 border border-amber-300 rounded-xl bg-amber-50 px-6 py-5">
-      <div className="text-sm font-semibold text-amber-900 uppercase tracking-wide">
-        Demo tools
+    <section
+      aria-labelledby="sd-h"
+      className="flex flex-col gap-2.5 p-5 bg-ob-panel border-2 border-dashed border-ob-alert rounded-ob max-md:px-4"
+    >
+      <div className="flex items-center gap-2.5">
+        <Lamp tone="alert" />
+        <h2 id="sd-h" className="text-18 font-extrabold">
+          Demo tools
+        </h2>
       </div>
-      <div className="mt-2 text-sm text-amber-900">
+      <p className="m-0 text-body-sm text-ob-ink-2 max-w-[70ch]">
         Wipe all bookings, tickets, payments, and customer accounts. Trips are reset to full
         availability. Operator, vessels, schedules, and fishing reports are preserved.
-      </div>
+      </p>
       {state === "idle" && (
-        <button
-          type="button"
-          onClick={() => setState("confirming")}
-          className="mt-4 inline-flex items-center px-4 py-2 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700"
-        >
+        <Button variant="danger" className="self-start" onClick={() => setState("confirming")}>
           Clear demo customers
-        </button>
+        </Button>
       )}
       {state === "confirming" && (
-        <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            onClick={run}
-            className="inline-flex items-center px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700"
-          >
+        <div className="flex flex-wrap gap-2.5">
+          <Button variant="danger-confirm" icon={false} onClick={run}>
             Yes, wipe everything
-          </button>
-          <button
-            type="button"
-            onClick={() => setState("idle")}
-            className="inline-flex items-center px-4 py-2 rounded-md border border-amber-300 text-amber-900 text-sm font-medium hover:bg-amber-100"
-          >
+          </Button>
+          <Button variant="secondary" onClick={() => setState("idle")}>
             Cancel
-          </button>
+          </Button>
         </div>
       )}
-      {state === "loading" && <div className="mt-4 text-sm text-amber-900">Working…</div>}
-      {state === "done" && <div className="mt-4 text-sm text-green-800">{message}</div>}
-      {state === "error" && <div className="mt-4 text-sm text-red-700">{message}</div>}
-    </div>
+      <div role="status" className="text-body-sm font-semibold">
+        {state === "loading" && <span className="text-ob-ink-2">Working…</span>}
+        {state === "done" && <span className="text-ob-go-ink">{message}</span>}
+        {state === "error" && <span className="text-ob-alert-ink">{message}</span>}
+      </div>
+    </section>
   );
 }

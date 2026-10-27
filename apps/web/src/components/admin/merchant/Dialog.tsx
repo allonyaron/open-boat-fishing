@@ -26,6 +26,7 @@ export function Dialog({
   open,
   onClose,
   title,
+  subtitle,
   footer,
   children,
   wide = false,
@@ -34,6 +35,8 @@ export function Dialog({
   open: boolean;
   onClose: () => void;
   title: string;
+  /** A line under the title — e.g. which trip a report is for. */
+  subtitle?: ReactNode;
   footer: ReactNode;
   children: ReactNode;
   /** 620px instead of 540px — pattern / report / trip-type dialogs. */
@@ -105,9 +108,12 @@ export function Dialog({
         <div className="flex items-center justify-between gap-3 min-h-16 py-2 pl-6 pr-2 border-b-2 border-ob-rule max-md:pl-4">
           <div className="flex items-center gap-3 min-w-0">
             {danger && <Lamp tone="alert" />}
-            <h2 id={titleId} className="text-title-panel text-ob-ink">
-              {title}
-            </h2>
+            <div className="min-w-0">
+              <h2 id={titleId} className="text-title-panel text-ob-ink">
+                {title}
+              </h2>
+              {subtitle && <div className="text-body-sm text-ob-ink-2">{subtitle}</div>}
+            </div>
           </div>
           <button
             type="button"
