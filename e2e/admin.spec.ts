@@ -1,4 +1,4 @@
-import { test, expect, type TestInfo, type Page } from "@playwright/test";
+import { test, expect, type TestInfo, type Page, type BrowserContext } from "@playwright/test";
 import path from "path";
 import fs from "fs";
 
@@ -12,113 +12,96 @@ function screenshotter(testInfo: TestInfo) {
   return (name: string) => path.join(dir, `${name}.png`);
 }
 
-async function adminLogin(page: Page) {
+// Admin login is rate limited (10 per 15 minutes per IP), so each worker signs
+// in once through the form and the remaining tests reuse that session cookie.
+let sessionCookies: Awaited<ReturnType<BrowserContext["cookies"]>> | null = null;
+
+async function signInThroughForm(page: Page): Promise<boolean> {
   await page.goto("/admin/login");
-
-  // AdminLayout fetches /api/admin/auth/me before rendering children, so the
-  // login form only appears after that check resolves. Wait for the input
-  // explicitly rather than relying on networkidle (which can fire while the
-  // layout is still in its undefined/loading state).
-  const emailInput = page.locator('input[type="email"]');
+  // AdminLayout checks /api/admin/auth/me before rendering the form, so wait
+  // for the field rather than for network idle.
+  const email = page.getByLabel("Email");
   try {
-    await emailInput.waitFor({ timeout: 10_000 });
+    await email.waitFor({ timeout: 10_000 });
   } catch {
     return false;
   }
-
-  await emailInput.fill(ADMIN_EMAIL);
-  await page.locator('input[type="password"]').fill(ADMIN_PASSWORD);
+  await email.fill(ADMIN_EMAIL);
+  await page.getByLabel("Password", { exact: true }).fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-
   try {
-    // Post-login lands on /admin (the Today dashboard) since the Merchant
-    // redesign, not /admin/trips — assert login succeeded generically, then
-    // navigate to the legacy trips list every test below still expects.
     await page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 10_000 });
-    await page.goto("/admin/trips");
-    return true;
   } catch {
     return false;
   }
+  sessionCookies = await page.context().cookies();
+  return true;
 }
 
-test("admin login → trips list", async ({ page }, testInfo) => {
-  const shot = screenshotter(testInfo);
+async function adminSession(page: Page): Promise<boolean> {
+  if (sessionCookies) {
+    await page.context().addCookies(sessionCookies);
+    return true;
+  }
+  return signInThroughForm(page);
+}
 
-  const ok = await adminLogin(page);
+/** Waits for the screen's own loading lines to clear. */
+async function settled(page: Page) {
+  await page.waitForFunction(() => !document.body.innerText.includes("Loading"), null, { timeout: 15_000 });
+}
+
+test("admin sign in → Today", async ({ page }, testInfo) => {
+  const shot = screenshotter(testInfo);
+  const ok = await signInThroughForm(page);
   if (!ok) {
     test.skip(true, "Admin user not seeded or server not running. Run seed:admin first.");
     return;
   }
 
-  // ── Trips list renders ─────────────────────────────────────────────────────
-  await page.getByRole("heading", { name: "Trips" }).waitFor({ timeout: 8_000 });
-  // Wait for client-side data to finish loading (loading text goes away)
-  await page.waitForFunction(
-    () => !document.body.innerText.includes("Loading…"),
-    { timeout: 10_000 },
-  );
-  await page.screenshot({ path: shot("10-admin-trips-list") });
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Today’s departures" })).toBeVisible();
+  await settled(page);
+  await page.screenshot({ path: shot("10-admin-today") });
 
-  // At least one Manifest link or "No upcoming trips" message should be present
-  const manifestLinks = page.getByRole("link", { name: "Manifest" });
-  const noTrips = page.getByText("No upcoming trips");
-  await expect(manifestLinks.or(noTrips).first()).toBeVisible();
+  // Either today's trips or the empty state.
+  const trips = page.getByRole("button", { name: /Who’s coming|^List/ });
+  const empty = page.getByText("Nothing is going out today.");
+  await expect(trips.or(empty).first()).toBeVisible();
 });
 
-test("admin trip detail + cancel dialog", async ({ page }, testInfo) => {
+test("calendar → cancel dialog needs a reason", async ({ page }, testInfo) => {
   const shot = screenshotter(testInfo);
-
-  const ok = await adminLogin(page);
-  if (!ok) {
+  if (!(await adminSession(page))) {
     test.skip(true, "Admin user not seeded or server not running.");
     return;
   }
 
-  await page.getByRole("heading", { name: "Trips" }).waitFor();
-  await page.waitForFunction(
-    () => !document.body.innerText.includes("Loading…"),
-    { timeout: 10_000 },
-  );
+  await page.goto("/admin/calendar");
+  await settled(page);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
-  const manifestLinks = page.getByRole("link", { name: "Manifest" });
-  if ((await manifestLinks.count()) === 0) {
-    test.skip(true, "No trips in the list. Run seed-test-trip.ts first.");
+  const cancel = page.getByRole("button", { name: /^Cancel( trip)?$|^Cancel, / }).first();
+  if (!(await cancel.isVisible().catch(() => false))) {
+    test.skip(true, "No trips on today's calendar day. Run seed-test-trip.ts first.");
     return;
   }
 
-  // ── Navigate to first trip manifest ───────────────────────────────────────
-  await Promise.all([
-    page.waitForURL(/\/admin\/trips\/.+/),
-    manifestLinks.first().click(),
-  ]);
-  await page.waitForLoadState("networkidle");
-  await page.screenshot({ path: shot("11-admin-trip-detail") });
+  await cancel.click();
+  const dialog = page.getByRole("dialog", { name: "Cancel trip" });
+  await expect(dialog).toBeVisible();
+  const confirm = dialog.getByRole("button", { name: /^Cancel and refund/ });
+  // Nothing is pre-selected; a reason has to be picked on purpose.
+  await expect(confirm).toBeDisabled();
+  // The radio input is visually hidden behind its big label; click the label as a user would.
+  await dialog.getByText("Other", { exact: true }).click();
+  await expect(dialog.getByRole("radio", { name: "Other" })).toBeChecked();
+  await expect(confirm).toBeEnabled();
+  await page.screenshot({ path: shot("11-admin-cancel-dialog") });
 
-  // Trip detail page has a heading
-  await expect(page.getByRole("heading").first()).toBeVisible();
-
-  // ── Cancel trip dialog (open + dismiss without submitting) ────────────────
-  await page.goto("/admin/trips");
-  await page.getByRole("heading", { name: "Trips" }).waitFor();
-  // Wait for the client-side trip list to finish loading before looking for the button
-  await page.waitForFunction(
-    () => !document.body.innerText.includes("Loading…"),
-    { timeout: 10_000 },
-  );
-
-  const cancelBtn = page.getByRole("button", { name: "Cancel trip" }).first();
-  if (!(await cancelBtn.isVisible().catch(() => false))) return;
-
-  await cancelBtn.click();
-  // Dialog should open — accessible via role="dialog"
-  const dialog = page.getByRole("dialog", { name: "Cancel trip?" });
-  await dialog.waitFor({ timeout: 5_000 });
-  await expect(page.getByLabel("Reason")).toBeVisible();
-  await page.screenshot({ path: shot("12-cancel-trip-dialog") });
-
-  // Dismiss without submitting
-  await page.getByRole("button", { name: "Never mind" }).click();
+  // Dismiss without submitting.
+  await dialog.getByRole("button", { name: "Keep the trip" }).click();
   await expect(dialog).not.toBeVisible();
 });
 
@@ -133,169 +116,105 @@ test("public fishing reports page renders", async ({ page }, testInfo) => {
   await expect(page.locator("body")).not.toContainText("Application error");
 });
 
-test("admin revenue page", async ({ page }, testInfo) => {
+test("admin money page", async ({ page }, testInfo) => {
   const shot = screenshotter(testInfo);
-
-  const ok = await adminLogin(page);
-  if (!ok) {
+  if (!(await adminSession(page))) {
     test.skip(true, "Admin user not seeded or server not running.");
     return;
   }
 
-  await page.goto("/admin/revenue");
-  await page.waitForLoadState("networkidle");
-  await page.waitForFunction(
-    () => !document.body.innerText.includes("Loading…"),
-    { timeout: 10_000 },
-  );
-  await page.screenshot({ path: shot("14-admin-revenue") });
+  await page.goto("/admin/money");
+  await settled(page);
+  await page.screenshot({ path: shot("14-admin-money") });
 
-  await expect(page.getByRole("heading", { name: "Revenue" })).toBeVisible();
-  // Summary cards — verify the three range buttons render (unambiguous text)
-  await expect(page.getByRole("button", { name: "Last 30 days" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Last 90 days" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Money" })).toBeVisible();
+  const period = page.getByRole("radiogroup", { name: "Period" });
+  for (const label of ["30 days", "90 days", "12 months"]) {
+    await expect(period.getByRole("radio", { name: label })).toBeVisible();
+  }
+  await expect(page.getByRole("heading", { name: "Trip by trip" })).toBeVisible();
 });
 
-test("admin manifest — passenger list and refund button", async ({ page }, testInfo) => {
-  // Requires: seed-test-customers.ts run against today's trip for the refund button to appear.
-  // The test passes either way — it screenshots whatever state the manifest is in.
+test("passenger list from Today", async ({ page }, testInfo) => {
+  // Requires seed-test-trip.ts (+ seed-test-customers.ts for bookings). Passes
+  // either way: it checks whichever state the list is in.
   const shot = screenshotter(testInfo);
-
-  const ok = await adminLogin(page);
-  if (!ok) {
+  if (!(await adminSession(page))) {
     test.skip(true, "Admin user not seeded or server not running.");
     return;
   }
 
-  await page.goto("/admin/trips");
-  await page.waitForLoadState("networkidle");
-  await page.waitForFunction(
-    () => !document.body.innerText.includes("Loading…"),
-    { timeout: 10_000 },
-  );
-
-  const manifestLinks = page.getByRole("link", { name: "Manifest" });
-  if ((await manifestLinks.count()) === 0) {
-    test.skip(true, "No trips in the list. Run seed-test-trip.ts first.");
+  await page.goto("/admin");
+  await settled(page);
+  const open = page.getByRole("button", { name: /Who’s coming|^List/ }).first();
+  if (!(await open.isVisible().catch(() => false))) {
+    test.skip(true, "No trips today. Run seed-test-trip.ts first.");
     return;
   }
 
-  await Promise.all([
-    page.waitForURL(/\/admin\/trips\/.+/),
-    manifestLinks.first().click(),
-  ]);
-  await page.waitForLoadState("networkidle");
-  await page.waitForFunction(
-    () => !document.body.innerText.includes("Loading…"),
-    { timeout: 10_000 },
-  );
-  await page.screenshot({ path: shot("15-admin-manifest") });
+  await Promise.all([page.waitForURL(/\/admin\/trips\/.+\/passengers/), open.click()]);
+  await settled(page);
+  await page.screenshot({ path: shot("15-admin-passengers") });
 
-  // Either "No bookings" or at least one booking card should be present
-  const noBookings = page.getByText("No bookings for this trip");
-  const bookingCard = page.locator(".bg-white.rounded-xl.border").first();
-  await expect(noBookings.or(bookingCard).first()).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByRole("radiogroup", { name: "Show" })).toBeVisible();
+  const nobody = page.getByText("Nobody has booked this trip yet.");
+  const booking = page.getByRole("listitem").first();
+  const table = page.getByRole("columnheader", { name: "Who" });
+  await expect(nobody.or(booking).or(table).first()).toBeVisible();
 });
 
-test("admin capacity inline edit", async ({ page }, testInfo) => {
+test("seats dialog opens and closes", async ({ page }, testInfo) => {
   const shot = screenshotter(testInfo);
-
-  const ok = await adminLogin(page);
-  if (!ok) {
+  if (!(await adminSession(page))) {
     test.skip(true, "Admin user not seeded or server not running.");
     return;
   }
 
-  await page.goto("/admin/trips");
-  await page.waitForLoadState("networkidle");
-  await page.waitForFunction(
-    () => !document.body.innerText.includes("Loading…"),
-    { timeout: 10_000 },
-  );
-
-  const manifestLinks = page.getByRole("link", { name: "Manifest" });
-  if ((await manifestLinks.count()) === 0) {
-    test.skip(true, "No trips in the list. Run seed-test-trip.ts first.");
+  await page.goto("/admin");
+  await settled(page);
+  const seats = page.getByRole("button", { name: /^Seats/ }).first();
+  if (!(await seats.isVisible().catch(() => false))) {
+    test.skip(true, "No trips today. Run seed-test-trip.ts first.");
     return;
   }
 
-  await Promise.all([
-    page.waitForURL(/\/admin\/trips\/.+/),
-    manifestLinks.first().click(),
-  ]);
-  await page.waitForLoadState("networkidle");
-  await page.waitForFunction(
-    () => !document.body.innerText.includes("Loading…"),
-    { timeout: 10_000 },
-  );
+  await seats.click();
+  const dialog = page.getByRole("dialog", { name: "Seats on this trip" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("Seats", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save" })).toBeVisible();
+  await page.screenshot({ path: shot("16-admin-seats-dialog") });
 
-  const editBtn = page.getByRole("button", { name: /Edit capacity/ });
-  if (!(await editBtn.isVisible().catch(() => false))) {
-    test.skip(true, "Trip is cancelled — no capacity edit button visible.");
-    return;
-  }
-
-  await editBtn.click();
-  // Inline input and Save button should appear
-  await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-  await page.screenshot({ path: shot("16-admin-capacity-edit") });
-
-  // Dismiss without saving
-  await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByRole("button", { name: /Edit capacity/ })).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).not.toBeVisible();
 });
 
-test("admin fishing report form — sailed trip", async ({ page }, testInfo) => {
-  // Only runs if a trip with status=sailed or pending_settlement exists.
-  // The fishing report section is gated by trip.status in the UI.
+test("report dialog — trip waiting on a report", async ({ page }, testInfo) => {
+  // Needs a sailed trip without a report in the last 5 days (seed-sailed-trip.ts).
   const shot = screenshotter(testInfo);
-
-  const ok = await adminLogin(page);
-  if (!ok) {
+  if (!(await adminSession(page))) {
     test.skip(true, "Admin user not seeded or server not running.");
     return;
   }
 
-  await page.goto("/admin/trips");
-  await page.waitForLoadState("domcontentloaded");
-  await page.waitForFunction(
-    () => !document.body.innerText.includes("Loading…"),
-    { timeout: 10_000 },
-  );
+  await page.goto("/admin/reports");
+  await settled(page);
+  await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeVisible();
 
-  const manifestLinks = page.getByRole("link", { name: "Manifest" });
-  const totalLinks = await manifestLinks.count();
-  if (totalLinks === 0) {
-    test.skip(true, "No trips. Run seed-test-trip.ts first.");
+  const post = page.getByRole("button", { name: "Post the report" }).first();
+  if (!(await post.isVisible().catch(() => false))) {
+    test.skip(true, "No trips waiting on a report. Run seed-sailed-trip.ts to test this.");
     return;
   }
 
-  // Check up to 5 trips for a sailed one — beyond that, skip rather than timeout.
-  const maxCheck = Math.min(totalLinks, 5);
-  for (let i = 0; i < maxCheck; i++) {
-    await page.goto("/admin/trips");
-    await page.waitForLoadState("domcontentloaded");
-    await page.waitForFunction(
-      () => !document.body.innerText.includes("Loading…"),
-      { timeout: 10_000 },
-    );
+  await post.click();
+  const dialog = page.getByRole("dialog", { name: "Post the report" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByPlaceholder("How the day went, conditions, where they were biting…")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Post it" })).toBeVisible();
+  await page.screenshot({ path: shot("17-admin-report-dialog") });
 
-    const links = page.getByRole("link", { name: "Manifest" });
-    await Promise.all([
-      page.waitForURL(/\/admin\/trips\/.+/),
-      links.nth(i).click(),
-    ]);
-    // networkidle waits for both the trip fetch and the follow-up report fetch
-    await page.waitForLoadState("networkidle");
-
-    const reportTextarea = page.getByPlaceholder("Describe today's catch…");
-    if (await reportTextarea.isVisible({ timeout: 8_000 }).catch(() => false)) {
-      await page.screenshot({ path: shot("17-admin-report-form") });
-      await expect(reportTextarea).toBeVisible();
-      await expect(page.getByRole("button", { name: /Post Report|Update Report/ })).toBeVisible();
-      return;
-    }
-  }
-
-  test.skip(true, "No sailed trips found in first 5. Manually set a trip status to 'sailed' to test this.");
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
 });

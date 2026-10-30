@@ -1,5 +1,6 @@
 import type { Config } from "tailwindcss";
 import * as tokens from "@openboat/design";
+import { obTokens } from "./tailwind.ob-tokens";
 
 const config: Config = {
   content: ["./src/app/**/*.{js,ts,jsx,tsx,mdx}", "./src/components/**/*.{js,ts,jsx,tsx,mdx}"],
@@ -40,36 +41,8 @@ const config: Config = {
         // panel's "here it is" flash on a trip card.
         "cart-tint": "#fbe9df",
         "focus-flash": "#dce5ea",
-        // ── Admin console redesign ("Merchant" direction, design_handoff_admin_console) ──
-        merchant: {
-          ink: "#303030",
-          page: "#f1f1f1",
-          surface: "#ffffff",
-          chrome: "#1a1a1a",
-          "chrome-mid": "#303030",
-          "chrome-light": "#4a4a4a",
-          hairline: "#e3e3e3",
-          control: "#d0d0d0",
-          input: "#8a8a8a",
-          muted: "#616161",
-          faint: "#8a8a8a",
-          disabled: "#b5b5b5",
-          fill: "#fafafa",
-          "fill-2": "#f6f6f7",
-          "fill-3": "#f1f1f1",
-          blue: "#005bd3",
-          "blue-tint": "#e0f0ff",
-          "blue-deep": "#00449e",
-          green: "#0c5132",
-          "green-tint": "#cdfee1",
-          amber: "#ffb800",
-          "amber-tint": "#ffd6a4",
-          "amber-soft": "#fff1e3",
-          "amber-deep": "#5e4200",
-          red: "#8e1f0b",
-          "red-tint": "#fee9e8",
-          teal: "#e3f5f5",
-        },
+        // ── Admin console v2 (design_handoff_admin_console_v2) ─────────────
+        ...obTokens.colors,
       },
       fontFamily: {
         grotesk: ["var(--font-space-grotesk)", "sans-serif"],
@@ -78,6 +51,7 @@ const config: Config = {
         // Consumer booking flow
         archivo: ["var(--font-archivo)", "Helvetica", "sans-serif"],
         "plex-mono": ["var(--font-ibm-plex-mono)", "monospace"],
+        ...obTokens.fontFamily,
       },
       fontSize: {
         "9": "9px",
@@ -103,6 +77,7 @@ const config: Config = {
         "34": "34px",
         "36": "36px",
         "48": "48px",
+        ...obTokens.fontSize,
       },
       borderWidth: {
         "1.5": "1.5px",
@@ -113,12 +88,15 @@ const config: Config = {
         pill: "999px",
         badge: "6px",
         icon: "10px",
+        ...obTokens.borderRadius,
       },
       spacing: {
         navbar: "60px",
         masthead: "66px",
         logo: "34px",
+        ...obTokens.spacing,
       },
+      minHeight: obTokens.minHeight,
       letterSpacing: {
         label: "0.08em",
         caps: "0.1em",
@@ -133,7 +111,10 @@ const config: Config = {
         summary: "0 14px 40px -20px rgba(16,32,31,0.25)",
         hero: "0 20px 60px -10px rgba(20,35,61,0.5)",
         sidebar: "0 10px 30px rgba(20,35,60,0.08)",
+        ...obTokens.boxShadow,
       },
+      keyframes: obTokens.keyframes,
+      animation: obTokens.animation,
     },
   },
   plugins: [],

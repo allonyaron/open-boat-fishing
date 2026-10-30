@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { dollars } from "@openboat/utils";
 import { ClearDemoCustomers } from "@/components/admin/ClearDemoCustomers";
 import {
-  Card,
-  CardHeader,
-  CardRow,
+  Panel,
   Button,
-  TextButton,
   Input,
-  Label,
+  HelpText,
+  Lamp,
+  BoatSwatch,
+  useDensity,
   useToast,
+  fmtMoney,
+  ErrorState,
+  LoadingState,
+  PlusIcon,
   BoatDialog,
   TripTypeDialog,
   PersonDialog,
@@ -62,6 +65,7 @@ type Operator = {
   cancelWindowHrs: number;
   onlineCutoffMinutes: number;
   termsUrl: string | null;
+  dockMapsUrl: string | null;
 };
 
 type BoatDialogState = "new" | Vessel | null;
@@ -111,6 +115,12 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
 
   const activeVessels = (vessels ?? []).filter((v) => v.active);
   const vesselOptions = activeVessels.map((v) => ({ id: v.id, name: v.name }));
+  // Editing a trip type whose boat is turned off: keep that boat in the (locked)
+  // list so the select shows the real boat instead of falling back to the first.
+  const tripTypeVesselOptions =
+    tripTypeDialog && tripTypeDialog !== "new" && !vesselOptions.some((v) => v.id === tripTypeDialog.vesselId)
+      ? [{ id: tripTypeDialog.vesselId, name: tripTypeDialog.vessel.name }, ...vesselOptions]
+      : vesselOptions;
 
   async function submitBoat(input: BoatInput) {
     setBusy(true);
@@ -124,7 +134,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't save the boat.");
+        showToast(body.error ?? "Couldn't save the boat.", "error");
         return;
       }
       showToast(isEdit ? "Boat updated." : "Boat added.");
@@ -151,6 +161,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
         whatToBring: input.whatToBring.split(",").map((s) => s.trim()).filter(Boolean),
         showRemaining: input.showRemaining,
         prices,
+        ...(isEdit ? { active: input.active } : {}),
       };
       const url = isEdit
         ? `/api/admin/settings/products/${tripTypeDialog.id}`
@@ -162,7 +173,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't save the trip type.");
+        showToast(body.error ?? "Couldn't save the trip type.", "error");
         return;
       }
       showToast(isEdit ? "Trip type updated." : "Trip type added.");
@@ -201,7 +212,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't save this person.");
+        showToast(body.error ?? "Couldn't save this person.", "error");
         return;
       }
       showToast(isEdit ? "Person updated." : "Person added.");
@@ -219,23 +230,11 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
       body: JSON.stringify({ [field]: value }),
     });
     if (!res.ok) {
-      showToast("Couldn't save that change.");
+      showToast("Couldn't save that change.", "error");
       return false;
     }
     setOperator((prev) => (prev ? { ...prev, [field]: value } : prev));
     return true;
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-xl border border-merchant-red-tint bg-[#fff8f7] p-5">
-        <div className="text-14 font-semibold text-merchant-red">Can&rsquo;t reach the booking system</div>
-        <p className="mt-1 text-13 text-merchant-muted">Settings just can&rsquo;t load right now.</p>
-        <Button variant="secondary" className="mt-3" onClick={load}>
-          Try again
-        </Button>
-      </div>
-    );
   }
 
   const boatDialogInitial: BoatInput | undefined =
@@ -248,6 +247,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
           certificateCapacity: boatDialog.certificateCapacity,
           groupDiscountThreshold: boatDialog.groupDiscountThreshold,
           groupDiscountPct: boatDialog.groupDiscountPct,
+          active: boatDialog.active,
         }
       : undefined;
 
@@ -262,6 +262,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
           seniorPriceCents: priceOf(tripTypeDialog, "senior"),
           whatToBring: tripTypeDialog.whatToBring.join(", "),
           showRemaining: tripTypeDialog.showRemaining,
+          active: tripTypeDialog.active,
         }
       : undefined;
 
@@ -277,141 +278,160 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
         }
       : undefined;
 
+  const jumps: [string, string][] = [
+    ["Boats", "#set-boats"],
+    ["Trips you sell", "#set-trips"],
+    ["People", "#set-people"],
+    ["Business", "#set-biz"],
+  ];
+
   return (
-    <div className="flex flex-col gap-4 max-w-[900px]">
-      <h1 className="text-20 font-bold text-merchant-ink" style={{ letterSpacing: "-0.01em" }}>
-        Settings
-      </h1>
+    <div className="flex flex-col gap-6 max-w-[1040px]">
+      <div>
+        <h1 className="text-title-page">Settings</h1>
+        <nav aria-label="Settings sections" className="flex flex-wrap gap-2 mt-3.5">
+          {jumps.map(([label, href]) => (
+            <a
+              key={href}
+              href={href}
+              className="inline-flex items-center min-h-tap-dock px-3.5 border-2 border-ob-rule rounded-ob text-body-sm font-bold text-ob-ink no-underline whitespace-nowrap hover:bg-ob-panel-2"
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+      </div>
 
-      <Card>
-        <CardHeader title="Your boats" />
-        {!vessels ? (
-          <CardRow className="text-13 text-merchant-muted">Loading…</CardRow>
-        ) : (
-          vessels.map((v) => (
-            <CardRow key={v.id} className={`flex items-center gap-3 ${v.active ? "" : "opacity-55"}`}>
-              <span className="w-1.5 h-10 rounded-full flex-shrink-0" style={{ backgroundColor: v.color }} />
-              <div className="flex-1 min-w-0">
-                <div className="text-14 font-semibold text-merchant-ink">
-                  {v.name}
-                  {v.description && <span className="font-normal text-merchant-muted"> — {v.description}</span>}
-                </div>
-                <div className="text-13 text-merchant-muted">
-                  Seats you sell: {v.capacity}
-                  {v.certificateCapacity && ` · Coast Guard limit: ${v.certificateCapacity}`}
-                  {v.groupDiscountThreshold && v.groupDiscountPct
-                    ? ` · Group discount: ${v.groupDiscountThreshold}+ tickets, ${v.groupDiscountPct}% off`
-                    : ""}
-                </div>
-              </div>
-              <TextButton onClick={() => setBoatDialog(v)} className="flex-shrink-0">
-                Change
-              </TextButton>
-            </CardRow>
-          ))
-        )}
-        <CardRow>
-          <Button variant="secondary" onClick={() => setBoatDialog("new")}>
-            Add a boat
-          </Button>
-        </CardRow>
-      </Card>
-
-      <Card>
-        <CardHeader title="Trips you sell" />
-        {!products ? (
-          <CardRow className="text-13 text-merchant-muted">Loading…</CardRow>
-        ) : products.length === 0 ? (
-          <CardRow className="text-13 text-merchant-muted">No trip types yet.</CardRow>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-13">
-              <thead>
-                <tr className="bg-merchant-fill text-left">
-                  {["Trip", "Fish", "Boat", "Adult", "Child", "Senior", "Seats shown?", ""].map((h) => (
-                    <th key={h} className="px-4 py-2 text-12 font-semibold text-merchant-muted">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((p) => (
-                  <tr key={p.id} className={`border-t border-merchant-hairline ${p.active ? "" : "opacity-55"}`}>
-                    <td className="px-4 py-2.5 font-semibold text-merchant-ink whitespace-nowrap">{p.displayName}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">{p.category}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: p.vessel.color }} />
-                        {p.vessel.name}
+      {error ? (
+        <ErrorState onRetry={load} body={<>Settings just can&rsquo;t load right now.</>} />
+      ) : (
+        <>
+          <Panel id="set-boats" aria-labelledby="sb-h" className="scroll-mt-20">
+            <SectionHead id="sb-h" title="Your boats">
+              <Button variant="strong" icon={<PlusIcon size={16} />} className="max-md:w-full" onClick={() => setBoatDialog("new")}>
+                Add a boat
+              </Button>
+            </SectionHead>
+            {!vessels ? (
+              <LoadingState rows={2} />
+            ) : (
+              vessels.map((v) => (
+                <Row key={v.id}>
+                  <span
+                    aria-hidden="true"
+                    className="w-1.5 self-stretch min-h-10 flex-none shadow-[0_0_0_1px_var(--ob-control)]"
+                    style={{ backgroundColor: v.color }}
+                  />
+                  <div className="flex-[1_1_300px] min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <span className={`text-title-row ${v.active ? "" : "text-ob-ink-2"}`}>{v.name}</span>
+                      {v.description && <span className="text-body-sm text-ob-ink-2">{v.description}</span>}
+                      {!v.active && <TurnedOff />}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-body-sm text-ob-ink-2 mt-0.5">
+                      <span>
+                        Seats you sell: <span className="font-num text-ob-ink">{v.capacity}</span>
                       </span>
-                    </td>
-                    <td className="px-4 py-2.5 tabular-nums">{dollars(priceOf(p, "adult"))}</td>
-                    <td className="px-4 py-2.5 tabular-nums">{dollars(priceOf(p, "child"))}</td>
-                    <td className="px-4 py-2.5 tabular-nums">{dollars(priceOf(p, "senior"))}</td>
-                    <td className="px-4 py-2.5">{p.showRemaining ? "Yes" : "No"}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      <TextButton onClick={() => setTripTypeDialog(p)}>Change</TextButton>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <CardRow>
-          <Button variant="secondary" onClick={() => setTripTypeDialog("new")} disabled={activeVessels.length === 0}>
-            Add a trip type
-          </Button>
-          {activeVessels.length === 0 && (
-            <p className="mt-1.5 text-12 text-merchant-faint">Add a boat first.</p>
-          )}
-        </CardRow>
-      </Card>
-
-      <Card>
-        <CardHeader title="Your people" />
-        {!staff ? (
-          <CardRow className="text-13 text-merchant-muted">Loading…</CardRow>
-        ) : (
-          staff.map((s) => {
-            const vesselName = s.vesselId ? vessels?.find((v) => v.id === s.vesselId)?.name : null;
-            return (
-              <CardRow key={s.id} className={`flex items-center gap-3 ${s.active ? "" : "opacity-55"}`}>
-                <div className="flex-1 min-w-0">
-                  <div className="text-14 font-semibold text-merchant-ink">{s.name}</div>
-                  <div className="text-13 text-merchant-muted">
-                    {s.role === "admin" ? "Signs in with a password" : `Signs in with a PIN${vesselName ? ` · ${vesselName}` : ""}`}
+                      {v.certificateCapacity ? (
+                        <span>
+                          Coast Guard limit: <span className="font-num text-ob-ink">{v.certificateCapacity}</span>
+                        </span>
+                      ) : null}
+                      {v.groupDiscountThreshold && v.groupDiscountPct ? (
+                        <span>
+                          Group discount: {v.groupDiscountThreshold}+ tickets, {v.groupDiscountPct}% off
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-                <span
-                  className="inline-flex items-center rounded-full px-2.5 py-0.5 text-12 font-semibold flex-shrink-0"
-                  style={
-                    s.role === "admin"
-                      ? { backgroundColor: "#e0f0ff", color: "#00449e" }
-                      : { backgroundColor: "#e3e3e3", color: "#4a4a4a" }
-                  }
+                  <Button variant="secondary" className="max-md:w-full" onClick={() => setBoatDialog(v)}>
+                    Change
+                  </Button>
+                </Row>
+              ))
+            )}
+          </Panel>
+
+          <Panel id="set-trips" aria-labelledby="st-h" className="scroll-mt-20">
+            <SectionHead id="st-h" title="Trips you sell">
+              <div className="flex flex-col items-end gap-1 max-md:w-full max-md:items-stretch">
+                <Button
+                  variant="strong"
+                  icon={<PlusIcon size={16} />}
+                  onClick={() => setTripTypeDialog("new")}
+                  disabled={activeVessels.length === 0}
+                  aria-describedby={activeVessels.length === 0 ? "add-boat-first" : undefined}
                 >
-                  {s.role === "admin" ? "Admin" : "Mate"}
-                </span>
-                <span className="text-13 text-merchant-muted flex-shrink-0">{s.active ? "Active" : "Turned off"}</span>
-                <TextButton onClick={() => setPersonDialog(s)} className="flex-shrink-0">
-                  Change
-                </TextButton>
-              </CardRow>
-            );
-          })
-        )}
-        <CardRow>
-          <Button variant="secondary" onClick={() => setPersonDialog("new")}>
-            Add someone
-          </Button>
-        </CardRow>
-      </Card>
+                  Add a trip type
+                </Button>
+                {vessels && activeVessels.length === 0 && (
+                  <span id="add-boat-first" className="text-meta text-ob-ink-3">
+                    Add a boat first.
+                  </span>
+                )}
+              </div>
+            </SectionHead>
+            {!products ? (
+              <LoadingState rows={2} />
+            ) : products.length === 0 ? (
+              <div className="px-5 py-4 text-body text-ob-ink-2">No trip types yet.</div>
+            ) : (
+              <TripTypes products={products} onChange={setTripTypeDialog} />
+            )}
+          </Panel>
 
-      {operator && <BusinessCard operator={operator} onSaveField={saveOperatorField} />}
+          <Panel id="set-people" aria-labelledby="sp-h" className="scroll-mt-20">
+            <SectionHead id="sp-h" title="Your people">
+              <Button variant="strong" icon={<PlusIcon size={16} />} className="max-md:w-full" onClick={() => setPersonDialog("new")}>
+                Add someone
+              </Button>
+            </SectionHead>
+            {!staff ? (
+              <LoadingState rows={2} />
+            ) : (
+              staff.map((p) => {
+                const vesselName = p.vesselId ? vessels?.find((v) => v.id === p.vesselId)?.name : null;
+                return (
+                  <Row key={p.id}>
+                    <div className="flex-[1_1_240px] min-w-0">
+                      <div className={`text-title-row ${p.active ? "" : "text-ob-ink-2"}`}>{p.name}</div>
+                      <div className="text-body-sm text-ob-ink-2">
+                        {p.role === "admin"
+                          ? "Signs in with a password"
+                          : `Signs in with a PIN${vesselName ? ` · ${vesselName}` : ""}`}
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex items-center min-h-[30px] px-2.5 border-2 rounded-ob text-meta font-extrabold ${
+                        p.role === "admin" ? "border-ob-ink" : "border-ob-control"
+                      }`}
+                    >
+                      {p.role === "admin" ? "Admin" : "Mate"}
+                    </span>
+                    <span className="inline-flex items-center gap-2 min-w-[110px]">
+                      {p.active ? (
+                        <>
+                          <Lamp tone="go" size={10} />
+                          <span className="text-body-sm font-bold text-ob-go-ink">Active</span>
+                        </>
+                      ) : (
+                        <TurnedOff />
+                      )}
+                    </span>
+                    <Button variant="secondary" className="max-md:w-full" onClick={() => setPersonDialog(p)}>
+                      Change
+                    </Button>
+                  </Row>
+                );
+              })
+            )}
+          </Panel>
 
-      {demoMode && <ClearDemoCustomers />}
+          {operator ? <BusinessCard operator={operator} onSaveField={saveOperatorField} /> : <Panel><LoadingState rows={2} /></Panel>}
+
+          {demoMode && <ClearDemoCustomers />}
+        </>
+      )}
 
       <BoatDialog
         open={boatDialog !== null}
@@ -423,7 +443,7 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
       <TripTypeDialog
         open={tripTypeDialog !== null}
         busy={busy}
-        vessels={vesselOptions}
+        vessels={tripTypeVesselOptions}
         initial={tripTypeDialogInitial}
         onClose={() => setTripTypeDialog(null)}
         onConfirm={submitTripType}
@@ -440,6 +460,118 @@ export default function SettingsClient({ demoMode }: { demoMode: boolean }) {
   );
 }
 
+function SectionHead({ id, title, children }: { id: string; title: string; children?: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b-2 border-ob-rule max-md:px-4">
+      <h2 id={id} className="text-title-panel">
+        {title}
+      </h2>
+      {children}
+    </div>
+  );
+}
+
+function Row({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4 border-t border-ob-hair [&:nth-child(2)]:border-t-0 max-md:px-4">
+      {children}
+    </div>
+  );
+}
+
+/** Turned-off boats, trip types and people: a hollow light and the words, not dimmed opacity. */
+function TurnedOff() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-meta font-bold text-ob-ink-2">
+      <Lamp tone="ink-2" shape="hollow" size={10} />
+      Turned off
+    </span>
+  );
+}
+
+function TripTypes({ products, onChange }: { products: Product[]; onChange: (p: Product) => void }) {
+  const { density } = useDensity();
+  const cellY = density === "dock" ? "py-3" : "py-1.5";
+  // The table needs ~950px; below 1280 (tablets, small laptops) use the cards.
+  const th = "py-2.5 px-3 text-meta font-bold text-ob-ink-2 whitespace-nowrap";
+  return (
+    <>
+      <table className="w-full border-collapse text-body-sm max-xl:hidden">
+        <thead>
+          <tr className="bg-ob-panel-2 text-left">
+            <th scope="col" className={`${th} pl-5`}>Trip</th>
+            <th scope="col" className={th}>Fish</th>
+            <th scope="col" className={th}>Boat</th>
+            <th scope="col" className={`${th} text-right`}>Adult</th>
+            <th scope="col" className={`${th} text-right`}>Child</th>
+            <th scope="col" className={`${th} text-right`}>Senior</th>
+            <th scope="col" className={th}>Seats shown?</th>
+            <th scope="col" className={`${th} pr-5`}>
+              <span className="sr-only">Change</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {products.map((p) => (
+            <tr key={p.id} className={`border-t border-ob-hair ${p.active ? "" : "text-ob-ink-2"}`}>
+              <td className={`${cellY} pl-5 pr-3 font-bold`}>
+                {p.displayName}
+                {!p.active && (
+                  <div className="font-normal">
+                    <TurnedOff />
+                  </div>
+                )}
+              </td>
+              <td className={`${cellY} px-3`}>{p.category}</td>
+              <td className={`${cellY} px-3 whitespace-nowrap`}>
+                <span className="inline-flex items-center gap-2">
+                  <BoatSwatch color={p.vessel.color} size="sm" />
+                  {p.vessel.name}
+                </span>
+              </td>
+              <td className={`${cellY} px-3 font-num text-right`}>{fmtMoney(priceOf(p, "adult"))}</td>
+              <td className={`${cellY} px-3 font-num text-right`}>{fmtMoney(priceOf(p, "child"))}</td>
+              <td className={`${cellY} px-3 font-num text-right`}>{fmtMoney(priceOf(p, "senior"))}</td>
+              <td className={`${cellY} px-3`}>{p.showRemaining ? "Yes" : "No"}</td>
+              <td className={`${cellY} pl-3 pr-5 text-right`}>
+                <Button variant="secondary" onClick={() => onChange(p)} aria-label={`Change ${p.displayName}`}>
+                  Change
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div role="list" className="xl:hidden">
+        {products.map((p) => (
+          <div role="listitem" key={p.id} className="flex flex-col gap-2 px-4 py-3.5 border-t border-ob-hair first:border-t-0">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className={`text-17 font-bold ${p.active ? "" : "text-ob-ink-2"}`}>{p.displayName}</span>
+              <span className="text-body-sm text-ob-ink-2">{p.category}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-body-sm text-ob-ink-2">
+              <BoatSwatch color={p.vessel.color} size="sm" />
+              {p.vessel.name} · Seats shown: {p.showRemaining ? "Yes" : "No"}
+              {!p.active && <TurnedOff />}
+            </div>
+            <div className="grid grid-cols-[repeat(3,1fr)_auto] gap-2 items-end">
+              {(["adult", "child", "senior"] as const).map((t) => (
+                <div key={t}>
+                  <div className="text-meta text-ob-ink-3 capitalize">{t}</div>
+                  <div className="font-num text-17">{fmtMoney(priceOf(p, t))}</div>
+                </div>
+              ))}
+              <Button variant="secondary" onClick={() => onChange(p)} aria-label={`Change ${p.displayName}`}>
+                Change
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 function BusinessCard({
   operator,
   onSaveField,
@@ -448,13 +580,27 @@ function BusinessCard({
   onSaveField: (field: keyof Operator, value: string | number | null) => Promise<boolean>;
 }) {
   return (
-    <Card>
-      <CardHeader title="Your business" subtitle="Changes save as you make them." />
-      <CardRow className="grid sm:grid-cols-2 gap-4">
+    <Panel id="set-biz" aria-labelledby="sz-h" className="scroll-mt-20">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-5 py-3.5 border-b-2 border-ob-rule max-md:px-4">
+        <h2 id="sz-h" className="text-title-panel">
+          Your business
+        </h2>
+        <span className="text-body-sm text-ob-ink-2">Changes save as you make them.</span>
+      </div>
+      <div className="grid grid-cols-2 max-md:grid-cols-1 gap-x-5 gap-y-[18px] p-5 max-md:px-4">
         <AutoSaveField label="Business name" field="name" value={operator.name} onSave={onSaveField} />
         <AutoSaveField label="Phone" field="phone" value={operator.phone ?? ""} onSave={onSaveField} />
         <AutoSaveField label="Booking email" field="emailFrom" value={operator.emailFrom} onSave={onSaveField} />
         <AutoSaveField label="Dock address" field="dockAddress" value={operator.dockAddress ?? ""} onSave={onSaveField} />
+        <AutoSaveField
+          label="Dock Google Maps link"
+          field="dockMapsUrl"
+          type="url"
+          value={operator.dockMapsUrl ?? ""}
+          placeholder="https://maps.google.com/…"
+          help="Customers get it as “Get directions” on their booking and boarding pass."
+          onSave={onSaveField}
+        />
         <AutoSaveField
           label="How early to arrive (minutes)"
           field="arriveMinutesBefore"
@@ -469,30 +615,25 @@ function BusinessCard({
           value={operator.cancelWindowHrs}
           onSave={onSaveField}
         />
-        <div>
-          <AutoSaveField
-            label="Stop online sales (minutes before departure)"
-            field="onlineCutoffMinutes"
-            type="number"
-            value={operator.onlineCutoffMinutes}
-            onSave={onSaveField}
-          />
-          <p className="mt-1 text-12 text-merchant-faint">
-            Applies to every trip unless the trip sets its own. 0 = sell until departure.
-          </p>
-        </div>
-        <div className="sm:col-span-2">
-          <AutoSaveField
-            label="Refund & cancellation policy link"
-            field="termsUrl"
-            value={operator.termsUrl ?? ""}
-            placeholder="https://…"
-            onSave={onSaveField}
-          />
-          <p className="mt-1 text-12 text-merchant-faint">Shown to customers on their boarding pass.</p>
-        </div>
-      </CardRow>
-    </Card>
+        <AutoSaveField
+          label="Stop online sales (minutes before departure)"
+          field="onlineCutoffMinutes"
+          type="number"
+          value={operator.onlineCutoffMinutes}
+          help="Applies to every trip unless the trip sets its own. 0 = sell until departure."
+          onSave={onSaveField}
+        />
+        <AutoSaveField
+          label="Refund & cancellation policy link"
+          field="termsUrl"
+          value={operator.termsUrl ?? ""}
+          placeholder="https://…"
+          help="Shown to customers on their boarding pass."
+          wide
+          onSave={onSaveField}
+        />
+      </div>
+    </Panel>
   );
 }
 
@@ -502,6 +643,8 @@ function AutoSaveField({
   value,
   type = "text",
   placeholder,
+  help,
+  wide = false,
   onSave,
 }: {
   label: string;
@@ -509,6 +652,9 @@ function AutoSaveField({
   value: string | number;
   type?: string;
   placeholder?: string;
+  help?: string;
+  /** Span both columns. */
+  wide?: boolean;
   onSave: (field: keyof Operator, value: string | number | null) => Promise<boolean>;
 }) {
   const [local, setLocal] = useState(String(value));
@@ -528,20 +674,33 @@ function AutoSaveField({
     setTimeout(() => setSaved(false), 1500);
   }
 
+  const id = `biz-${field}`;
   return (
-    <div>
-      <Label htmlFor={`biz-${field}`}>{label}</Label>
-      <div className="relative">
-        <Input
-          id={`biz-${field}`}
-          type={type}
-          value={local}
-          placeholder={placeholder}
-          onChange={(e) => setLocal(e.target.value)}
-          onBlur={commit}
-        />
-        {saved && <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-12 text-merchant-green">Saved</span>}
+    <div className={`min-w-0 ${wide ? "col-span-2 max-md:col-span-1" : ""}`}>
+      <div className="flex items-baseline justify-between gap-2 mb-1.5">
+        <label htmlFor={id} className="text-body-sm font-bold">
+          {label}
+        </label>
+        <span role="status" className="inline-flex items-center gap-1.5 text-meta font-bold text-ob-go-ink">
+          {saved && (
+            <>
+              <Lamp tone="go" size={8} />
+              Saved
+            </>
+          )}
+        </span>
       </div>
+      <Input
+        id={id}
+        type={type}
+        inputMode={type === "number" ? "numeric" : undefined}
+        value={local}
+        placeholder={placeholder}
+        aria-describedby={help ? `${id}-help` : undefined}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={commit}
+      />
+      {help && <HelpText id={`${id}-help`}>{help}</HelpText>}
     </div>
   );
 }

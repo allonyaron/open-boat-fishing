@@ -38,8 +38,3 @@ export function DensityProvider({ children }: { children: ReactNode }) {
 export function useDensity() {
   return useContext(DensityContext);
 }
-
-/** Minimum interactive-target height for the current density. */
-export function densityMinHeight(density: Density): string {
-  return density === "dock" ? "46px" : "38px";
-}

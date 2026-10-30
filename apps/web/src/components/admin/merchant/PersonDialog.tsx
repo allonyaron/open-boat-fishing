@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
-import { Input, Label, Select, Toggle } from "./Input";
+import { HelpText, Input, Label, Select } from "./Input";
+import { ActiveSwitch, Segmented } from "./Controls";
 import type { VesselOption } from "./TripTypeDialog";
 
 export type PersonInput = {
@@ -59,96 +60,86 @@ export function PersonDialog({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
+          <Button variant="key" className="px-6" disabled={busy || !canSave} onClick={() => onConfirm(form)}>
             {isEdit ? "Save person" : "Add person"}
           </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-4">
-        <div>
-          <Label htmlFor="person-name">Name</Label>
-          <Input id="person-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-        </div>
-        <div>
-          <Label htmlFor="person-email">Email</Label>
-          <Input
-            id="person-email"
-            type="email"
-            value={form.email}
-            disabled={isEdit}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            className={isEdit ? "bg-merchant-fill text-merchant-faint" : ""}
-          />
-          {isEdit && <p className="mt-1 text-12 text-merchant-faint">Email can&rsquo;t be changed after the account is created.</p>}
-        </div>
-
-        <div>
-          <div className="text-13 text-merchant-ink mb-1.5">Role</div>
-          {isEdit ? (
-            <div className="text-14 text-merchant-ink font-semibold capitalize">{form.role}</div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {(["admin", "mate"] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, role: r, vesselId: r === "admin" ? null : f.vesselId }))}
-                  style={{ minHeight: "46px" }}
-                  className={`rounded-lg text-14 font-semibold capitalize transition-colors ${
-                    form.role === r
-                      ? "bg-merchant-chrome-mid text-white"
-                      : "bg-merchant-fill-3 text-merchant-ink"
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {form.role === "mate" && (
-          <div>
-            <Label htmlFor="person-boat">Boat</Label>
-            <Select
-              id="person-boat"
-              value={form.vesselId ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, vesselId: e.target.value || null }))}
-            >
-              <option value="">Any boat</option>
-              {vessels.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-        )}
-
-        <div>
-          <Label htmlFor="person-secret">{secretLabel}</Label>
-          <Input
-            id="person-secret"
-            type={form.role === "admin" ? "password" : "text"}
-            inputMode={form.role === "mate" ? "numeric" : undefined}
-            value={form.secret}
-            onChange={(e) => setForm((f) => ({ ...f, secret: e.target.value }))}
-            placeholder={
-              isEdit
-                ? "Leave this blank to keep the one they have"
-                : form.role === "admin"
-                  ? "At least 8 characters"
-                  : "4–8 digits"
-            }
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="text-13 text-merchant-ink">Active</div>
-          <Toggle checked={form.active} onChange={(v) => setForm((f) => ({ ...f, active: v }))} label="Active" />
-        </div>
+      <div>
+        <Label htmlFor="person-name">Name</Label>
+        <Input id="person-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
       </div>
+      <div>
+        <Label htmlFor="person-email">Email</Label>
+        <Input
+          id="person-email"
+          type="email"
+          value={form.email}
+          disabled={isEdit}
+          aria-describedby={isEdit ? "person-email-help" : undefined}
+          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+        />
+        {isEdit && <HelpText id="person-email-help">Email can&rsquo;t be changed after the account is created.</HelpText>}
+      </div>
+
+      <div>
+        <div className="text-body-sm font-bold mb-1.5">Role</div>
+        {isEdit ? (
+          <div className="text-body font-bold capitalize">{form.role}</div>
+        ) : (
+          <Segmented
+            label="Role"
+            size="dock"
+            fill
+            value={form.role}
+            onChange={(r) => setForm((f) => ({ ...f, role: r, vesselId: r === "admin" ? null : f.vesselId }))}
+            options={[
+              { value: "admin", label: "Admin" },
+              { value: "mate", label: "Mate" },
+            ]}
+          />
+        )}
+      </div>
+
+      {form.role === "mate" && (
+        <div>
+          <Label htmlFor="person-boat">Boat</Label>
+          <Select
+            id="person-boat"
+            value={form.vesselId ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, vesselId: e.target.value || null }))}
+          >
+            <option value="">Any boat</option>
+            {vessels.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+
+      <div>
+        <Label htmlFor="person-secret">{secretLabel}</Label>
+        <Input
+          id="person-secret"
+          type={form.role === "admin" ? "password" : "text"}
+          inputMode={form.role === "mate" ? "numeric" : undefined}
+          numeric={form.role === "mate"}
+          value={form.secret}
+          onChange={(e) => setForm((f) => ({ ...f, secret: e.target.value }))}
+          placeholder={
+            isEdit
+              ? "Leave this blank to keep the one they have"
+              : form.role === "admin"
+                ? "At least 8 characters"
+                : "4–8 digits"
+          }
+        />
+      </div>
+
+      <ActiveSwitch id="person-active" checked={form.active} onChange={(v) => setForm((f) => ({ ...f, active: v }))} />
     </Dialog>
   );
 }

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { fmtTimeCompactET, fmtLongDateET, fmtLongMonthDayET } from "@/lib/format";
 import { todayET } from "@/lib/date-et";
 import {
-  Card,
+  Panel,
   Button,
   TripList,
   useToast,
@@ -15,6 +15,14 @@ import {
   AddDepartureDialog,
   type TripRowData,
   type ProductOption,
+  ErrorState,
+  EmptyState,
+  LoadingState,
+  Lamp,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PlusIcon,
+  BoatSwatch,
 } from "@/components/admin/merchant";
 
 type DialogState =
@@ -88,7 +96,8 @@ export default function CalendarPage() {
   useEffect(() => {
     fetch("/api/admin/settings/products")
       .then((r) => (r.ok ? r.json() : []))
-      .then(setProducts)
+      // Turned-off trip types aren't offered for new departures.
+      .then((all) => setProducts(all.filter((p: ProductOption & { active: boolean }) => p.active)))
       .catch(() => {});
   }, []);
 
@@ -118,7 +127,7 @@ export default function CalendarPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't cancel the trip.");
+        showToast(body.error ?? "Couldn't cancel the trip.", "error");
         return;
       }
       showToast(
@@ -143,7 +152,7 @@ export default function CalendarPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't update seats.");
+        showToast(body.error ?? "Couldn't update seats.", "error");
         return;
       }
       showToast(`Trip updated — ${settings.capacity} seats.`);
@@ -169,7 +178,7 @@ export default function CalendarPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        showToast(body.error ?? "Couldn't add the departure.");
+        showToast(body.error ?? "Couldn't add the departure.", "error");
         return;
       }
       showToast("Departure added.");
@@ -180,25 +189,12 @@ export default function CalendarPage() {
     }
   }
 
-  if (error) {
-    return (
-      <div className="rounded-xl border border-merchant-red-tint bg-[#fff8f7] p-5">
-        <div className="text-14 font-semibold text-merchant-red">Can&rsquo;t reach the booking system</div>
-        <p className="mt-1 text-13 text-merchant-muted">
-          Your trips are safe — this screen just can&rsquo;t load them right now.
-        </p>
-        <Button variant="secondary" className="mt-3" onClick={load}>
-          Try again
-        </Button>
-      </div>
-    );
-  }
-
   const actions = {
     onWhosComing: (tripId: string) => router.push(`/admin/trips/${tripId}/passengers`),
     onSeats: (tripId: string) => {
       const trip = selectedTrips.find((t) => t.id === tripId);
-      if (trip) setDialog({
+      if (trip)
+        setDialog({
           type: "seats",
           tripId,
           currentCapacity: trip.capacity,
@@ -208,21 +204,31 @@ export default function CalendarPage() {
     onCancel: (tripId: string) => setDialog({ type: "cancel", tripId }),
   };
 
+  const dialogTrip =
+    dialog && dialog.type !== "addDeparture" ? selectedTrips.find((t) => t.id === dialog.tripId) ?? null : null;
+
   const seatsBooked = selectedLive.reduce((s, t) => s + t.ticketsSold, 0);
   const seatsTotal = selectedLive.reduce((s, t) => s + t.capacity, 0);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-20 font-bold text-merchant-ink" style={{ letterSpacing: "-0.01em" }}>
-          {monthLabel(cursor)}
-        </h1>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setCursor(shiftMonth(cursor, -1))}>
-            ← Prev
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h1 className="text-title-page">{monthLabel(cursor)}</h1>
+        <div className="flex gap-2 max-md:w-full">
+          <Button
+            variant="secondary"
+            size="dock"
+            icon={<ChevronLeftIcon size={18} />}
+            aria-label="Prev month"
+            className="max-md:flex-1 px-3.5"
+            onClick={() => setCursor(shiftMonth(cursor, -1))}
+          >
+            Prev
           </Button>
           <Button
             variant="secondary"
+            size="dock"
+            className="max-md:flex-1"
             onClick={() => {
               setCursor(today.slice(0, 7));
               setSelected(today);
@@ -230,91 +236,93 @@ export default function CalendarPage() {
           >
             Today
           </Button>
-          <Button variant="secondary" onClick={() => setCursor(shiftMonth(cursor, 1))}>
-            Next →
+          <Button
+            variant="secondary"
+            size="dock"
+            iconAfter={<ChevronRightIcon size={18} />}
+            aria-label="Next month"
+            className="max-md:flex-1 px-3.5"
+            onClick={() => setCursor(shiftMonth(cursor, 1))}
+          >
+            Next
           </Button>
         </div>
       </div>
 
-      <Card>
-        <div className="grid grid-cols-7">
-          {WEEKDAY_HEADERS.map((d) => (
-            <div key={d} className="text-12 font-semibold text-merchant-muted text-center py-2 border-b border-merchant-hairline">
-              {d}
-            </div>
-          ))}
-          {gridDates.map((date) => {
-            const dayTrips = tripsByDate.get(date) ?? [];
-            const liveDayTrips = dayTrips.filter((t) => t.status !== "cancelled");
-            const inMonth = date.slice(0, 7) === cursor;
-            const isToday = date === today;
-            const isSelected = date === selected;
-            const hasFlag = dayTrips.some((t) => t.status === "cancelled" || t.scheduleId === null);
-            const dayNum = Number(date.slice(-2));
-            return (
-              <button
-                key={date}
-                onClick={() => setSelected(date)}
-                className={`min-h-[92px] p-1.5 text-left border-b border-r border-merchant-hairline last:border-r-0 [&:nth-child(7n)]:border-r-0 ${
-                  isSelected ? "bg-merchant-fill-2" : "bg-white hover:bg-merchant-fill"
-                } ${!inMonth ? "opacity-40" : ""}`}
-                style={isSelected ? { boxShadow: "inset 0 0 0 2px #303030" } : isToday ? { boxShadow: "inset 0 0 0 1px #005bd3" } : undefined}
-              >
-                <div className="flex items-center justify-between">
-                  <span className={`text-13 font-semibold tabular-nums ${isToday ? "text-merchant-blue" : "text-merchant-ink"}`}>
-                    {dayNum}
-                  </span>
-                  {hasFlag && <span className="w-1.5 h-1.5 rounded-full bg-merchant-amber" />}
-                </div>
-                <div className="flex flex-col gap-0.5 mt-1">
-                  {liveDayTrips.slice(0, 3).map((t) => (
-                    <div key={t.id} className="text-11 bg-merchant-fill-3 rounded-[6px] px-1 py-0.5 truncate">
-                      {fmtTimeCompactET(t.startTime)} {t.vessel.name}
-                    </div>
-                  ))}
-                  {liveDayTrips.length > 3 && (
-                    <div className="text-11 text-merchant-faint px-1">+{liveDayTrips.length - 3} more</div>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </Card>
+      {error ? (
+        <ErrorState onRetry={load} body={<>Your trips are safe — this screen just can&rsquo;t load them right now.</>} />
+      ) : (
+        <>
+          <MonthGrid
+            label={monthLabel(cursor)}
+            dates={gridDates}
+            cursor={cursor}
+            today={today}
+            selected={selected}
+            tripsByDate={tripsByDate}
+            onPick={setSelected}
+          />
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-meta text-ob-ink-2">
+            <span className="inline-flex items-center gap-2">
+              <Lamp tone="alert" size={10} />A trip was cancelled
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <Lamp tone="ink" shape="dashed" size={10} />
+              One-off departure added
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span aria-hidden="true" className="w-[18px] h-1 bg-ob-ink-2" />
+              How full the day is
+            </span>
+          </div>
 
-      <Card>
-        <div className="px-4 py-3.5 flex flex-wrap items-center justify-between gap-3 border-b border-merchant-hairline">
-          <div>
-            <div className="text-15 font-bold text-merchant-ink">{fmtLongDateET(selected)}</div>
-            <div className="text-13 text-merchant-muted">
-              {selectedLive.length} going out · {seatsBooked} of {seatsTotal} seats booked
+          <Panel aria-labelledby="day-h">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4 border-b-2 border-ob-rule max-md:px-4">
+              <div className="flex flex-col gap-0.5">
+                <h2 id="day-h" className="text-title-panel">
+                  {fmtLongDateET(selected)}
+                </h2>
+                {trips && (
+                  <div className="text-body-sm text-ob-ink-2">
+                    {selectedLive.length} going out · {seatsBooked} of {seatsTotal} seats booked
+                  </div>
+                )}
+              </div>
+              <Button
+                variant="key"
+                size="dock"
+                icon={<PlusIcon />}
+                className="max-md:w-full"
+                onClick={() => setDialog({ type: "addDeparture" })}
+              >
+                Add a departure for this day
+              </Button>
             </div>
-          </div>
-          <Button variant="secondary" onClick={() => setDialog({ type: "addDeparture" })}>
-            Add a departure for this day
-          </Button>
-        </div>
-        {selectedTrips.length === 0 ? (
-          <div className="px-4 py-8 text-center">
-            <div className="text-14 font-semibold text-merchant-ink">Nothing going out this day.</div>
-            <div className="text-13 text-merchant-muted mt-1">
-              Either it isn&rsquo;t in your weekly schedule, or every trip was cancelled.
-            </div>
-          </div>
-        ) : (
-          <TripList trips={selectedTrips} actions={actions} />
-        )}
-      </Card>
+            {!trips ? (
+              <LoadingState label="Loading this day’s trips…" />
+            ) : selectedTrips.length === 0 ? (
+              <EmptyState
+                title="Nothing going out this day."
+                body={<>Either it isn&rsquo;t in your weekly schedule, or every trip was cancelled.</>}
+              />
+            ) : (
+              <TripList trips={selectedTrips} actions={actions} />
+            )}
+          </Panel>
+        </>
+      )}
 
       <CancelDialog
         open={dialog?.type === "cancel"}
         busy={busy}
+        trip={dialogTrip}
         onClose={() => setDialog(null)}
         onConfirm={(reason) => dialog?.type === "cancel" && submitCancel(dialog.tripId, reason)}
       />
       <SeatsDialog
         open={dialog?.type === "seats"}
         busy={busy}
+        trip={dialogTrip}
         currentCapacity={dialog?.type === "seats" ? dialog.currentCapacity : 0}
         currentCutoffMinutes={dialog?.type === "seats" ? dialog.currentCutoffMinutes : null}
         onClose={() => setDialog(null)}
@@ -331,3 +339,124 @@ export default function CalendarPage() {
     </div>
   );
 }
+
+/** The fill bar follows the trip-light colours: past days ink-3, full go, 70%+ caution, else ink-2. */
+function dayFill(ratio: number, dim: boolean): string {
+  if (dim) return "bg-ob-ink-3";
+  if (ratio >= 1) return "bg-ob-go";
+  if (ratio >= 0.7) return "bg-ob-caution";
+  return "bg-ob-ink-2";
+}
+
+function MonthGrid({
+  label,
+  dates,
+  cursor,
+  today,
+  selected,
+  tripsByDate,
+  onPick,
+}: {
+  label: string;
+  dates: string[];
+  cursor: string;
+  today: string;
+  selected: string;
+  tripsByDate: Map<string, TripRowData[]>;
+  onPick: (date: string) => void;
+}) {
+  return (
+    <div className="bg-ob-panel border-2 border-ob-rule rounded-ob overflow-hidden">
+      <div aria-hidden="true" className="grid grid-cols-7 border-b-2 border-ob-rule bg-ob-panel-2">
+        {WEEKDAY_HEADERS.map((d) => (
+          <div key={d} className="py-2 px-2.5 max-md:px-1 text-meta font-bold text-ob-ink-2">
+            <span className="max-md:hidden">{d}</span>
+            <span className="md:hidden">{d.charAt(0)}</span>
+          </div>
+        ))}
+      </div>
+      <div role="group" aria-label={label} className="grid grid-cols-7">
+        {dates.map((date, i) => {
+          const dayTrips = tripsByDate.get(date) ?? [];
+          const live = dayTrips.filter((t) => t.status !== "cancelled").sort((a, b) => a.startTime.localeCompare(b.startTime));
+          const sold = live.reduce((s, t) => s + t.ticketsSold, 0);
+          const cap = live.reduce((s, t) => s + t.capacity, 0);
+          const ratio = cap ? sold / cap : 0;
+          const pct = Math.min(100, Math.round(ratio * 100));
+          const inMonth = date.slice(0, 7) === cursor;
+          const past = date < today;
+          // Days outside the month and days gone by are dimmed with ink-3, not
+          // opacity, so their text keeps AA contrast.
+          const dim = past || !inMonth;
+          const isToday = date === today;
+          const isSelected = date === selected;
+          const cancelled = dayTrips.some((t) => t.status === "cancelled");
+          const added = dayTrips.some((t) => t.scheduleId === null);
+          // Accessible name = "Saturday, October" + the visible day number + a
+          // spoken summary; the chips, count and bar are decorative repeats.
+          const [weekday, monthDay] = fmtLongDateET(date).split(", ");
+          const spoken =
+            ": " +
+            (live.length ? `${live.length} going out, ${sold} of ${cap} booked` : "nothing going out") +
+            (cancelled ? ", a trip was cancelled" : "") +
+            (added ? ", a one-off departure was added" : "");
+          return (
+            <button
+              key={date}
+              type="button"
+              aria-pressed={isSelected}
+              onClick={() => onPick(date)}
+              className={`relative flex flex-col items-stretch gap-1 min-h-[148px] max-md:min-h-16 py-2 px-2.5 max-md:py-1.5 max-md:px-1 text-left text-ob-ink border-b border-ob-hair ${
+                i % 7 === 6 ? "" : "border-r"
+              } ${isSelected ? "bg-ob-panel-2 shadow-[inset_0_0_0_3px_var(--ob-ink)]" : "hover:bg-ob-panel-2"}`}
+            >
+              <div className="flex items-center justify-between gap-1">
+                <span className="sr-only">{`${weekday}, ${monthDay.replace(/\s*\d+$/, "")} `}</span>
+                <span
+                  className={`inline-flex items-center justify-center min-w-7 h-[26px] px-1 font-num text-body font-semibold rounded-lamp ${
+                    isToday ? "bg-ob-key text-ob-key-ink" : dim ? "text-ob-ink-3" : "text-ob-ink"
+                  }`}
+                >
+                  {Number(date.slice(-2))}
+                </span>
+                <span className="sr-only">{spoken}</span>
+                {cancelled ? (
+                  <Lamp tone="alert" size={10} />
+                ) : added ? (
+                  <Lamp tone="ink" shape="dashed" size={10} />
+                ) : null}
+              </div>
+              <div aria-hidden="true" className="max-md:hidden flex flex-col gap-1">
+                {live.slice(0, 3).map((t) => (
+                  <div
+                    key={t.id}
+                    className={`flex items-center gap-1.5 text-meta leading-tight whitespace-nowrap overflow-hidden ${dim ? "text-ob-ink-3" : "text-ob-ink"}`}
+                  >
+                    <BoatSwatch color={t.vessel.color} size="xs" />
+                    <span className="font-num">{fmtTimeCompactET(t.startTime)}</span>
+                    <span className="truncate">{t.vessel.name}</span>
+                  </div>
+                ))}
+                {live.length > 3 && <div className="text-meta text-ob-ink-3">+{live.length - 3} more</div>}
+              </div>
+              {live.length > 0 && (
+                <div aria-hidden="true" className="md:hidden font-num text-meta text-ob-ink-2">
+                  {live.length}
+                </div>
+              )}
+              {live.length > 0 && (
+                <div aria-hidden="true" className="mt-auto flex items-center gap-1.5">
+                  <div className="flex-1 h-1 bg-ob-panel-2 shadow-[inset_0_0_0_1px_var(--ob-hair)]">
+                    <div className={`h-full ${dayFill(ratio, dim)}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="max-md:hidden font-num text-meta text-ob-ink-3">{pct}%</span>
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
