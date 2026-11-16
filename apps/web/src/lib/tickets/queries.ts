@@ -23,7 +23,8 @@ export const holdsSeat: SQL = or(
   eq(tickets.status, "disputed"),
 )!;
 
-function ticketsOnTrip(tripId: SQL | AnyColumn, filter: SQL) {
+/** Correlated count of a trip's tickets matching `filter`, for select lists. */
+export function countTicketsOnTrip(tripId: SQL | AnyColumn, filter: SQL) {
   return sql<number>`(
     select cast(count(*) as int) from ${tickets}
     join ${bookingItems} on ${bookingItems.id} = ${tickets.bookingItemId}
@@ -33,10 +34,10 @@ function ticketsOnTrip(tripId: SQL | AnyColumn, filter: SQL) {
 
 /** Correlated count of a trip's live tickets ("sold"), for select lists. */
 export function liveTicketCount(tripId: SQL | AnyColumn) {
-  return ticketsOnTrip(tripId, isLive);
+  return countTicketsOnTrip(tripId, isLive);
 }
 
 /** Correlated count of the seats a trip's tickets take, for capacity floors. */
 export function seatHoldingTicketCount(tripId: SQL | AnyColumn) {
-  return ticketsOnTrip(tripId, holdsSeat);
+  return countTicketsOnTrip(tripId, holdsSeat);
 }

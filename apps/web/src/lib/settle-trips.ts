@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { operators, trips, bookingItems, tickets } from "@openboat/db";
 import { and, eq, inArray, lt } from "drizzle-orm";
+import { isLive } from "@/lib/tickets/queries";
 
 /**
  * Lazy sail-signal: called before any revenue read. Two-step transition:
@@ -69,7 +70,8 @@ export async function settleTrips(operatorId: string): Promise<{ settled: number
           and(
             inArray(tickets.bookingItemId, itemIds),
             eq(tickets.feeStatus, "held"),
-            eq(tickets.voided, false),
+            // Only paid tickets earn: an unpaid hold's fee was never charged.
+            isLive,
           ),
         );
     }

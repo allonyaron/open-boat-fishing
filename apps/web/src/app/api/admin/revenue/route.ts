@@ -3,9 +3,12 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { settleTrips } from "@/lib/settle-trips";
 import { trips, vessels, products, bookingItems, tickets } from "@openboat/db";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { isLive } from "@/lib/tickets/queries";
 
 export const dynamic = "force-dynamic";
+
+const wasCharged = inArray(tickets.status, ["refunded", "disputed"]);
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
@@ -32,12 +35,15 @@ export async function GET(req: NextRequest) {
       vesselName: vessels.name,
       vesselColor: vessels.color,
       productName: products.displayName,
-      earnedCount: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'earned' and not ${tickets.voided} then 1 else 0 end) as int)`,
-      heldCount: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'held'   and not ${tickets.voided} then 1 else 0 end) as int)`,
-      reversedCount: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'reversed' then 1 else 0 end) as int)`,
-      earnedCents: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'earned' and not ${tickets.voided} then ${tickets.feeAmountCents} else 0 end) as int)`,
-      heldCents: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'held'   and not ${tickets.voided} then ${tickets.feeAmountCents} else 0 end) as int)`,
-      reversedCents: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'reversed' then ${tickets.feeAmountCents} else 0 end) as int)`,
+      // Earned and held count paid tickets only. Reversed counts fees that were
+      // charged and given back; an unpaid hold's fee was never charged, so its
+      // voided ticket isn't a reversal.
+      earnedCount: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'earned' and ${isLive} then 1 else 0 end) as int)`,
+      heldCount: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'held' and ${isLive} then 1 else 0 end) as int)`,
+      reversedCount: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'reversed' and ${wasCharged} then 1 else 0 end) as int)`,
+      earnedCents: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'earned' and ${isLive} then ${tickets.feeAmountCents} else 0 end) as int)`,
+      heldCents: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'held' and ${isLive} then ${tickets.feeAmountCents} else 0 end) as int)`,
+      reversedCents: sql<number>`cast(sum(case when ${tickets.feeStatus} = 'reversed' and ${wasCharged} then ${tickets.feeAmountCents} else 0 end) as int)`,
     })
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))

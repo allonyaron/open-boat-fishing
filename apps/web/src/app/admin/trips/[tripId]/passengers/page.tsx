@@ -35,6 +35,7 @@ import { BookingListDeskPhone, BookingListDock, BookingTableDesk, type Passenger
 import { PrintSheet } from "./PrintSheet";
 import {
   bookingName,
+  isLiveTicket,
   keepTicket,
   ticketLabel,
   TICKET_LABEL,
@@ -200,11 +201,11 @@ export default function PassengerListPage() {
   };
 
   const allTickets = bookings?.flatMap((b) => b.tickets) ?? [];
-  const liveTickets = allTickets.filter((t) => !t.voided);
+  const liveTickets = allTickets.filter(isLiveTicket);
   const checkedInCount = liveTickets.filter((t) => t.checkedIn).length;
   const waitingCount = liveTickets.length - checkedInCount;
-  const paidCents = liveTickets.reduce((s, t) => s + t.priceCents, 0);
-  const refundedCount = allTickets.length - liveTickets.length;
+  const paidCents = (bookings ?? []).reduce((s, b) => s + b.paidCents, 0);
+  const refundedCount = allTickets.filter((t) => t.status === "refunded" || t.status === "disputed").length;
 
   const shown: ShownBooking[] = (bookings ?? [])
     .map((booking) => ({ booking, tickets: booking.tickets.filter((t) => keepTicket(filter, t)) }))

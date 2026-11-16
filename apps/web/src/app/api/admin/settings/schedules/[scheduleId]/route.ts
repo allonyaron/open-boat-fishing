@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
-import { schedules, trips, products, bookingItems, tickets } from "@openboat/db";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { schedules, trips, products } from "@openboat/db";
+import { and, eq, gte, inArray } from "drizzle-orm";
+import { seatHoldingTicketCount } from "@/lib/tickets/queries";
 import {
   type DayOfWeek,
   VALID_DAYS,
@@ -106,21 +107,23 @@ export async function PATCH(
     .returning();
 
   // Every not-yet-departed trip currently on the calendar for this pattern,
-  // with how many live tickets it has.
+  // with how many seats its tickets take (unpaid holds included: a customer
+  // may be paying for one right now).
   const currentRows = await db
     .select({
       id: trips.id,
       departureDate: trips.departureDate,
       status: trips.status,
-      ticketsSold: sql<number>`(
-        select cast(count(*) as int) from ${tickets} t
-        join ${bookingItems} bi on bi.id = t.booking_item_id
-        where bi.trip_id = trips.id
-          and t.voided = false
-      )`.as("tickets_sold"),
+      ticketsSold: seatHoldingTicketCount(trips.id).as("tickets_sold"),
     })
     .from(trips)
-    .where(and(eq(trips.scheduleId, scheduleId), gte(trips.departureDate, today)));
+    .where(
+      and(
+        eq(trips.scheduleId, scheduleId),
+        eq(trips.operatorId, session.operatorId),
+        gte(trips.departureDate, today),
+      ),
+    );
 
   const coveredDates = new Set(currentRows.map((r) => r.departureDate));
 

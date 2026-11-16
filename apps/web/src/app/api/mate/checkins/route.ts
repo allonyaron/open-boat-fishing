@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireMate } from "@/lib/mate-auth";
 import { tickets, checkIns, bookingItems } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
+import { isTicketLive } from "@/lib/tickets/status";
 
 type CheckInEvent = {
   localId: string;
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
     }
 
     const [ticket] = await db
-      .select({ id: tickets.id, voided: tickets.voided })
+      .select({ id: tickets.id, status: tickets.status, voided: tickets.voided })
       .from(tickets)
       .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
       .where(
@@ -56,7 +57,9 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    if (ticket.voided) {
+    // Unpaid (held) tickets are rejected too. Same error code, because
+    // installed mate builds retry any code they don't know forever.
+    if (!isTicketLive(ticket)) {
       results.push({ localId, ok: false, error: "ticket_voided" });
       continue;
     }

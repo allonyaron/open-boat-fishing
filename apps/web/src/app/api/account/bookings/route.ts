@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/customer-auth";
 import { bookings, bookingItems, tickets, trips, vessels, products } from "@openboat/db";
 import { and, eq, inArray, desc } from "drizzle-orm";
+import { isTicketLive } from "@/lib/tickets/status";
 
 export async function GET(req: NextRequest) {
   const auth = await requireCustomer(req);
@@ -47,10 +48,11 @@ export async function GET(req: NextRequest) {
         bookingItemId: tickets.bookingItemId,
         ticketType: tickets.ticketType,
         priceCents: tickets.priceCents,
+        status: tickets.status,
         voided: tickets.voided,
       })
       .from(tickets)
-      .where(inArray(tickets.bookingId, bookingIds)),
+      .where(and(inArray(tickets.bookingId, bookingIds), eq(tickets.operatorId, customer.operatorId))),
   ]);
 
   const result = bookingRows.map((booking) => ({
@@ -63,7 +65,11 @@ export async function GET(req: NextRequest) {
       .filter((i) => i.bookingId === booking.id)
       .map((item) => ({
         ...item,
-        tickets: ticketRows.filter((t) => t.bookingItemId === item.id),
+        // Installed apps read only `voided`: anything that can't board reads
+        // as voided. `status` says which.
+        tickets: ticketRows
+          .filter((t) => t.bookingItemId === item.id)
+          .map((t) => ({ ...t, voided: !isTicketLive(t) })),
       })),
   }));
 

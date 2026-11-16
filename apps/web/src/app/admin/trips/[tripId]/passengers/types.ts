@@ -1,8 +1,11 @@
+import type { TicketStatus } from "@/lib/tickets/status";
+
 export type TicketData = {
   id: string;
   ticketType: "adult" | "child" | "senior";
   priceCents: number;
-  voided: boolean;
+  /** Only `live` can board or be refunded. */
+  status: TicketStatus;
   passengerName: string | null;
   checkedIn: boolean;
   checkedInAt: string | null;
@@ -17,6 +20,8 @@ export type BookingData = {
   notes: string | null;
   status: string;
   totalCents: number;
+  /** What this booking has paid for this trip's live tickets (the server works it out). */
+  paidCents: number;
   tickets: TicketData[];
 };
 
@@ -56,12 +61,36 @@ export function telHref(phone: string): string {
   return `tel:${digits}`;
 }
 
+/** Paid for and valid: the only tickets that get Aboard and Refund buttons. */
+export function isLiveTicket(t: TicketData): boolean {
+  return t.status === "live";
+}
+
+/** Shown struck through: the ticket was paid for and given back, or never paid. */
+export function isStruckTicket(t: TicketData): boolean {
+  return t.status === "refunded" || t.status === "disputed" || t.status === "voided";
+}
+
+/** What replaces the buttons on a ticket that isn't live. */
+export function notLiveNote(t: TicketData): string {
+  switch (t.status) {
+    case "held":
+      return "Can board once paid";
+    case "disputed":
+      return "Can’t board while the chargeback is open";
+    case "voided":
+      return "Never paid";
+    default:
+      return "Seat is back on sale";
+  }
+}
+
 export function waitingTickets(b: BookingData): TicketData[] {
-  return b.tickets.filter((t) => !t.voided && !t.checkedIn);
+  return b.tickets.filter((t) => isLiveTicket(t) && !t.checkedIn);
 }
 
 export function keepTicket(filter: PassengerFilter, t: TicketData): boolean {
   if (filter === "all") return true;
-  if (t.voided) return false;
+  if (!isLiveTicket(t)) return false;
   return filter === "aboard" ? t.checkedIn : !t.checkedIn;
 }

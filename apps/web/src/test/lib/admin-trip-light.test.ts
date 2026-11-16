@@ -45,7 +45,10 @@ describe("tripLightKind — clock states", () => {
 });
 
 describe("ticketLightKind", () => {
-  it("refunded wins", () => expect(ticketLightKind({ voided: true, checkedIn: true })).toBe("refunded"));
-  it("aboard", () => expect(ticketLightKind({ voided: false, checkedIn: true })).toBe("aboard"));
-  it("not here yet", () => expect(ticketLightKind({ voided: false, checkedIn: false })).toBe("not-here"));
+  it("refunded wins", () => expect(ticketLightKind({ status: "refunded", checkedIn: true })).toBe("refunded"));
+  it("aboard", () => expect(ticketLightKind({ status: "live", checkedIn: true })).toBe("aboard"));
+  it("not here yet", () => expect(ticketLightKind({ status: "live", checkedIn: false })).toBe("not-here"));
+  it("unpaid", () => expect(ticketLightKind({ status: "held", checkedIn: false })).toBe("awaiting-payment"));
+  it("chargeback", () => expect(ticketLightKind({ status: "disputed", checkedIn: false })).toBe("disputed"));
+  it("never paid", () => expect(ticketLightKind({ status: "voided", checkedIn: false })).toBe("never-paid"));
 });

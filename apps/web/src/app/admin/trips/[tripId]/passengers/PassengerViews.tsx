@@ -4,6 +4,9 @@ import { fmtTimeET } from "@/lib/format";
 import { Button, StatusLight, useDensity, fmtMoney, ticketLightKind, CheckAllIcon, CheckIcon, NoteIcon, UndoIcon } from "@/components/admin/merchant";
 import {
   bookingName,
+  isLiveTicket,
+  isStruckTicket,
+  notLiveNote,
   telHref,
   ticketLabel,
   ticketTypeLabel,
@@ -120,14 +123,14 @@ function TicketRowDock({
           <StatusLight kind={ticketLightKind(ticket)} />
           <span className="font-num text-meta text-ob-ink-3">{checkedInTime(ticket)}</span>
         </div>
-        <div className={`flex items-baseline gap-2.5 ${ticket.voided ? "line-through" : ""}`}>
-          <span className={`text-title-row ${ticket.voided ? "text-ob-ink-3" : "text-ob-ink"}`}>{ticketLabel(ticket)}</span>
+        <div className={`flex items-baseline gap-2.5 ${isStruckTicket(ticket) ? "line-through" : ""}`}>
+          <span className={`text-title-row ${isStruckTicket(ticket) ? "text-ob-ink-3" : "text-ob-ink"}`}>{ticketLabel(ticket)}</span>
           <span className="text-body-sm text-ob-ink-2">{ticketTypeLabel(ticket)}</span>
           <span className="font-num text-body-sm text-ob-ink-3 ml-auto">{fmtMoney(ticket.priceCents)}</span>
         </div>
       </div>
-      {ticket.voided ? (
-        <div className="text-body-sm text-ob-ink-3">Seat is back on sale</div>
+      {!isLiveTicket(ticket) ? (
+        <div className="text-body-sm text-ob-ink-3">{notLiveNote(ticket)}</div>
       ) : (
         <div className="flex gap-2.5 max-md:flex-[1_1_100%]">
           {ticket.checkedIn ? (
@@ -217,10 +220,10 @@ function BookingRowsDesk({
       </tr>
       {tickets.map((t) => {
         const busy = actions.busyTicket === t.id || actions.busyBooking === booking.id;
-        const strike = t.voided ? "line-through" : "";
+        const strike = isStruckTicket(t) ? "line-through" : "";
         return (
           <tr key={t.id} className="border-t border-ob-hair">
-            <td className={`py-1 pl-8 pr-4 ${t.voided ? "text-ob-ink-3" : "text-ob-ink"} ${strike}`}>{ticketLabel(t)}</td>
+            <td className={`py-1 pl-8 pr-4 ${isStruckTicket(t) ? "text-ob-ink-3" : "text-ob-ink"} ${strike}`}>{ticketLabel(t)}</td>
             <td className={`py-1 px-3 text-ob-ink-2 ${strike}`}>{ticketTypeLabel(t)}</td>
             <td className={`py-1 px-3 font-num text-right ${strike}`}>{fmtMoney(t.priceCents)}</td>
             <td className="py-1 px-3 whitespace-nowrap">
@@ -230,8 +233,8 @@ function BookingRowsDesk({
               </span>
             </td>
             <td className="py-1 pl-3 pr-4 text-right whitespace-nowrap">
-              {t.voided ? (
-                <span className="text-ob-ink-3">Seat is back on sale</span>
+              {!isLiveTicket(t) ? (
+                <span className="text-ob-ink-3">{notLiveNote(t)}</span>
               ) : (
                 <span className="inline-flex gap-1.5">
                   {t.checkedIn ? (
@@ -288,7 +291,7 @@ export function BookingListDeskPhone({ shown, actions }: { shown: ShownBooking[]
               <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 border-t border-ob-hair">
                 <div className="flex-1 min-w-0">
                   <div
-                    className={`text-body-sm font-bold truncate ${t.voided ? "text-ob-ink-3 line-through" : "text-ob-ink"}`}
+                    className={`text-body-sm font-bold truncate ${isStruckTicket(t) ? "text-ob-ink-3 line-through" : "text-ob-ink"}`}
                   >
                     {ticketLabel(t)}
                   </div>
@@ -297,7 +300,7 @@ export function BookingListDeskPhone({ shown, actions }: { shown: ShownBooking[]
                     <span>· {fmtMoney(t.priceCents)}</span>
                   </div>
                 </div>
-                {!t.voided &&
+                {isLiveTicket(t) &&
                   (t.checkedIn ? (
                     <Button variant="secondary" className="min-w-[84px]" disabled={busy} onClick={() => actions.onToggle(t)}>
                       Undo
@@ -307,7 +310,7 @@ export function BookingListDeskPhone({ shown, actions }: { shown: ShownBooking[]
                       Aboard
                     </Button>
                   ))}
-                {!t.voided && (
+                {isLiveTicket(t) && (
                   <Button variant="danger" icon={false} className="px-2.5" disabled={busy} onClick={() => actions.onRefund(t, booking)}>
                     Refund
                   </Button>

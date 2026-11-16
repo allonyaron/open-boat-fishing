@@ -4,6 +4,7 @@ import { fmtTimeET } from "@/lib/format";
 import { and, eq } from "drizzle-orm";
 import { getOperatorRecord } from "@/lib/operator";
 import { notFound } from "next/navigation";
+import { isTicketLive } from "@/lib/tickets/status";
 import { PrintButton } from "./PrintButton";
 
 export default async function BoardingPassPage({ params }: { params: { bookingId: string } }) {
@@ -26,6 +27,7 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
       priceCents: tickets.priceCents,
       qrPayload: tickets.qrPayload,
       passengerName: tickets.passengerName,
+      status: tickets.status,
       voided: tickets.voided,
       departureDate: trips.departureDate,
       startTime: trips.startTime,
@@ -42,10 +44,36 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
     .innerJoin(trips, eq(trips.id, bookingItems.tripId))
     .innerJoin(vessels, eq(vessels.id, trips.vesselId))
     .innerJoin(products, eq(products.id, trips.productId))
-    .where(eq(tickets.bookingId, booking.id))
+    .where(and(eq(tickets.bookingId, booking.id), eq(tickets.operatorId, operator.id)))
     .orderBy(trips.departureDate, trips.startTime);
 
   if (ticketRows.length === 0) notFound();
+
+  // No boarding pass, and no QR code, until the payment goes through.
+  if (ticketRows.every((t) => t.status === "held")) {
+    return (
+      <div className="max-w-md mx-auto my-16 px-6 py-8 text-center bg-white border border-hairline rounded-xl font-sans">
+        <div className="text-xs font-bold tracking-widest uppercase text-muted">Awaiting payment</div>
+        <h1 className="mt-2 text-xl font-bold text-ink">
+          Your boarding passes aren&rsquo;t ready yet
+        </h1>
+        <p className="mt-3 text-sm text-muted">
+          We haven&rsquo;t received payment for booking {booking.confirmationCode}. Once it goes
+          through, your boarding passes will appear on this page.
+        </p>
+      </div>
+    );
+  }
+
+  /** Why a ticket can't board, or null when it can. */
+  function invalidReason(t: (typeof ticketRows)[number]): string | null {
+    if (t.tripStatus === "cancelled") return "TRIP CANCELLED — THIS TICKET IS NO LONGER VALID";
+    if (isTicketLive(t)) return null;
+    if (t.status === "refunded") return "REFUNDED — THIS TICKET IS NO LONGER VALID";
+    if (t.status === "disputed") return "NOT VALID FOR BOARDING";
+    if (t.status === "held") return "AWAITING PAYMENT — NOT YET VALID";
+    return "CANCELLED — THIS TICKET IS NO LONGER VALID";
+  }
 
   function fmtDate(d: string) {
     return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {
@@ -107,8 +135,8 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
 
       {/* One ticket per page */}
       {ticketRows.map((ticket, i) => {
-        const cancelled =
-          ticket.voided || booking.status === "cancelled" || ticket.tripStatus === "cancelled";
+        const reason = invalidReason(ticket);
+        const cancelled = reason !== null;
         return (
           <div
             key={ticket.id}
@@ -127,7 +155,7 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
                   fontSize: "0.75rem",
                 }}
               >
-                CANCELLED — THIS TICKET IS NO LONGER VALID
+                {reason}
               </div>
             )}
             {/* Header bar — color-coded to vessel */}
@@ -139,15 +167,18 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
                 <div className="ticket-operator">{operatorName.toUpperCase()} TICKETS</div>
                 <div className="ticket-vessel">{ticket.vesselName}</div>
               </div>
-              <div className="ticket-header-right">
-                <img
-                  src={`${qrBaseUrl}${encodeURIComponent(ticket.qrPayload)}`}
-                  alt={`QR code for ticket ${ticket.id}`}
-                  width={100}
-                  height={100}
-                  className="ticket-qr"
-                />
-              </div>
+              {/* A ticket that can't board gets no QR code to scan. */}
+              {!cancelled && (
+                <div className="ticket-header-right">
+                  <img
+                    src={`${qrBaseUrl}${encodeURIComponent(ticket.qrPayload)}`}
+                    alt={`QR code for ticket ${ticket.id}`}
+                    width={100}
+                    height={100}
+                    className="ticket-qr"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Body */}

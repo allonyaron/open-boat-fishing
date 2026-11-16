@@ -3,8 +3,9 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { settleTrips } from "@/lib/settle-trips";
 import { todayET, addDaysToDateString } from "@/lib/date-et";
-import { trips, vessels, products, bookingItems, tickets, fishingReports } from "@openboat/db";
-import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { trips, vessels, products, fishingReports } from "@openboat/db";
+import { and, eq, gte, inArray, isNull } from "drizzle-orm";
+import { liveTicketCount } from "@/lib/tickets/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -28,12 +29,7 @@ export async function GET(req: NextRequest) {
       endTime: trips.endTime,
       vessel: { name: vessels.name, color: vessels.color },
       product: { displayName: products.displayName },
-      ticketsSold: sql<number>`(
-        select cast(count(*) as int) from ${tickets} t
-        join ${bookingItems} bi on bi.id = t.booking_item_id
-        where bi.trip_id = trips.id
-          and t.voided = false
-      )`.as("tickets_sold"),
+      ticketsSold: liveTicketCount(trips.id).as("tickets_sold"),
     })
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))

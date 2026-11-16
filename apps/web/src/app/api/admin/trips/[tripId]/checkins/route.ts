@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
-import { tickets, bookingItems, checkIns } from "@openboat/db";
+import { tickets, bookingItems, checkIns, trips } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
+import { isTicketLive } from "@/lib/tickets/status";
 
 // Admin/office-side check-in toggle — parallel to /api/mate/checkins but
 // single-ticket and synchronous (no offline queue). Backs the passenger
@@ -27,9 +28,10 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
   }
 
   const [ticket] = await db
-    .select({ id: tickets.id, voided: tickets.voided, operatorId: tickets.operatorId })
+    .select({ id: tickets.id, status: tickets.status, voided: tickets.voided, tripStatus: trips.status })
     .from(tickets)
     .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
+    .innerJoin(trips, eq(trips.id, bookingItems.tripId))
     .where(
       and(
         eq(tickets.id, ticketId),
@@ -43,7 +45,15 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
   }
 
   if (body.checkedIn) {
-    if (ticket.voided) {
+    // Only cancelled trips are refused: a trip that has departed
+    // (pending_settlement) still takes late check-ins.
+    if (ticket.tripStatus === "cancelled") {
+      return NextResponse.json({ error: "This trip was cancelled" }, { status: 409 });
+    }
+    if (ticket.status === "held") {
+      return NextResponse.json({ error: "This ticket isn't paid for yet" }, { status: 409 });
+    }
+    if (!isTicketLive(ticket)) {
       return NextResponse.json({ error: "Cannot check in a refunded ticket" }, { status: 409 });
     }
     let [row] = await db
@@ -69,6 +79,8 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
     return NextResponse.json({ ok: true, checkedIn: true, checkedInAt: row.checkedInAt });
   }
 
-  await db.delete(checkIns).where(eq(checkIns.ticketId, ticketId));
+  await db
+    .delete(checkIns)
+    .where(and(eq(checkIns.ticketId, ticketId), eq(checkIns.operatorId, session.operatorId)));
   return NextResponse.json({ ok: true, checkedIn: false, checkedInAt: null });
 }

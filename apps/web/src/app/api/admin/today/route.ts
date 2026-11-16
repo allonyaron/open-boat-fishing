@@ -7,13 +7,13 @@ import {
   trips,
   vessels,
   products,
-  bookingItems,
   tickets,
   bookings,
   schedules,
   fishingReports,
 } from "@openboat/db";
 import { and, eq, gte, lt, lte, sql, isNull, inArray } from "drizzle-orm";
+import { countTicketsOnTrip, liveTicketCount } from "@/lib/tickets/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -49,18 +49,8 @@ export async function GET(req: NextRequest) {
       cancellationReason: trips.cancellationReason,
       vessel: { name: vessels.name, color: vessels.color },
       product: { displayName: products.displayName },
-      ticketsSold: sql<number>`(
-        select cast(count(*) as int) from ${tickets} t
-        join ${bookingItems} bi on bi.id = t.booking_item_id
-        where bi.trip_id = trips.id
-          and t.voided = false
-      )`.as("tickets_sold"),
-      refundedCount: sql<number>`(
-        select cast(count(*) as int) from ${tickets} t
-        join ${bookingItems} bi on bi.id = t.booking_item_id
-        where bi.trip_id = trips.id
-          and t.voided = true
-      )`.as("refunded_count"),
+      ticketsSold: liveTicketCount(trips.id).as("tickets_sold"),
+      refundedCount: countTicketsOnTrip(trips.id, eq(tickets.status, "refunded")).as("refunded_count"),
     })
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))
