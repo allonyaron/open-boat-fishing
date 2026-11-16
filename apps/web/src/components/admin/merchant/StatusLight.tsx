@@ -161,6 +161,8 @@ export function tripLightKind(
     scheduleId?: string | null;
     capacity: number;
     ticketsSold: number;
+    /** Seats still for sale. When known, Sold out and Filling up count unpaid holds as taken. */
+    seatsRemaining?: number;
     startTime?: string;
   },
   now?: number,
@@ -172,9 +174,10 @@ export function tripLightKind(
     if (now >= departs) return "departed";
     if (now >= departs - BOARDING_WINDOW_MINUTES * 60_000) return "boarding";
   }
-  if (trip.ticketsSold >= trip.capacity) return "sold-out";
+  const taken = trip.seatsRemaining !== undefined ? trip.capacity - trip.seatsRemaining : trip.ticketsSold;
+  if (taken >= trip.capacity) return "sold-out";
   if (trip.scheduleId === null) return "added";
-  if (trip.capacity > 0 && trip.ticketsSold / trip.capacity >= 0.7) return "filling-up";
+  if (trip.capacity > 0 && taken / trip.capacity >= 0.7) return "filling-up";
   return "on-sale";
 }
 

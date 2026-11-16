@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
       startTime: trips.startTime,
       endTime: trips.endTime,
       capacity: trips.capacity,
+      seatsRemaining: trips.seatsRemaining,
       onlineCutoffMinutes: trips.onlineCutoffMinutes,
       status: trips.status,
       cancellationReason: trips.cancellationReason,

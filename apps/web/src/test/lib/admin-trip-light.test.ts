@@ -17,6 +17,10 @@ describe("tripLightKind — seat states", () => {
   it("on sale below 70%", () => expect(tripLightKind(trip())).toBe("on-sale"));
   it("filling up at 70%", () => expect(tripLightKind(trip({ ticketsSold: 42 }))).toBe("filling-up"));
   it("sold out when full", () => expect(tripLightKind(trip({ ticketsSold: 60 }))).toBe("sold-out"));
+  it("unpaid holds count as taken when seatsRemaining is known", () => {
+    expect(tripLightKind(trip({ ticketsSold: 30, seatsRemaining: 0 }))).toBe("sold-out");
+    expect(tripLightKind(trip({ ticketsSold: 30, seatsRemaining: 18 }))).toBe("filling-up");
+  });
   it("added for a one-off, ahead of filling up", () =>
     expect(tripLightKind(trip({ scheduleId: null, ticketsSold: 50 }))).toBe("added"));
   it("sold out beats added", () => expect(tripLightKind(trip({ scheduleId: null, ticketsSold: 60 }))).toBe("sold-out"));

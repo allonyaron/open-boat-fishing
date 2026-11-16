@@ -103,6 +103,7 @@ async function seedConfirmedBooking(tripId: string) {
     ticketType: "adult",
     priceCents: 10000,
     feeAmountCents: 150,
+    status: "live",
     qrPayload: randomUUID(),
   });
 
@@ -181,5 +182,12 @@ describe("POST /api/admin/trips/[tripId]/cancel", () => {
       .from(bookings)
       .where(eq(bookings.id, bookingId));
     expect(booking.status).toBe("cancelled");
+
+    // A paid passenger's ticket is refunded (money went back), not voided.
+    const [ticket] = await testDb
+      .select({ status: tickets.status, voided: tickets.voided, feeStatus: tickets.feeStatus })
+      .from(tickets)
+      .where(eq(tickets.bookingId, bookingId));
+    expect(ticket).toEqual({ status: "refunded", voided: true, feeStatus: "reversed" });
   });
 });
