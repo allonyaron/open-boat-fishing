@@ -49,52 +49,55 @@
 <!-- public.tickets -->
 <g id="node2" class="node">
 <title>public.tickets</title>
-<polygon fill="#efefef" stroke="none" points="43.2,-582.2 43.2,-617.8 312.43,-617.8 312.43,-582.2 43.2,-582.2"/>
-<polygon fill="none" stroke="black" points="43.2,-582.2 43.2,-617.8 312.43,-617.8 312.43,-582.2 43.2,-582.2"/>
-<text text-anchor="start" x="67.33" y="-595.6" font-family="Arial Bold" font-size="18.00">public.tickets</text>
-<text text-anchor="start" x="163.81" y="-595.6" font-family="Arial" font-size="14.00">    </text>
-<text text-anchor="start" x="194.93" y="-595.6" font-family="Arial" font-size="14.00" fill="#666666">[BASE TABLE]</text>
-<polygon fill="none" stroke="black" points="43.2,-551.4 43.2,-582.2 312.43,-582.2 312.43,-551.4 43.2,-551.4"/>
-<text text-anchor="start" x="50.2" y="-563.6" font-family="Arial" font-size="14.00">id </text>
-<text text-anchor="start" x="64.99" y="-563.6" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
-<polygon fill="none" stroke="black" points="43.2,-520.6 43.2,-551.4 312.43,-551.4 312.43,-520.6 43.2,-520.6"/>
-<text text-anchor="start" x="50.2" y="-532.8" font-family="Arial" font-size="14.00">booking_item_id </text>
-<text text-anchor="start" x="156.05" y="-532.8" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
-<polygon fill="none" stroke="black" points="43.2,-489.8 43.2,-520.6 312.43,-520.6 312.43,-489.8 43.2,-489.8"/>
-<text text-anchor="start" x="50.2" y="-502" font-family="Arial" font-size="14.00">booking_id </text>
-<text text-anchor="start" x="121.81" y="-502" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
-<polygon fill="none" stroke="black" points="43.2,-459 43.2,-489.8 312.43,-489.8 312.43,-459 43.2,-459"/>
-<text text-anchor="start" x="50.2" y="-471.2" font-family="Arial" font-size="14.00">operator_id </text>
-<text text-anchor="start" x="124.92" y="-471.2" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
-<polygon fill="none" stroke="black" points="43.2,-428.2 43.2,-459 312.43,-459 312.43,-428.2 43.2,-428.2"/>
-<text text-anchor="start" x="50.2" y="-440.4" font-family="Arial" font-size="14.00">ticket_type </text>
-<text text-anchor="start" x="121.01" y="-440.4" font-family="Arial" font-size="14.00" fill="#666666">[ticket_type]</text>
-<polygon fill="none" stroke="black" points="43.2,-397.4 43.2,-428.2 312.43,-428.2 312.43,-397.4 43.2,-397.4"/>
-<text text-anchor="start" x="50.2" y="-409.6" font-family="Arial" font-size="14.00">price_cents </text>
-<text text-anchor="start" x="125.68" y="-409.6" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
-<polygon fill="none" stroke="black" points="43.2,-366.6 43.2,-397.4 312.43,-397.4 312.43,-366.6 43.2,-366.6"/>
-<text text-anchor="start" x="50.2" y="-378.8" font-family="Arial" font-size="14.00">passenger_name </text>
-<text text-anchor="start" x="162.28" y="-378.8" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
-<polygon fill="none" stroke="black" points="43.2,-335.8 43.2,-366.6 312.43,-366.6 312.43,-335.8 43.2,-335.8"/>
-<text text-anchor="start" x="50.2" y="-348" font-family="Arial" font-size="14.00">qr_payload </text>
-<text text-anchor="start" x="123.37" y="-348" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
-<polygon fill="none" stroke="black" points="43.2,-305 43.2,-335.8 312.43,-335.8 312.43,-305 43.2,-305"/>
-<text text-anchor="start" x="50.2" y="-317.2" font-family="Arial" font-size="14.00">voided </text>
-<text text-anchor="start" x="95.34" y="-317.2" font-family="Arial" font-size="14.00" fill="#666666">[boolean]</text>
-<polygon fill="none" stroke="black" points="43.2,-274.2 43.2,-305 312.43,-305 312.43,-274.2 43.2,-274.2"/>
-<text text-anchor="start" x="50.2" y="-286.4" font-family="Arial" font-size="14.00">created_at </text>
-<text text-anchor="start" x="120.25" y="-286.4" font-family="Arial" font-size="14.00" fill="#666666">[timestamp without time zone]</text>
-<polygon fill="none" stroke="black" points="43.2,-243.4 43.2,-274.2 312.43,-274.2 312.43,-243.4 43.2,-243.4"/>
-<text text-anchor="start" x="50.2" y="-255.6" font-family="Arial" font-size="14.00">fee_amount_cents </text>
-<text text-anchor="start" x="169.28" y="-255.6" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
-<polygon fill="none" stroke="black" points="43.2,-212.6 43.2,-243.4 312.43,-243.4 312.43,-212.6 43.2,-212.6"/>
-<text text-anchor="start" x="50.2" y="-224.8" font-family="Arial" font-size="14.00">fee_status </text>
-<text text-anchor="start" x="118.69" y="-224.8" font-family="Arial" font-size="14.00" fill="#666666">[fee_status]</text>
+<polygon fill="#efefef" stroke="none" points="43.2,-597.6 43.2,-633.2 312.43,-633.2 312.43,-597.6 43.2,-597.6"/>
+<polygon fill="none" stroke="black" points="43.2,-597.6 43.2,-633.2 312.43,-633.2 312.43,-597.6 43.2,-597.6"/>
+<text text-anchor="start" x="67.33" y="-611" font-family="Arial Bold" font-size="18.00">public.tickets</text>
+<text text-anchor="start" x="163.81" y="-611" font-family="Arial" font-size="14.00">    </text>
+<text text-anchor="start" x="194.93" y="-611" font-family="Arial" font-size="14.00" fill="#666666">[BASE TABLE]</text>
+<polygon fill="none" stroke="black" points="43.2,-566.8 43.2,-597.6 312.43,-597.6 312.43,-566.8 43.2,-566.8"/>
+<text text-anchor="start" x="50.2" y="-579" font-family="Arial" font-size="14.00">id </text>
+<text text-anchor="start" x="64.99" y="-579" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
+<polygon fill="none" stroke="black" points="43.2,-536 43.2,-566.8 312.43,-566.8 312.43,-536 43.2,-536"/>
+<text text-anchor="start" x="50.2" y="-548.2" font-family="Arial" font-size="14.00">booking_item_id </text>
+<text text-anchor="start" x="156.05" y="-548.2" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
+<polygon fill="none" stroke="black" points="43.2,-505.2 43.2,-536 312.43,-536 312.43,-505.2 43.2,-505.2"/>
+<text text-anchor="start" x="50.2" y="-517.4" font-family="Arial" font-size="14.00">booking_id </text>
+<text text-anchor="start" x="121.81" y="-517.4" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
+<polygon fill="none" stroke="black" points="43.2,-474.4 43.2,-505.2 312.43,-505.2 312.43,-474.4 43.2,-474.4"/>
+<text text-anchor="start" x="50.2" y="-486.6" font-family="Arial" font-size="14.00">operator_id </text>
+<text text-anchor="start" x="124.92" y="-486.6" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
+<polygon fill="none" stroke="black" points="43.2,-443.6 43.2,-474.4 312.43,-474.4 312.43,-443.6 43.2,-443.6"/>
+<text text-anchor="start" x="50.2" y="-455.8" font-family="Arial" font-size="14.00">ticket_type </text>
+<text text-anchor="start" x="121.01" y="-455.8" font-family="Arial" font-size="14.00" fill="#666666">[ticket_type]</text>
+<polygon fill="none" stroke="black" points="43.2,-412.8 43.2,-443.6 312.43,-443.6 312.43,-412.8 43.2,-412.8"/>
+<text text-anchor="start" x="50.2" y="-425" font-family="Arial" font-size="14.00">price_cents </text>
+<text text-anchor="start" x="125.68" y="-425" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
+<polygon fill="none" stroke="black" points="43.2,-382 43.2,-412.8 312.43,-412.8 312.43,-382 43.2,-382"/>
+<text text-anchor="start" x="50.2" y="-394.2" font-family="Arial" font-size="14.00">passenger_name </text>
+<text text-anchor="start" x="162.28" y="-394.2" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<polygon fill="none" stroke="black" points="43.2,-351.2 43.2,-382 312.43,-382 312.43,-351.2 43.2,-351.2"/>
+<text text-anchor="start" x="50.2" y="-363.4" font-family="Arial" font-size="14.00">qr_payload </text>
+<text text-anchor="start" x="123.37" y="-363.4" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<polygon fill="none" stroke="black" points="43.2,-320.4 43.2,-351.2 312.43,-351.2 312.43,-320.4 43.2,-320.4"/>
+<text text-anchor="start" x="50.2" y="-332.6" font-family="Arial" font-size="14.00">voided </text>
+<text text-anchor="start" x="95.34" y="-332.6" font-family="Arial" font-size="14.00" fill="#666666">[boolean]</text>
+<polygon fill="none" stroke="black" points="43.2,-289.6 43.2,-320.4 312.43,-320.4 312.43,-289.6 43.2,-289.6"/>
+<text text-anchor="start" x="50.2" y="-301.8" font-family="Arial" font-size="14.00">created_at </text>
+<text text-anchor="start" x="120.25" y="-301.8" font-family="Arial" font-size="14.00" fill="#666666">[timestamp without time zone]</text>
+<polygon fill="none" stroke="black" points="43.2,-258.8 43.2,-289.6 312.43,-289.6 312.43,-258.8 43.2,-258.8"/>
+<text text-anchor="start" x="50.2" y="-271" font-family="Arial" font-size="14.00">fee_amount_cents </text>
+<text text-anchor="start" x="169.28" y="-271" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
+<polygon fill="none" stroke="black" points="43.2,-228 43.2,-258.8 312.43,-258.8 312.43,-228 43.2,-228"/>
+<text text-anchor="start" x="50.2" y="-240.2" font-family="Arial" font-size="14.00">fee_status </text>
+<text text-anchor="start" x="118.69" y="-240.2" font-family="Arial" font-size="14.00" fill="#666666">[fee_status]</text>
+<polygon fill="none" stroke="black" points="43.2,-197.2 43.2,-228 312.43,-228 312.43,-197.2 43.2,-197.2"/>
+<text text-anchor="start" x="50.2" y="-209.4" font-family="Arial" font-size="14.00">status </text>
+<text text-anchor="start" x="91.44" y="-209.4" font-family="Arial" font-size="14.00" fill="#666666">[ticket_status]</text>
 </g>
 <!-- public.check_ins&#45;&gt;public.tickets -->
 <g id="edge1" class="edge">
 <title>public.check_ins:ticket_id&#45;&gt;public.tickets:id</title>
-<path fill="none" stroke="black" d="M594.8,-1143.43C429.74,-1137.61 435.44,-987.19 364.82,-830.4 340.31,-775.99 373.11,-566.8 313.43,-566.8"/>
+<path fill="none" stroke="black" d="M594.8,-1143.43C429.78,-1137.59 436.35,-986.77 364.82,-830.4 341.39,-779.18 369.76,-582.2 313.43,-582.2"/>
 <polygon fill="black" stroke="black" points="594.53,-1143.42 604.45,-1148.09 599.87,-1143.51 604.2,-1143.59 604.2,-1143.59 604.2,-1143.59 599.87,-1143.51 604.61,-1139.09 594.53,-1143.42"/>
 <text text-anchor="start" x="366.71" y="-1153.6" font-family="Arial" font-size="10.00">FOREIGN KEY (ticket_id) REFERENCES tickets(id)</text>
 </g>

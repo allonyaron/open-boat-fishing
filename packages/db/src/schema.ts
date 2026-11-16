@@ -29,6 +29,15 @@ export const bookingStatusEnum = pgEnum("booking_status", [
 export const ticketTypeEnum = pgEnum("ticket_type", [
   "adult", "child", "senior",
 ]);
+// Set only through apps/web/src/lib/tickets. Only `live` boards, counts as
+// sold and earns the platform fee.
+export const ticketStatusEnum = pgEnum("ticket_status", [
+  "held",      // booking awaiting payment; the seat is taken, nothing else
+  "live",      // payment_intent.succeeded received
+  "refunded",  // money returned (office refund, trip cancel, Dashboard refund)
+  "voided",    // never paid: the hold expired or was released, or the trip was cancelled first
+  "disputed",  // chargeback opened
+]);
 export const checkInMethodEnum = pgEnum("check_in_method", [
   "qr", "name_search", "manual",
 ]);
@@ -322,6 +331,9 @@ export const tickets = pgTable("tickets", {
   feeStatus: feeStatusEnum("fee_status").notNull().default("held"),
   passengerName: text("passenger_name"),
   qrPayload: text("qr_payload").notNull(),           // encodes ticket id for scanning
+  status: ticketStatusEnum("status").notNull().default("held"),
+  // Superseded by status; still written (true unless held/live) for code
+  // deployed before it. Dropped in a later release.
   voided: boolean("voided").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
