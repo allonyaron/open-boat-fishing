@@ -17,7 +17,10 @@ export type TripRowData = {
   capacity: number;
   /** Per-trip online-sales cutoff; null = the operator's default applies. */
   onlineCutoffMinutes: number | null;
+  /** Paid (live) tickets. */
   ticketsSold: number;
+  /** Seats still for sale: unpaid holds have already taken theirs. */
+  seatsRemaining: number;
   status: string;
   scheduleId: string | null;
   vessel: { name: string; color: string };
@@ -39,6 +42,8 @@ type Row = {
   kind: TripLightKind;
   cancelled: boolean;
   left: number;
+  /** Seats held by customers who haven't finished paying. */
+  atCheckout: number;
   refunded: number;
 };
 
@@ -48,7 +53,8 @@ function toRow(trip: TripRowData, now: number): Row {
     trip,
     kind,
     cancelled: kind === "cancelled",
-    left: Math.max(0, trip.capacity - trip.ticketsSold),
+    left: Math.max(0, trip.seatsRemaining),
+    atCheckout: Math.max(0, trip.capacity - trip.seatsRemaining - trip.ticketsSold),
     refunded: trip.refundedCount ?? trip.ticketsSold,
   };
 }
@@ -58,21 +64,31 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /** The seat gauge's fill follows the trip light: departed ink-3, full go, 70%+ caution, else ink-2. */
 function gaugeFill(row: Row): string {
   if (row.kind === "departed") return "bg-ob-ink-3";
-  const r = row.trip.capacity > 0 ? row.trip.ticketsSold / row.trip.capacity : 0;
+  const r = row.trip.capacity > 0 ? seatsTaken(row.trip) / row.trip.capacity : 0;
   if (r >= 1) return "bg-ob-go";
   if (r >= 0.7) return "bg-ob-caution";
   return "bg-ob-ink-2";
 }
 
+/** Seats out of sale: paid, or held at checkout. */
+function seatsTaken(trip: TripRowData) {
+  return Math.max(0, trip.capacity - trip.seatsRemaining);
+}
+
 function gaugePct(trip: TripRowData) {
-  return trip.capacity > 0 ? Math.min(100, Math.round((trip.ticketsSold / trip.capacity) * 100)) : 0;
+  return trip.capacity > 0 ? Math.min(100, Math.round((seatsTaken(trip) / trip.capacity) * 100)) : 0;
+}
+
+function leftLabel(row: Row) {
+  const left = row.left === 0 ? "None left" : plural(row.left, "seat left", "seats left");
+  return row.atCheckout > 0 ? `${left} · ${row.atCheckout} at checkout` : left;
 }
 
 function Gauge({ row, thin = false }: { row: Row; thin?: boolean }) {
   return (
     <div
       role="img"
-      aria-label={`${row.trip.ticketsSold} of ${row.trip.capacity} seats booked`}
+      aria-label={`${seatsTaken(row.trip)} of ${row.trip.capacity} seats taken`}
       className={`${thin ? "h-1.5 w-[72px] inline-block align-middle" : "h-2 mt-2"} bg-ob-panel-2 shadow-[inset_0_0_0_1px_var(--ob-hair)]`}
     >
       <div className={`h-full ${gaugeFill(row)}`} style={{ width: `${gaugePct(row.trip)}%` }} />
@@ -165,7 +181,7 @@ function DockRowWide({ row, actions }: { row: Row; actions: TripRowActions }) {
                 <span className="text-body text-ob-ink-3">/{trip.capacity}</span>
               </div>
               <div className="text-meta text-ob-ink-2">
-                {row.left === 0 ? "None left" : plural(row.left, "seat left", "seats left")}
+                {leftLabel(row)}
               </div>
             </div>
             <Gauge row={row} />
@@ -228,7 +244,7 @@ function DockCardPhone({ row, actions }: { row: Row; actions: TripRowActions }) 
                 <span className="font-ui text-body-sm text-ob-ink-2 ml-1.5">booked</span>
               </div>
               <div className="text-body-sm text-ob-ink-2">
-                {row.left === 0 ? "None left" : plural(row.left, "seat left", "seats left")}
+                {leftLabel(row)}
               </div>
             </div>
             <Gauge row={row} />

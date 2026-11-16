@@ -449,6 +449,7 @@ describe("GET /api/bookings — wallet lookup", () => {
       ticketType: "adult",
       priceCents: 10000,
       feeAmountCents: 150,
+      status: "live",
       qrPayload: randomUUID(),
     });
   });

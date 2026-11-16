@@ -37,6 +37,7 @@ async function seedBookingFor(operatorId: string, tripId: string, customerEmail:
     ticketType: "adult",
     priceCents: 10000,
     feeAmountCents: 150,
+    status: "live",
     qrPayload: randomUUID(),
   });
 

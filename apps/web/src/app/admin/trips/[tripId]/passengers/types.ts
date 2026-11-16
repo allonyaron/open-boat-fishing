@@ -31,6 +31,7 @@ export type TripDetail = {
   startTime: string;
   endTime: string;
   capacity: number;
+  seatsRemaining: number;
   status: string;
   cancellationReason: string | null;
   vessel: { name: string; color: string };
