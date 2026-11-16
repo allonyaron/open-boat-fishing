@@ -194,7 +194,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { tripId: st
         // the response counts paid tickets only.
         let taken: number;
         [{ sold, taken }] = await tx
-          .select({ sold: liveTicketCount(trips.id), taken: seatHoldingTicketCount(trips.id) })
+          .select({ sold: liveTicketCount(), taken: seatHoldingTicketCount() })
           .from(trips)
           .where(and(eq(trips.id, tripId), eq(trips.operatorId, session.operatorId)));
 

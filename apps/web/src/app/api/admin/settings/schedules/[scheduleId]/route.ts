@@ -114,7 +114,7 @@ export async function PATCH(
       id: trips.id,
       departureDate: trips.departureDate,
       status: trips.status,
-      ticketsSold: seatHoldingTicketCount(trips.id).as("tickets_sold"),
+      ticketsSold: seatHoldingTicketCount().as("tickets_sold"),
     })
     .from(trips)
     .where(

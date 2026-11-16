@@ -56,7 +56,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ tr
       // The floor counts every seat taken, unpaid holds included; "sold" in
       // the response counts paid tickets only.
       const [{ sold, taken }] = await tx
-        .select({ sold: liveTicketCount(trips.id), taken: seatHoldingTicketCount(trips.id) })
+        .select({ sold: liveTicketCount(), taken: seatHoldingTicketCount() })
         .from(trips)
         .where(and(eq(trips.id, tripId), eq(trips.operatorId, staff.operatorId)));
 

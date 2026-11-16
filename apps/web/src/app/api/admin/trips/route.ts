@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
         displayName: products.displayName,
         category: products.category,
       },
-      ticketsSold: liveTicketCount(trips.id).as("tickets_sold"),
+      ticketsSold: liveTicketCount().as("tickets_sold"),
     })
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))
