@@ -137,11 +137,16 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 **Cron security**
 - Every `/api/cron/*` route must verify `Authorization: Bearer ${CRON_SECRET}` before any business logic. Return 401 immediately if missing or wrong.
 
+**Ticket lifecycle**
+- `tickets.status` is `held → live → refunded | disputed`, or `held → voided` when never paid. Only `moveTickets` in `lib/tickets/lifecycle.ts` changes it; it also writes `voided` and reverses the fee of a ticket leaving service.
+- Only `live` tickets board, count as sold or earn the fee. Readers use `isLive` / `liveTicketCount` (`lib/tickets/queries.ts`) or `isTicketLive` (`lib/tickets/status.ts`), never `voided` alone. Capacity floors count `holdsSeat` (live, held and disputed).
+- `voided` is kept in step with `status` (true unless held or live) until a later release drops it; `isLive` also requires it false for refunds made by code deployed before `status`.
+
 **Cancellation atomicity**
-- Full cancellation is one DB transaction: void all tickets, set `fee_status = 'reversed'` on all fees, restore seats via SQL arithmetic, set `booking.status = 'cancelled'`. No partial cancellation path.
+- Full cancellation is one DB transaction: move the booking's tickets out of service through `moveTickets` (held → voided, live → refunded), restore seats for the tickets it moved via SQL arithmetic, set `booking.status = 'cancelled'`. No partial cancellation path.
 
 **Fee lifecycle**
-- Fees are inserted as `fee_status = 'held'`. Only the fee-earn cron (or lazy earn on revenue report render) may transition them to `'earned'`. Revenue queries must filter `WHERE fee_status = 'earned'` — never count `'held'` fees.
+- Fees are inserted as `fee_status = 'held'`. Only the fee-earn cron (or lazy earn on revenue report render) may transition them to `'earned'`, and only on live tickets. Revenue queries must filter `WHERE fee_status = 'earned'` — never count `'held'` fees — and count reversals only on tickets that were paid (refunded, disputed).
 
 **QR codes** *(pre-launch gap — tracking in Known Tech Debt)*
 - `tickets.qrPayload` must be an HMAC of `ticketId + per-operator secret`, not a bare UUID. Currently bare UUIDs. Must be fixed and the mate app updated to validate signatures before go-live.
