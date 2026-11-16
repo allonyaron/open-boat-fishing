@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/session";
 import { sendPushToEmails } from "@/lib/push";
 import { trips, bookingItems, bookings, tickets, vessels, products } from "@openboat/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { moveTickets } from "@/lib/tickets/lifecycle";
 
 export async function POST(req: NextRequest, { params }: { params: { tripId: string } }) {
   const auth = await requireAdmin(req);
@@ -125,13 +126,11 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
       })
       .where(eq(trips.id, tripId));
 
-    // Void tickets on this trip + reverse their fees
-    if (ticketItemIds.length > 0) {
-      await tx
-        .update(tickets)
-        .set({ voided: true, feeStatus: "reversed" })
-        .where(inArray(tickets.bookingItemId, ticketItemIds));
-    }
+    // Take this trip's tickets out of service and reverse their fees: paid
+    // ones were refunded above, unpaid holds never charged anything.
+    const scope = { operatorId: session.operatorId, bookingItemIds: ticketItemIds };
+    await moveTickets(tx, scope, "live", "refunded");
+    await moveTickets(tx, scope, "held", "voided");
 
     // Cancel bookings where ALL items were on this trip
     const fullyRefundedBookingIds = refundPlans

@@ -189,6 +189,9 @@ export async function POST(req: NextRequest) {
               priceCents: t.listCents,
               feeAmountCents: t.feeCents,
               feeStatus: "held" as const,
+              // Takes the seat but can't board until payment_intent.succeeded
+              // makes it live (lib/tickets).
+              status: "held" as const,
               qrPayload: id,
             };
           });
