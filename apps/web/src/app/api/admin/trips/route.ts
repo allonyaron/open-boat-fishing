@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
-import { trips, vessels, products, bookingItems, tickets } from "@openboat/db";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { trips, vessels, products } from "@openboat/db";
+import { and, eq, gte, lte } from "drizzle-orm";
+import { liveTicketCount } from "@/lib/tickets/queries";
 import { parseTime, toTimeString, isOvernight, tripEndDate } from "@/lib/trip-materialization";
 import { etWallClockToUTC } from "@/lib/date-et";
 
@@ -41,12 +42,7 @@ export async function GET(req: NextRequest) {
         displayName: products.displayName,
         category: products.category,
       },
-      ticketsSold: sql<number>`(
-        select cast(count(*) as int) from ${tickets} t
-        join ${bookingItems} bi on bi.id = t.booking_item_id
-        where bi.trip_id = ${trips.id}
-          and t.voided = false
-      )`.as("tickets_sold"),
+      ticketsSold: liveTicketCount(trips.id).as("tickets_sold"),
     })
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))

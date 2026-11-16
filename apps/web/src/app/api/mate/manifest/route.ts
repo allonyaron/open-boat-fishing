@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireMate } from "@/lib/mate-auth";
 import { trips, vessels, products, bookings, bookingItems, tickets, checkIns } from "@openboat/db";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { liveTicketCount } from "@/lib/tickets/queries";
+import { isTicketLive } from "@/lib/tickets/status";
 
 export async function GET(req: NextRequest) {
   const auth = await requireMate(req);
@@ -31,11 +33,7 @@ export async function GET(req: NextRequest) {
         certificateCapacity: vessels.certificateCapacity,
       },
       product: { id: products.id, displayName: products.displayName, category: products.category },
-      ticketsSold: sql<number>`(
-        select count(*) from ${tickets} t
-        join ${bookingItems} bi on bi.id = t.booking_item_id
-        where bi.trip_id = ${trips.id} and t.voided = false
-      )`.as("tickets_sold"),
+      ticketsSold: liveTicketCount(trips.id).as("tickets_sold"),
     })
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))
@@ -46,7 +44,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  const itemRows = await db.select().from(bookingItems).where(eq(bookingItems.tripId, tripId));
+  const itemRows = await db
+    .select()
+    .from(bookingItems)
+    .where(and(eq(bookingItems.tripId, tripId), eq(bookingItems.operatorId, staff.operatorId)));
 
   if (itemRows.length === 0) {
     return NextResponse.json({ trip, bookings: [] });
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
         status: bookings.status,
       })
       .from(bookings)
-      .where(inArray(bookings.id, bookingIds)),
+      .where(and(inArray(bookings.id, bookingIds), eq(bookings.operatorId, staff.operatorId))),
     db
       .select({
         id: tickets.id,
@@ -74,10 +75,19 @@ export async function GET(req: NextRequest) {
         ticketType: tickets.ticketType,
         passengerName: tickets.passengerName,
         qrPayload: tickets.qrPayload,
+        status: tickets.status,
         voided: tickets.voided,
       })
       .from(tickets)
-      .where(inArray(tickets.bookingItemId, itemIds)),
+      // Tickets that were paid for at some point. Unpaid holds (held) and
+      // never-paid voided tickets aren't passengers, so they aren't listed.
+      .where(
+        and(
+          inArray(tickets.bookingItemId, itemIds),
+          eq(tickets.operatorId, staff.operatorId),
+          inArray(tickets.status, ["live", "refunded", "disputed"]),
+        ),
+      ),
     db
       .select({
         ticketId: checkIns.ticketId,
@@ -102,7 +112,10 @@ export async function GET(req: NextRequest) {
             ticketType: t.ticketType,
             passengerName: t.passengerName,
             qrPayload: t.qrPayload,
-            voided: t.voided,
+            status: t.status,
+            // Installed mate builds read only `voided`: anything not live must
+            // read as voided so their scanner rejects it.
+            voided: !isTicketLive(t),
             checkedIn: !!ci,
             checkedInAt: ci?.checkedInAt?.toISOString() ?? null,
             checkInMethod: ci?.method ?? null,
@@ -110,6 +123,7 @@ export async function GET(req: NextRequest) {
         });
       return { ...b, tickets: ticketList };
     })
+    .filter((b) => b.tickets.length > 0)
     .sort((a, b) => (a.customerName ?? "").localeCompare(b.customerName ?? ""));
 
   return NextResponse.json({ trip, bookings: bookingList });

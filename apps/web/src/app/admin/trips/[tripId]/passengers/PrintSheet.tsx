@@ -1,5 +1,5 @@
 import { fmtLongDateET, fmtTimeET } from "@/lib/format";
-import { bookingName, TICKET_LABEL, type BookingData, type TripDetail } from "./types";
+import { bookingName, isLiveTicket, TICKET_LABEL, type BookingData, type TripDetail } from "./types";
 
 const PRINTED_DAY = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
@@ -23,7 +23,7 @@ export function PrintSheet({
   operatorName: string | null;
 }) {
   const all = bookings.flatMap((b) => b.tickets);
-  const live = all.filter((t) => !t.voided);
+  const live = all.filter(isLiveTicket);
   const aboard = live.filter((t) => t.checkedIn).length;
   const printedAt = new Date();
 
@@ -66,7 +66,8 @@ export function PrintSheet({
               const name = first
                 ? bookingName(b) + (t.passengerName && t.passengerName !== bookingName(b) ? ` — ${t.passengerName}` : "")
                 : t.passengerName ?? `↳ ${TICKET_LABEL[t.ticketType]} ticket`;
-              const strike = t.voided ? "line-through" : "";
+              // Everything that can't board is struck, unpaid holds included.
+              const strike = isLiveTicket(t) ? "" : "line-through";
               const last = j === b.tickets.length - 1;
               return [
                 <tr key={t.id} className="border-b border-ob-hair break-inside-avoid">

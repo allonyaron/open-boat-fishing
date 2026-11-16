@@ -2,8 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { trips, vessels, products, bookingItems, bookings, tickets, checkIns } from "@openboat/db";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
+import { liveTicketCount, seatHoldingTicketCount } from "@/lib/tickets/queries";
+import { isTicketLive, type TicketStatus } from "@/lib/tickets/status";
+
+/**
+ * The part of a booking item's charged subtotal that pays for its live
+ * tickets. The subtotal is net of any group discount; it's split across the
+ * tickets that were paid for (live, refunded, disputed) in proportion to their
+ * list prices, so a refunded or disputed ticket's share drops out. Unpaid
+ * holds count for nothing.
+ */
+function paidForLiveTickets(
+  subtotalCents: number,
+  itemTickets: { priceCents: number; status: TicketStatus; voided: boolean }[],
+): number {
+  const paid = itemTickets.filter((t) => t.status !== "held" && t.status !== "voided");
+  const listTotal = paid.reduce((s, t) => s + t.priceCents, 0);
+  if (listTotal === 0) return 0;
+  const liveList = paid.filter(isTicketLive).reduce((s, t) => s + t.priceCents, 0);
+  return Math.round((subtotalCents * liveList) / listTotal);
+}
 
 export async function GET(req: NextRequest, { params }: { params: { tripId: string } }) {
   const auth = await requireAdmin(req);
@@ -37,7 +57,10 @@ export async function GET(req: NextRequest, { params }: { params: { tripId: stri
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  const itemRows = await db.select().from(bookingItems).where(eq(bookingItems.tripId, tripId));
+  const itemRows = await db
+    .select()
+    .from(bookingItems)
+    .where(and(eq(bookingItems.tripId, tripId), eq(bookingItems.operatorId, session.operatorId)));
 
   if (itemRows.length === 0) {
     return NextResponse.json({ trip, bookings: [] });
@@ -46,51 +69,65 @@ export async function GET(req: NextRequest, { params }: { params: { tripId: stri
   const bookingIds = [...new Set(itemRows.map((i) => i.bookingId))];
 
   const [bookingRows, ticketRows, checkInRows] = await Promise.all([
-    db.select().from(bookings).where(inArray(bookings.id, bookingIds)),
+    db
+      .select()
+      .from(bookings)
+      .where(and(inArray(bookings.id, bookingIds), eq(bookings.operatorId, session.operatorId))),
+    // Every ticket but the never-paid voided ones (expired or released holds):
+    // those were never passengers. Unpaid holds (held) are listed as awaiting payment.
     db
       .select()
       .from(tickets)
       .where(
-        inArray(
-          tickets.bookingItemId,
-          itemRows.map((i) => i.id),
+        and(
+          inArray(
+            tickets.bookingItemId,
+            itemRows.map((i) => i.id),
+          ),
+          eq(tickets.operatorId, session.operatorId),
+          ne(tickets.status, "voided"),
         ),
       ),
-    db.select().from(checkIns).where(eq(checkIns.tripId, tripId)),
+    db
+      .select()
+      .from(checkIns)
+      .where(and(eq(checkIns.tripId, tripId), eq(checkIns.operatorId, session.operatorId))),
   ]);
 
   const checkInByTicket = new Map(checkInRows.map((c) => [c.ticketId, c]));
 
-  const bookingList = bookingRows.map((b) => {
-    const items = itemRows.filter((i) => i.bookingId === b.id);
-    const ticketList = ticketRows
-      .filter((t) => items.some((i) => i.id === t.bookingItemId))
-      .map((t) => ({
+  const bookingList = bookingRows
+    .map((b) => {
+      const items = itemRows.filter((i) => i.bookingId === b.id);
+      const bookingTickets = ticketRows.filter((t) => items.some((i) => i.id === t.bookingItemId));
+      const ticketList = bookingTickets.map((t) => ({
         id: t.id,
         ticketType: t.ticketType,
         priceCents: t.priceCents,
         feeAmountCents: t.feeAmountCents,
         feeStatus: t.feeStatus,
-        voided: t.voided,
+        status: t.status,
         passengerName: t.passengerName,
         checkedIn: checkInByTicket.has(t.id),
         checkedInAt: checkInByTicket.get(t.id)?.checkedInAt ?? null,
       }));
 
-    return {
-      id: b.id,
-      confirmationCode: b.confirmationCode,
-      customerName: b.customerName,
-      customerEmail: b.customerEmail,
-      customerPhone: b.customerPhone,
-      notes: b.notes,
-      status: b.status,
-      totalCents: b.totalCents,
-      stripePaymentIntentId: b.stripePaymentIntentId,
-      createdAt: b.createdAt,
-      tickets: ticketList,
-    };
-  });
+      return {
+        id: b.id,
+        confirmationCode: b.confirmationCode,
+        customerName: b.customerName,
+        customerEmail: b.customerEmail,
+        customerPhone: b.customerPhone,
+        notes: b.notes,
+        status: b.status,
+        totalCents: b.totalCents,
+        paidCents: items.reduce((s, i) => s + paidForLiveTickets(i.subtotalCents, bookingTickets.filter((t) => t.bookingItemId === i.id)), 0),
+        stripePaymentIntentId: b.stripePaymentIntentId,
+        createdAt: b.createdAt,
+        tickets: ticketList,
+      };
+    })
+    .filter((b) => b.tickets.length > 0);
 
   return NextResponse.json({ trip, bookings: bookingList });
 }
@@ -153,15 +190,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { tripId: st
       let sold: number | undefined;
 
       if (hasCapacity) {
-        [{ sold }] = await tx
-          .select({ sold: sql<number>`cast(count(*) as int)` })
-          .from(tickets)
-          .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
-          .where(and(eq(bookingItems.tripId, tripId), eq(tickets.voided, false)));
+        // The floor counts every seat taken, unpaid holds included; `sold` in
+        // the response counts paid tickets only.
+        let taken: number;
+        [{ sold, taken }] = await tx
+          .select({ sold: liveTicketCount(trips.id), taken: seatHoldingTicketCount(trips.id) })
+          .from(trips)
+          .where(and(eq(trips.id, tripId), eq(trips.operatorId, session.operatorId)));
 
-        if (newCapacity < sold)
+        if (newCapacity < taken)
           throw Object.assign(
-            new Error(`Cannot set capacity below tickets already sold (${sold})`),
+            new Error(
+              taken > sold
+                ? `Cannot set capacity below seats already taken (${taken}, including ${taken - sold} awaiting payment)`
+                : `Cannot set capacity below tickets already sold (${sold})`,
+            ),
             { status: 422 },
           );
 

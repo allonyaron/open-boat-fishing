@@ -22,6 +22,7 @@ import { ALLOWED_PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
 import { assertCartBookable, cartSchema, seatsByTrip } from "@/lib/bookings/cart";
 import { loadPriceBook } from "@/lib/bookings/price-book";
 import { priceCart } from "@/lib/bookings/price-cart";
+import { isTicketLive } from "@/lib/tickets/status";
 import { z } from "zod";
 
 const WALLET_WINDOW_MS = 15 * 60 * 1000;
@@ -322,7 +323,10 @@ export async function GET(req: NextRequest) {
   const tripIds = itemRows.map((i) => i.tripId);
 
   const [ticketRows, tripRows] = await Promise.all([
-    db.select().from(tickets).where(eq(tickets.bookingId, booking.id)),
+    db
+      .select()
+      .from(tickets)
+      .where(and(eq(tickets.bookingId, booking.id), eq(tickets.operatorId, operatorId))),
     tripIds.length > 0
       ? db.select().from(trips).where(inArray(trips.id, tripIds))
       : Promise.resolve([] as (typeof trips.$inferSelect)[]),
@@ -383,7 +387,10 @@ export async function GET(req: NextRequest) {
         priceCents: t.priceCents,
         feeAmountCents: t.feeAmountCents,
         qrPayload: t.qrPayload,
-        voided: t.voided,
+        status: t.status,
+        // Installed apps read only `voided`: anything that can't board must
+        // read as voided.
+        voided: !isTicketLive(t),
       })),
     };
   });

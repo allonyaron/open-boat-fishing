@@ -3,6 +3,8 @@
  * colour alone. Filled = happening or done, hollow = waiting, dashed = one-off.
  */
 
+import type { TicketStatus } from "@/lib/tickets/status";
+
 export type LampTone = "go" | "caution" | "alert" | "ink" | "ink-2" | "ink-3" | "key" | "control";
 export type LampShape = "filled" | "hollow" | "dashed";
 
@@ -69,7 +71,10 @@ export type LightKind =
   // tickets
   | "not-here"
   | "aboard"
+  | "awaiting-payment"
   | "refunded"
+  | "disputed"
+  | "never-paid"
   // weekly schedule patterns
   | "running"
   | "paused"
@@ -92,7 +97,10 @@ const LIGHTS: Record<LightKind, LightSpec> = {
   "report-owed": { label: "Report owed", tone: "caution", shape: "filled", word: "text-ob-caution-ink" },
   "not-here": { label: "Not here yet", tone: "ink-2", shape: "hollow", word: "text-ob-ink" },
   aboard: { label: "Aboard", tone: "go", shape: "filled", word: "text-ob-go-ink" },
+  "awaiting-payment": { label: "Awaiting payment", tone: "caution", shape: "hollow", word: "text-ob-caution-ink" },
   refunded: { label: "Refunded", tone: "alert", shape: "filled", word: "text-ob-alert-ink" },
+  disputed: { label: "Chargeback", tone: "alert", shape: "filled", word: "text-ob-alert-ink" },
+  "never-paid": { label: "Never paid", tone: "ink-3", shape: "hollow", word: "text-ob-ink-2" },
   running: { label: "Running", tone: "go", shape: "filled", word: "text-ob-go-ink" },
   paused: { label: "Paused", tone: "ink-2", shape: "hollow", word: "text-ob-ink" },
   "coming-up": { label: "Coming up", tone: "ink-2", shape: "hollow", word: "text-ob-ink" },
@@ -170,10 +178,22 @@ export function tripLightKind(
   return "on-sale";
 }
 
-export type TicketLightKind = Extract<LightKind, "not-here" | "aboard" | "refunded">;
+export type TicketLightKind = Extract<
+  LightKind,
+  "not-here" | "aboard" | "awaiting-payment" | "refunded" | "disputed" | "never-paid"
+>;
 
-export function ticketLightKind(ticket: { voided: boolean; checkedIn: boolean }): TicketLightKind {
-  if (ticket.voided) return "refunded";
-  if (ticket.checkedIn) return "aboard";
-  return "not-here";
+export function ticketLightKind(ticket: { status: TicketStatus; checkedIn: boolean }): TicketLightKind {
+  switch (ticket.status) {
+    case "held":
+      return "awaiting-payment";
+    case "refunded":
+      return "refunded";
+    case "disputed":
+      return "disputed";
+    case "voided":
+      return "never-paid";
+    case "live":
+      return ticket.checkedIn ? "aboard" : "not-here";
+  }
 }

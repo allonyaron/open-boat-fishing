@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireMate } from "@/lib/mate-auth";
-import { trips, vessels, tickets, bookingItems, capacityChanges } from "@openboat/db";
+import { trips, vessels, capacityChanges } from "@openboat/db";
 import { and, eq, sql } from "drizzle-orm";
+import { liveTicketCount, seatHoldingTicketCount } from "@/lib/tickets/queries";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ tripId: string }> }) {
   const auth = await requireMate(req);
@@ -52,15 +53,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ tr
           { status: 422 },
         );
 
-      const [{ sold }] = await tx
-        .select({ sold: sql<number>`cast(count(*) as int)` })
-        .from(tickets)
-        .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
-        .where(and(eq(bookingItems.tripId, tripId), eq(tickets.voided, false)));
+      // The floor counts every seat taken, unpaid holds included; "sold" in
+      // the response counts paid tickets only.
+      const [{ sold, taken }] = await tx
+        .select({ sold: liveTicketCount(trips.id), taken: seatHoldingTicketCount(trips.id) })
+        .from(trips)
+        .where(and(eq(trips.id, tripId), eq(trips.operatorId, staff.operatorId)));
 
-      if (newCapacity < sold)
+      if (newCapacity < taken)
         throw Object.assign(
-          new Error(`Cannot set capacity below tickets already sold (${sold})`),
+          new Error(
+            taken > sold
+              ? `Cannot set capacity below seats already taken (${taken}, including ${taken - sold} awaiting payment)`
+              : `Cannot set capacity below tickets already sold (${sold})`,
+          ),
           { status: 422 },
         );
 
