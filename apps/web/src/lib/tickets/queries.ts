@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import { bookingItems, tickets } from "@openboat/db";
 
 // Status filters and counts for every reader of tickets, so "paid for" and
@@ -23,21 +23,26 @@ export const holdsSeat: SQL = or(
   eq(tickets.status, "disputed"),
 )!;
 
-/** Correlated count of a trip's tickets matching `filter`, for select lists. */
-export function countTicketsOnTrip(tripId: SQL | AnyColumn, filter: SQL) {
+/**
+ * Correlated count of the tickets matching `filter` on the outer query's
+ * `trips` row, for select lists. The join and the correlation spell out their
+ * tables: Drizzle drops the table name from a bare column in a single-table
+ * select, and "id" alone is ambiguous inside the subquery.
+ */
+export function countTicketsOnTrip(filter: SQL) {
   return sql<number>`(
     select cast(count(*) as int) from ${tickets}
-    join ${bookingItems} on ${bookingItems.id} = ${tickets.bookingItemId}
-    where ${bookingItems.tripId} = ${tripId} and ${filter}
+    join ${bookingItems} on "booking_items"."id" = "tickets"."booking_item_id"
+    where "booking_items"."trip_id" = "trips"."id" and ${filter}
   )`;
 }
 
-/** Correlated count of a trip's live tickets ("sold"), for select lists. */
-export function liveTicketCount(tripId: SQL | AnyColumn) {
-  return countTicketsOnTrip(tripId, isLive);
+/** Correlated count of the outer trip's live tickets ("sold"). */
+export function liveTicketCount() {
+  return countTicketsOnTrip(isLive);
 }
 
-/** Correlated count of the seats a trip's tickets take, for capacity floors. */
-export function seatHoldingTicketCount(tripId: SQL | AnyColumn) {
-  return countTicketsOnTrip(tripId, holdsSeat);
+/** Correlated count of the seats the outer trip's tickets take, for capacity floors. */
+export function seatHoldingTicketCount() {
+  return countTicketsOnTrip(holdsSeat);
 }

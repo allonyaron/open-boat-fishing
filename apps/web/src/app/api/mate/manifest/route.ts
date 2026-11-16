@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
         certificateCapacity: vessels.certificateCapacity,
       },
       product: { id: products.id, displayName: products.displayName, category: products.category },
-      ticketsSold: liveTicketCount(trips.id).as("tickets_sold"),
+      ticketsSold: liveTicketCount().as("tickets_sold"),
     })
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))

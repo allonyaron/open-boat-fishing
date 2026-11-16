@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       endTime: trips.endTime,
       vessel: { name: vessels.name, color: vessels.color },
       product: { displayName: products.displayName },
-      ticketsSold: liveTicketCount(trips.id).as("tickets_sold"),
+      ticketsSold: liveTicketCount().as("tickets_sold"),
     })
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))

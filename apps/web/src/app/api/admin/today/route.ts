@@ -49,8 +49,8 @@ export async function GET(req: NextRequest) {
       cancellationReason: trips.cancellationReason,
       vessel: { name: vessels.name, color: vessels.color },
       product: { displayName: products.displayName },
-      ticketsSold: liveTicketCount(trips.id).as("tickets_sold"),
-      refundedCount: countTicketsOnTrip(trips.id, eq(tickets.status, "refunded")).as("refunded_count"),
+      ticketsSold: liveTicketCount().as("tickets_sold"),
+      refundedCount: countTicketsOnTrip(eq(tickets.status, "refunded")).as("refunded_count"),
     })
     .from(trips)
     .innerJoin(vessels, eq(trips.vesselId, vessels.id))
