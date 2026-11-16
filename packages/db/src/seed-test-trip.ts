@@ -150,6 +150,7 @@ async function run() {
       ticketType: "adult",
       priceCents: 6800,
       feeAmountCents: 150,
+      status: "live", // the booking is seeded as paid
       qrPayload: adultId,
     },
     {
@@ -160,6 +161,7 @@ async function run() {
       ticketType: "child",
       priceCents: 6800,
       feeAmountCents: 150,
+      status: "live", // the booking is seeded as paid
       qrPayload: childId,
     },
   ]);

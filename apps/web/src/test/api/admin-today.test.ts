@@ -113,6 +113,7 @@ describe("GET /api/admin/today", () => {
       ticketType: "adult",
       priceCents: 10000,
       feeAmountCents: 150,
+      status: "live",
       qrPayload: randomUUID(),
     });
 

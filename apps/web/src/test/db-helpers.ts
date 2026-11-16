@@ -178,19 +178,29 @@ export type BookingSeedResult = {
   ticketId: string;
 };
 
+const TICKET_STATUS_FOR_BOOKING = {
+  pending: "held",
+  confirmed: "live",
+  cancelled: "voided",
+} as const;
+
 /**
  * Seed a minimal booking (bookingItem + ticket) for the given operator/trip.
  * Defaults to a pending booking with holdExpiresAt already expired (useful for
- * cron-expire tests). Pass opts to override status or expiry.
+ * cron-expire tests). Pass opts to override status or expiry. The ticket's
+ * status follows the booking's (pending → held, confirmed → live, cancelled →
+ * voided) unless `ticketStatus` says otherwise.
  */
 export async function seedBooking(
   ctx: SeedResult,
   opts: {
     status?: "pending" | "confirmed" | "cancelled";
+    ticketStatus?: "held" | "live" | "refunded" | "voided" | "disputed";
     holdExpiresAt?: Date;
     stripePaymentIntentId?: string;
   } = {},
 ): Promise<BookingSeedResult> {
+  const ticketStatus = opts.ticketStatus ?? TICKET_STATUS_FOR_BOOKING[opts.status ?? "pending"];
   const code = randomUUID().slice(0, 6).toUpperCase();
   const [booking] = await testDb
     .insert(bookings)
@@ -225,6 +235,10 @@ export async function seedBooking(
       ticketType: "adult",
       priceCents: 10000,
       feeAmountCents: 150,
+      status: ticketStatus,
+      // Kept in step with status, as lib/tickets writes it.
+      voided: !["held", "live"].includes(ticketStatus),
+      ...(["refunded", "voided", "disputed"].includes(ticketStatus) && { feeStatus: "reversed" as const }),
       qrPayload: randomUUID(),
     })
     .returning({ id: tickets.id });

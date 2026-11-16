@@ -77,6 +77,7 @@ async function seedRefundableBooking(opts: { voided?: boolean } = {}) {
       priceCents: 10000,
       feeAmountCents: 150,
       qrPayload: randomUUID(),
+      status: opts.voided ? "refunded" : "live",
       voided: opts.voided ?? false,
     })
     .returning({ id: tickets.id });

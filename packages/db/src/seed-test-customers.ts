@@ -194,6 +194,7 @@ async function run() {
           ticketType: t.type,
           priceCents: t.cents,
           feeAmountCents: 150,
+          status: "live" as const, // the booking is seeded as paid
           qrPayload: id,
         };
       }),
