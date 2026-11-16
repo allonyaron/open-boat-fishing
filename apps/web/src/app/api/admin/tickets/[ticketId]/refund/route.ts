@@ -4,6 +4,8 @@ import { stripe } from "@/lib/stripe";
 import { requireAdmin } from "@/lib/session";
 import { tickets, bookingItems, bookings, payments, trips } from "@openboat/db";
 import { and, eq, sql } from "drizzle-orm";
+import { moveTickets } from "@/lib/tickets/lifecycle";
+import { isTicketLive } from "@/lib/tickets/status";
 
 export async function POST(req: NextRequest, { params }: { params: { ticketId: string } }) {
   const auth = await requireAdmin(req);
@@ -32,8 +34,11 @@ export async function POST(req: NextRequest, { params }: { params: { ticketId: s
 
   const { ticket, bookingItem, booking, payment } = row;
 
-  if (ticket.voided) {
-    return NextResponse.json({ error: "Ticket already refunded" }, { status: 409 });
+  if (!isTicketLive(ticket)) {
+    return NextResponse.json(
+      { error: ticket.status === "held" ? "Ticket isn't paid for" : "Ticket already refunded" },
+      { status: 409 },
+    );
   }
   if (booking.status !== "confirmed" || !booking.stripePaymentIntentId) {
     return NextResponse.json({ error: "Booking is not in a refundable state" }, { status: 409 });
@@ -71,17 +76,21 @@ export async function POST(req: NextRequest, { params }: { params: { ticketId: s
     );
   }
 
-  // Mark ticket voided + restore one seat on the trip
+  // Mark the ticket refunded and give its seat back. The move is conditional,
+  // so a second submit that got this far restores nothing.
   await db.transaction(async (tx) => {
-    await tx
-      .update(tickets)
-      .set({ voided: true, feeStatus: "reversed" })
-      .where(eq(tickets.id, ticketId));
+    const moved = await moveTickets(
+      tx,
+      { operatorId: session.operatorId, ticketIds: [ticketId] },
+      "live",
+      "refunded",
+    );
+    if (moved.length === 0) return;
 
     await tx
       .update(trips)
       .set({ seatsRemaining: sql`${trips.seatsRemaining} + 1` })
-      .where(eq(trips.id, bookingItem.tripId));
+      .where(and(eq(trips.id, bookingItem.tripId), eq(trips.operatorId, session.operatorId)));
   });
 
   return NextResponse.json({ ok: true, ticketId, refundedCents: ticket.priceCents });

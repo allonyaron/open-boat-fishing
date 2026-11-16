@@ -4,6 +4,7 @@ import { stripe } from "@/lib/stripe";
 import { sendPushToEmails } from "@/lib/push";
 import { getPostHogServer } from "@/lib/posthog";
 import { sendConfirmationEmail } from "@/lib/notifications/send-confirmation-email";
+import { moveTickets } from "@/lib/tickets/lifecycle";
 import { bookings, tickets, payments } from "@openboat/db";
 import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -62,6 +63,10 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
 
     // Confirm the booking (seats were already decremented at booking creation)
     await tx.update(bookings).set({ status: "confirmed" }).where(eq(bookings.id, bookingId));
+
+    // The tickets can board from now on. Only held ones move: a ticket already
+    // voided (its trip was cancelled while the booking was pending) stays void.
+    await moveTickets(tx, { operatorId: fresh.operatorId, bookingId }, "held", "live");
 
     // Record the payment
     await tx.insert(payments).values({
