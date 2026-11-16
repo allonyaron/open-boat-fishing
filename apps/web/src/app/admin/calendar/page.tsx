@@ -380,8 +380,10 @@ function MonthGrid({
           const dayTrips = tripsByDate.get(date) ?? [];
           const live = dayTrips.filter((t) => t.status !== "cancelled").sort((a, b) => a.startTime.localeCompare(b.startTime));
           const sold = live.reduce((s, t) => s + t.ticketsSold, 0);
+          // How full = seats out of sale, holds at checkout included, like the trip rows.
+          const taken = live.reduce((s, t) => s + Math.max(0, t.capacity - t.seatsRemaining), 0);
           const cap = live.reduce((s, t) => s + t.capacity, 0);
-          const ratio = cap ? sold / cap : 0;
+          const ratio = cap ? taken / cap : 0;
           const pct = Math.min(100, Math.round(ratio * 100));
           const inMonth = date.slice(0, 7) === cursor;
           const past = date < today;
