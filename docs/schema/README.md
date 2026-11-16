@@ -15,7 +15,7 @@
 | [public.products](public.products.md)                 | 12      | Trip type sold on a vessel, e.g. Sea Bass Fishing Express.                                                                                                                                                | BASE TABLE |
 | [public.schedules](public.schedules.md)               | 12      | Recurring departure pattern for a product. Trips are materialized from it when it is saved.                                                                                                               | BASE TABLE |
 | [public.staff](public.staff.md)                       | 11      | Admin and mate accounts. Mates sign in to the tablet app with a PIN; admins sign in to the web dashboard with a password.                                                                                 | BASE TABLE |
-| [public.tickets](public.tickets.md)                   | 12      | One per passenger, on one trip via its booking_item.                                                                                                                                                      | BASE TABLE |
+| [public.tickets](public.tickets.md)                   | 13      | One per passenger, on one trip via its booking_item.                                                                                                                                                      | BASE TABLE |
 | [public.trip_overrides](public.trip_overrides.md)     | 7       | Admin-applied exceptions for a specific trip: cancellations or capacity changes.                                                                                                                          | BASE TABLE |
 | [public.trips](public.trips.md)                       | 23      | One materialized departure. Written when a schedule is saved, or added by hand as a one-off. (schedule_id, departure_date) is unique.                                                                     | BASE TABLE |
 | [public.vessels](public.vessels.md)                   | 14      | Boats owned by an operator.                                                                                                                                                                               | BASE TABLE |
@@ -38,6 +38,7 @@
 | public.fee_display     | folded, itemized                                 |
 | public.fee_status      | earned, held, reversed                           |
 | public.staff_role      | admin, mate                                      |
+| public.ticket_status   | disputed, held, live, refunded, voided           |
 | public.ticket_type     | adult, child, senior                             |
 | public.trip_status     | cancelled, pending_settlement, sailed, scheduled |
 
