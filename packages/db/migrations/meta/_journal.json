@@ -120,6 +120,13 @@
       "when": 1794792282145,
       "tag": "0016_ticket_status",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794890362382,
+      "tag": "0017_seat_ledger_net_price",
+      "breakpoints": true
     }
   ]
 }
