@@ -1091,47 +1091,31 @@ _(running scratch list; pass X turns these into findings)_
 
 ## 7. Proposed sequencing
 
-Sizes: S ≤ 1 day, M 2–5 days, L 1–2 weeks. The CODE_REVIEW.md blocker rows stay the launch list; this sequencing says
-which AR findings to fold into those rows so the work is done once, and which to defer.
+**The order of work lives in `CODE_REVIEW.md` → "Launch Blockers" (folded in on 2026-11-16).** This section only
+says where each finding landed, so nobody follows two tables.
 
-**Before launch (first real payment, single operator).** In order, each building on the previous:
-
-| Step | Work | Size | Folds into / depends on |
-|---|---|---|---|
-| 1 | Merge PR #47 (`lib/tickets`). | — | Blocker 7. Everything below assumes it. |
-| 2 | **AR-7** `lib/inventory` with the `capacity_changes` ledger; seat give-backs driven by `moveTickets`; the capacity CHECK last. | M | Replaces the inventory half of blocker row 8. Depends on 1. |
-| 3 | **AR-16** `transition()` for bookings and trips. | S | Do with step 2; rows 9 and 14 call it. |
-| 4 | **AR-6** `stripe_events` inbox and `stripe_commands` outbox, `payments` as read model. | M | Is the ledger of row 10 and the auto-refund path of row 9; row 11 reads `charge.dispute.closed` from the inbox. Depends on 3. |
-| 5 | Blocker rows 8 (net price), 9 (`cancelTrip`), 10, 11 on top of steps 2–4. | L | As listed in CODE_REVIEW.md. |
-| 6 | **AR-10** cron calls `reclaimExpiredHolds`; drop the legacy branch. | S | Independent; do any time after 1. |
-| 7 | **AR-8** security headers (report-only one preview cycle, then enforce). | S | Independent. |
-| 8 | **AR-9** actor on every command + `audit_log`; platform accounts. | M | Do with blocker row 12 (P5-1 sessions) since both touch `requireAdmin` and the context. |
-| 9 | **AR-18** structured logging, error tracker, `operator_alerts` fed by step 4. | S | Depends on 4 for the alert source. |
-| 10 | **AR-14** workflow permissions and SHA pins. **AR-5** PI idempotency key. | S | Independent. |
-| 11 | Blocker rows 13, 15, 16, 17 as listed. | — | Unchanged. |
-
-**Before a second operator (centralized mode).**
-
-| Step | Work | Size | Depends on |
-|---|---|---|---|
-| 12 | **AR-2** `lib/request-context`; routes stop reading header/session/token directly. | M | Step 8 (it already threads the principal). |
-| 13 | **AR-1** RLS migration with kill-switch GUC, `withTenant`/`withPlatform`, lib signatures take `tx`, route sweep, two-operator isolation test. | M | Step 12. Blocker row 20's exemptions land as `withPlatform` paths. |
-| 14 | **AR-3** `resolveTenant` extracted and unit-tested; one CI job without `OPERATOR_ID`. | S | Step 13 (so the job exercises RLS too). |
-| 15 | **AR-11** `tick(now)` scheduler on Pro's 10-minute cron; page hooks call the same function. | M | Steps 4 and 6. |
-| 16 | **AR-13** `packages/contracts` + contract version + `426` path. Must precede the first store submission, which is also when the apps become un-updatable without it. | M | Independent; before P9-8's release gates. |
-| 17 | **AR-12** item 3 indexes (with F1-11) and item 4 composite FKs. | S | Step 13. |
-
-**After launch.**
-
-| Step | Work | Size | Notes |
-|---|---|---|---|
-| 18 | **AR-4** `seat_holds` table; bookings created only at `payment_intent.succeeded`. | L | Needs 2, 4, 15. Removes three of four hold cancellers. |
-| 19 | **AR-15** remaining extractions (schedules, check-in, settings) and **AR-17** `lib/http` sweep. | L spread | One route at a time, each with its command test. |
-| 20 | **AR-12** items 1–2 contract migration (drop dead columns) and `status_changed_at`. | S | After 18 removes `pending`. |
-| 21 | Middleware lookup cache (backlog item 6), O1 money formatter, push receipts, upload stream limit. | S each | Opportunistic. |
-
-**Dependency summary:** 1 → 2 → 3 → 4 → 5; 8 → 12 → 13 → 14; 4, 6 → 15; 2, 4, 15 → 18. Everything in the
-"before launch" table except step 5 is S or M and parallelisable across two people.
+| Finding | Where it landed |
+|---|---|
+| AR-1 | Before a second operator, row 27 (with F1-10, P2-10) |
+| AR-2 | Before a second operator, row 26 |
+| AR-3 | Before a second operator, row 28 |
+| AR-4 | Fix Roadmap, Phase 3 (after rows 8, 10, 29) |
+| AR-5 | Pre-launch, row 24 |
+| AR-6 | Pre-launch, row 10 (rewritten; rows 9 and 11 build on it) |
+| AR-7 | Pre-launch, row 8 (rewritten; inventory module replaces `releaseBookingInventory`) |
+| AR-8 | Pre-launch, row 21 |
+| AR-9 | Pre-launch, row 12 (with P5-1, F1-8) |
+| AR-10 | Pre-launch, row 22 (with the rest of P3-5) |
+| AR-11 | Before a second operator, row 29 (with P3-7, P5-9 purge) |
+| AR-12 | Row 31 (indexes, item 3); Phase 3 (contract migration, items 1–2); row 8 (`status_changed_at`, item 2) |
+| AR-13 | Before a second operator, row 30 (must precede the first store submission) |
+| AR-14 | Pre-launch, row 23 |
+| AR-15 | Phase 3 (remaining extractions); rows 8, 9, 14, 16 build the first modules |
+| AR-16 | Pre-launch, row 8 (`transition()` for bookings and trips) |
+| AR-17 | Phase 3, with AR-15 |
+| AR-18 | Pre-launch, row 25 |
+| AR-19 | Phase 3 (after row 30) |
+| AR-20 | Phase 3 (after row 30) |
 
 ---
 
