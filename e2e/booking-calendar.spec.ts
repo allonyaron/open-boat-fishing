@@ -18,6 +18,15 @@ const VESSELS = {
   z: { name: "Fixture Zulu", color: "#186a4a", code: null },
 };
 
+/** Eastern time's UTC offset on `date` ("-05:00" or "-04:00"), so fixture times read the same in summer. */
+function etOffset(date: string): string {
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeZoneName: "shortOffset" })
+    .formatToParts(new Date(`${date}T12:00:00Z`))
+    .find((p) => p.type === "timeZoneName")!.value; // "GMT-5"
+  const hours = Number(name.replace("GMT", ""));
+  return `${hours < 0 ? "-" : "+"}${String(Math.abs(hours)).padStart(2, "0")}:00`;
+}
+
 function trip(
   id: string,
   date: string,
@@ -27,7 +36,7 @@ function trip(
   seatsRemaining: number,
   showRemaining = true,
 ) {
-  const start = new Date(`${date}T${String(hour).padStart(2, "0")}:00:00-05:00`);
+  const start = new Date(`${date}T${String(hour).padStart(2, "0")}:00:00${etOffset(date)}`);
   return {
     id,
     departureDate: date,
@@ -48,22 +57,29 @@ function trip(
   };
 }
 
+// Fixture days are picked by weekday, not date, so the grid looks the same
+// whatever weekday the month starts on.
+const firstDow = new Date(`${d(1)}T12:00:00Z`).getUTCDay();
 // The first Saturday of the fixture month: its box is in the last column.
-const firstSat = (() => {
-  const dow = new Date(`${d(1)}T12:00:00Z`).getUTCDay();
-  return 1 + ((6 - dow + 7) % 7);
-})();
+const firstSat = 1 + ((6 - firstDow + 7) % 7);
+// The third Sunday (the 15th–21st), in the first column: its open panel always
+// sits to the right of that column, so it never covers MORE_DAY below it.
+const STATES_DAY = 1 + ((7 - firstDow) % 7) + 14;
+// The Sunday after (the 22nd–28th).
+const MORE_DAY = STATES_DAY + 7;
+// The Tuesday between them.
+const SOLO_DAY = STATES_DAY + 2;
 
 const FIXTURE = [
-  // The 20th: one of each line state, four trips.
-  trip("t20-open", d(20), 5, "a", "Blackfish", 30),
-  trip("t20-low", d(20), 6, "b", "Fluke", 8),
-  trip("t20-hidden", d(20), 7, "c", "Bluefish", 8, false),
-  trip("t20-full", d(20), 12, "b", "Sea Bass", 0),
-  // The 22nd: five trips, more than a 1280×800 box shows.
-  ...[5, 6, 7, 12, 16].map((h, i) => trip(`t22-${i}`, d(22), h, i % 2 ? "a" : "b", "Fluke", 30)),
-  // The 24th: a boat that sails no other day.
-  trip("t24-z", d(24), 6, "z", "Porgy", 30),
+  // STATES_DAY: one of each line state, four trips.
+  trip("tstates-open", d(STATES_DAY), 5, "a", "Blackfish", 30),
+  trip("tstates-low", d(STATES_DAY), 6, "b", "Fluke", 8),
+  trip("tstates-hidden", d(STATES_DAY), 7, "c", "Bluefish", 8, false),
+  trip("tstates-full", d(STATES_DAY), 12, "b", "Sea Bass", 0),
+  // MORE_DAY: five trips, more than a 1280×800 box shows.
+  ...[5, 6, 7, 12, 16].map((h, i) => trip(`tmore-${i}`, d(MORE_DAY), h, i % 2 ? "a" : "b", "Fluke", 30)),
+  // SOLO_DAY: a boat that sails no other day.
+  trip("tsolo-z", d(SOLO_DAY), 6, "z", "Porgy", 30),
   trip(`tsat`, d(firstSat), 6, "a", "Fluke", 30),
 ];
 
@@ -83,7 +99,7 @@ async function gotoFixtureMonth(page: Page) {
   await page.goto("/book");
   await page.evaluate(() => localStorage.removeItem("openboat_cart"));
   await main(page).getByRole("button", { name: "Next month" }).click();
-  await expect(boxButton(page, d(20))).toBeVisible();
+  await expect(boxButton(page, d(STATES_DAY))).toBeVisible();
 }
 
 /** Seeds the stored cart with real trips from REAL_MONTH. */
@@ -115,74 +131,79 @@ test.describe("booking calendar (desktop)", () => {
   test("trip lines show seat state; boxes fit 4 lines at 1280×800", async ({ page }) => {
     await gotoFixtureMonth(page);
 
-    const lines = box(page, d(20)).locator(".bk-line");
-    await expect(lines).toHaveCount(4);
+    // How many lines fit follows the box height: floor((h − 34) / 16). A
+    // six-week month has shorter boxes, so it fits one line fewer.
+    const h = await box(page, d(MORE_DAY)).evaluate((el) => el.clientHeight);
+    const fit = Math.floor((h - 34) / 16);
+    const weeks = (await page.locator(".bk-cal-grid > *").count()) / 7;
+    if (weeks === 5) expect(fit).toBe(4);
+
+    const lines = box(page, d(STATES_DAY)).locator(".bk-line");
+    await expect(lines).toHaveCount(Math.min(4, fit));
     const [open, low, hidden, full] = [0, 1, 2, 3].map((i) => lines.nth(i));
 
     await expect(open).toHaveText(/^5:00ABLACKFISH$/);
     await expect(low).toHaveText(/FLUKE8$/);
     await expect(low).toHaveCSS("color", "rgb(140, 59, 18)");
-    // show_remaining off: rust, but no number.
-    await expect(hidden).toHaveText(/BLUEFISH$/);
-    await expect(hidden).toHaveCSS("color", "rgb(140, 59, 18)");
-    await expect(full).toHaveText(/FULL$/);
-    await expect(full.locator(".bk-line-name")).toHaveCSS("text-decoration-line", "line-through");
-
-    // How many lines fit follows the box height: floor((h − 34) / 16).
-    const h = await box(page, d(22)).evaluate((el) => el.clientHeight);
-    const fit = Math.floor((h - 34) / 16);
-    const weeks = (await page.locator(".bk-cal-grid > *").count()) / 7;
-    if (weeks === 5) expect(fit).toBe(4);
-    const day22 = box(page, d(22)).locator(".bk-line");
-    await expect(day22).toHaveCount(fit); // fit − 1 trips plus "+N MORE"
-    await expect(day22.last()).toHaveText(`+${5 - (fit - 1)} MORE`);
+    if (fit >= 4) {
+      // show_remaining off: rust, but no number.
+      await expect(hidden).toHaveText(/BLUEFISH$/);
+      await expect(hidden).toHaveCSS("color", "rgb(140, 59, 18)");
+      await expect(full).toHaveText(/FULL$/);
+      await expect(full.locator(".bk-line-name")).toHaveCSS("text-decoration-line", "line-through");
+    } else {
+      await expect(lines.last()).toHaveText(`+${4 - (fit - 1)} MORE`);
+    }
+    const moreLines = box(page, d(MORE_DAY)).locator(".bk-line");
+    await expect(moreLines).toHaveCount(fit); // fit − 1 trips plus "+N MORE"
+    await expect(moreLines.last()).toHaveText(`+${5 - (fit - 1)} MORE`);
   });
 
   test("box, trip line and +N MORE open the same panel; nothing is added", async ({ page }) => {
     await gotoFixtureMonth(page);
 
     // Box → panel, focus on close.
-    await openBox(page, d(20));
+    await openBox(page, d(STATES_DAY));
     await expect(dialog(page)).toHaveCount(1);
     await expect(dialog(page)).toContainText("4 TRIPS");
     await expect(dialog(page).getByRole("button", { name: "Close" })).toBeFocused();
-    await expect(boxButton(page, d(20))).toHaveAttribute("aria-expanded", "true");
+    await expect(boxButton(page, d(STATES_DAY))).toHaveAttribute("aria-expanded", "true");
 
     // Esc closes and focus returns to the day.
     await page.keyboard.press("Escape");
     await expect(dialog(page)).toHaveCount(0);
-    await expect(boxButton(page, d(20))).toBeFocused();
+    await expect(boxButton(page, d(STATES_DAY))).toBeFocused();
 
     // Trip line → same panel, that trip outlined, its first + focused.
-    await box(page, d(20)).locator(".bk-line").nth(1).click();
-    const card = dialog(page).locator('[data-trip-card="t20-low"]');
+    await box(page, d(STATES_DAY)).locator(".bk-line").nth(1).click();
+    const card = dialog(page).locator('[data-trip-card="tstates-low"]');
     await expect(card).toHaveClass(/is-focus/);
     await expect(card.getByRole("button", { name: /^One more .*seat$/ }).first()).toBeFocused();
     await expect(rail(page).getByText("No seats yet.")).toBeVisible();
 
     // Another day swaps the panel; "+N MORE" opens it too.
-    await box(page, d(22)).getByRole("button", { name: /MORE$/ }).click();
+    await box(page, d(MORE_DAY)).getByRole("button", { name: /MORE$/ }).click();
     await expect(dialog(page)).toHaveCount(1);
     await expect(dialog(page)).toContainText("5 TRIPS");
 
     // × closes.
     await dialog(page).getByRole("button", { name: "Close" }).click();
     await expect(dialog(page)).toHaveCount(0);
-    await expect(boxButton(page, d(22))).toBeFocused();
+    await expect(boxButton(page, d(MORE_DAY))).toBeFocused();
 
     // A click outside the panel and the rail closes it; one inside the rail doesn't.
-    await openBox(page, d(20));
+    await openBox(page, d(STATES_DAY));
     await rail(page).getByText("No seats yet.").click();
     await expect(dialog(page)).toHaveCount(1);
     await page.locator(".bk-cal-dow").click();
     await expect(dialog(page)).toHaveCount(0);
 
     // Sold out: WAITLIST, no stepper.
-    await openBox(page, d(20));
-    const soldOut = dialog(page).locator('[data-trip-card="t20-full"]');
+    await openBox(page, d(STATES_DAY));
+    const soldOut = dialog(page).locator('[data-trip-card="tstates-full"]');
     await expect(soldOut).toContainText("SOLD OUT");
     await expect(soldOut.getByRole("button", { name: "WAITLIST" })).toBeVisible();
-    await expect(dialog(page).locator('[data-trip-card="t20-hidden"]')).toContainText("ALMOST FULL");
+    await expect(dialog(page).locator('[data-trip-card="tstates-hidden"]')).toContainText("ALMOST FULL");
   });
 
   test("panel placement: never over the rail, flips left in the last column", async ({ page }) => {
@@ -199,8 +220,8 @@ test.describe("booking calendar (desktop)", () => {
     // ‹ › step through sailing days; ‹ is disabled on the first.
     await expect(dialog(page).getByRole("button", { name: "Previous sailing day" })).toBeDisabled();
     await dialog(page).getByRole("button", { name: "Next sailing day" }).click();
-    await expect(dialog(page)).toContainText("4 TRIPS"); // the 20th
-    await expect(boxButton(page, d(20))).toHaveAttribute("aria-expanded", "true");
+    await expect(dialog(page)).toContainText("4 TRIPS"); // STATES_DAY
+    await expect(boxButton(page, d(STATES_DAY))).toHaveAttribute("aria-expanded", "true");
     await dialog(page).getByRole("button", { name: "Previous sailing day" }).click();
     await expect(boxButton(page, d(firstSat))).toHaveAttribute("aria-expanded", "true");
   });
@@ -209,15 +230,15 @@ test.describe("booking calendar (desktop)", () => {
     await gotoFixtureMonth(page);
     const chips = page.getByRole("group", { name: "Filter by boat" });
 
-    await openBox(page, d(20));
+    await openBox(page, d(STATES_DAY));
     await chips.getByRole("button", { name: "FIXTURE BRAVO" }).click();
     await expect(dialog(page)).toContainText("2 TRIPS"); // still has Bravo's trips
-    await expect(box(page, d(20)).locator(".bk-line")).toHaveCount(2);
+    await expect(box(page, d(STATES_DAY)).locator(".bk-line")).toHaveCount(2);
 
     await chips.getByRole("button", { name: "FIXTURE ZULU" }).click();
-    await expect(dialog(page)).toHaveCount(0); // no Zulu trip on the 20th
-    await expect(boxButton(page, d(20))).toHaveCount(0);
-    await expect(box(page, d(24)).locator(".bk-line")).toHaveCount(1);
+    await expect(dialog(page)).toHaveCount(0); // no Zulu trip on STATES_DAY
+    await expect(boxButton(page, d(STATES_DAY))).toHaveCount(0);
+    await expect(box(page, d(SOLO_DAY)).locator(".bk-line")).toHaveCount(1);
   });
 
   test("keyboard: one tab stop, arrows move, Enter opens", async ({ page }) => {
@@ -323,7 +344,7 @@ test.describe("booking calendar (desktop)", () => {
     await gotoFixtureMonth(page);
     await expect(page.locator(".booking-nav-addr")).toBeHidden();
     const weeks = (await page.locator(".bk-cal-grid > *").count()) / 7;
-    if (weeks === 5) await expect(box(page, d(22)).locator(".bk-line")).toHaveCount(3);
+    if (weeks === 5) await expect(box(page, d(MORE_DAY)).locator(".bk-line")).toHaveCount(3);
   });
 
   test("1024 wide is desktop; 1023 is mobile", async ({ page }) => {
