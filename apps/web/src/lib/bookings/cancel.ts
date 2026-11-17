@@ -50,8 +50,11 @@ async function restoreSeats(tx: Tx, operatorId: string, bookingId: string, moved
  * Guards with FOR UPDATE so concurrent webhook deliveries and cron runs
  * cannot both restore seats for the same booking.
  */
-export async function cancelPendingBooking(bookingId: string): Promise<CancelledBooking | null> {
-  return db.transaction((tx) => cancelPendingBookingInTx(tx, bookingId));
+export async function cancelPendingBooking(
+  bookingId: string,
+  opts: { expectedPaymentIntentId?: string } = {},
+): Promise<CancelledBooking | null> {
+  return db.transaction((tx) => cancelPendingBookingInTx(tx, bookingId, opts));
 }
 
 /**
@@ -62,11 +65,15 @@ export async function cancelPendingBooking(bookingId: string): Promise<Cancelled
  * null is returned: that process is already cancelling or confirming it, and
  * the caller holds trip locks, so waiting on the booking row could deadlock
  * against cancelPendingBooking, which locks the booking first, then the trips.
+ *
+ * With expectedPaymentIntentId, the booking is cancelled only if that is the
+ * PI it was created for (the payment_intent.canceled webhook passes the
+ * event's PI, which names the booking only through writable metadata).
  */
 export async function cancelPendingBookingInTx(
   tx: Tx,
   bookingId: string,
-  opts: { skipLocked?: boolean } = {},
+  opts: { skipLocked?: boolean; expectedPaymentIntentId?: string } = {},
 ): Promise<CancelledBooking | null> {
   const [booking] = await tx
     .select({
@@ -75,12 +82,22 @@ export async function cancelPendingBookingInTx(
       confirmationCode: bookings.confirmationCode,
       customerEmail: bookings.customerEmail,
       operatorId: bookings.operatorId,
+      stripePaymentIntentId: bookings.stripePaymentIntentId,
     })
     .from(bookings)
     .where(eq(bookings.id, bookingId))
     .for("update", opts.skipLocked ? { skipLocked: true } : {});
 
   if (!booking || booking.status === "confirmed" || booking.status === "cancelled") {
+    return null;
+  }
+  if (
+    opts.expectedPaymentIntentId !== undefined &&
+    booking.stripePaymentIntentId !== opts.expectedPaymentIntentId
+  ) {
+    console.error(
+      `cancelPendingBooking: PI ${opts.expectedPaymentIntentId} does not belong to booking ${bookingId} (has ${booking.stripePaymentIntentId ?? "none"}); not cancelling`,
+    );
     return null;
   }
 
