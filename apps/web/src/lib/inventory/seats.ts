@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import { bookingItems, capacityChanges, trips, vessels } from "@openboat/db";
 import type { db } from "@/lib/db";
 import { liveTicketCount, seatHoldingTicketCount } from "@/lib/tickets/queries";
@@ -244,8 +244,8 @@ export async function recountUpcomingTrips(
       and(
         eq(trips.operatorId, input.operatorId),
         ne(trips.status, "cancelled"),
-        sql`${trips.startTime} >= ${input.from}`,
-        sql`${trips.startTime} < ${input.to}`,
+        gte(trips.startTime, input.from),
+        lt(trips.startTime, input.to),
       ),
     )
     .orderBy(trips.id);
