@@ -4,38 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Steps 1–10 complete. All testing phases (0–6) complete. Step 11 (production infra) is in progress — first target is `openboatfishing.com` as combined production sandbox + public demo.**
+**Pre-launch.** `openboatfishing.com` runs as a test-mode demo; the first live operator is a separate deployment.
 
-**Centralized architecture work (items 1–8) complete.** The codebase now supports both single-deploy (per-operator `OPERATOR_ID` env var) and centralized multi-tenant (domain → operator_id via `domains` table + Edge middleware). See `docs/centralized-architecture.md` for the full work item list and design notes.
+**Where the work order is:** `CODE_REVIEW.md` → "Launch Blockers" → "Blockers, in fix order". It is the only work
+order. The next thing to do is the first row without a ✅; the "Before a second operator" table follows it, and the
+"Fix Roadmap" holds the post-launch phases. Design detail for rows marked `AR-n` is in `ARCHITECTURE_REVIEW.md`
+(architecture and security review, 2026-11-16). Earlier narratives (`docs/build-status.md`, the Steps 1–11 list,
+`docs/architecture-review-findings.md`, `docs/refactoring-backlog.md`) are history, not a plan.
 
-**Refactoring backlog (items 2–5 complete):** Session factory, `OperatorContext` helper, general env-var cleanup, and booking-cancel domain extraction all landed. Remaining: item 1 (full domain modules — booking creation still inline), item 2 partial (server-component `getOperatorRecord()` helper not yet added), item 6 (middleware caching — post-launch). See `docs/refactoring-backlog.md`.
+**Each row is one branch and one PR** (see Git Workflow). When a row lands, mark it ✅ in its row with the PR number
+and what was verified, and note anything left open in that row.
 
-See `docs/build-status.md` for the full per-step build narrative.
+**Done so far (2026-11-16):** rows 1, 2b, 3, 4, 4b, 5, 7, 18, 19. **Next:** row 6 (P3-2), then row 8.
 
-**openboatfishing.com deployment (Step 11a — in progress):** Code work landed; user infra provisioning (domain, Neon, Vercel Pro, Stripe test Connect) is the next unblock. See `docs/openboatfishing-demo-deploy.md` for the full deploy checklist. Demo operator is **MV Open Boat** (3 vessels, 6 products, schedules through 2035). `DEMO_MODE=true` env flag enables the yellow banner, the nightly reset cron (`/api/cron/reset-demo-data`, wipes bookings but preserves customers + fishing reports), and the "Clear demo customers" admin button in `/admin/settings`.
-
-**Testing status:** All phases done. Phase 6 (mobile lib unit tests) complete — 51 tests, 97.97% line coverage, committed `ffea43f`. Maestro mobile E2E and BottomSheet extraction deferred until after launch.
-
-**Security fixes — all complete (last batch committed `6568cd2`):**
-
-- ✅ **H1 (CRITICAL — money bug):** Cron skips bookings whose PI is `succeeded`/`processing`; webhook guards against already-cancelled bookings.
-- ✅ **H2/H3:** Postgres-backed fixed-window rate limiter (`src/lib/rate-limit.ts`) on all auth routes — OTP request (20/hr IP + 5/hr email), OTP verify (10/15min email), mate PIN (5/15min email), admin login (10/15min IP).
-- ✅ **H4:** In-memory `rlStore` replaced with Postgres rate limiter (durable across Vercel lambda instances).
-- ✅ **H5:** Trip reminders window narrowed from `[+23h, +25h]` to `[+23h, +24h)` — exclusive upper bound tiles hourly cron runs with no overlap.
-- ✅ **M4:** `POST /api/bookings` — Zod schema validates cart/email/tickets; IP rate limit (20/15min) blocks seat-hold DoS.
-- ✅ **M6:** Audience separation — mate tokens embed `aud:"mate"`, customer tokens `aud:"customer"`; each verify function rejects the other type.
-- ✅ **M8:** Webhook handles `charge.refunded` (full refund → void tickets, cancel booking, restore seats) and `charge.dispute.created` (void tickets to block boarding).
-- ✅ **M9:** Startup env validation via `src/lib/env.ts` + `src/instrumentation.ts` — missing vars throw at boot, not at request time.
-- ✅ **M10:** Push notifications fire when bookings expire (cron) or PI is cancelled (webhook).
-
-**Known gaps blocking production (original list):**
-
-- SMS not sent (Twilio TODO in webhook)
-- QR payload is bare UUID — needs HMAC signing before launch
-- Weekend vs. weekday pricing not modelled (schema change needed)
-- `CRON_SECRET` env var must be added to Vercel before deploying (value in `apps/web/.env.local`)
-- EAS build + store submission not done (configure Apple IDs in `eas.json submit.consumer`, then `eas submit`)
-- Crons are set to daily in `vercel.json` for Vercel Hobby (max 2, once/day). Upgrade to Pro to restore `*/10 * * * *` expiry, hourly reminders, and the `reset-demo-data` cron.
+**Deployment facts that are not in the tracker:** `DEMO_MODE=true` enables the demo banner, the nightly reset cron
+(`/api/cron/reset-demo-data`, not registered in `vercel.json` on Hobby) and the "Clear demo customers" button;
+`vercel.json` runs only two daily crons on Hobby (expiry at 02:00, reminders at 09:00 UTC); `CRON_SECRET` must be set
+in Vercel; EAS store submission is not done; SMS (Twilio) is not wired.
 
 ## Known Tech Debt (pre-launch, not blocking dev)
 
