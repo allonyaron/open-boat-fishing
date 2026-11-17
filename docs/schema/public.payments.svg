@@ -61,71 +61,74 @@
 <!-- public.bookings -->
 <g id="node2" class="node">
 <title>public.bookings</title>
-<polygon fill="#efefef" stroke="none" points="43.2,-628.4 43.2,-664 365.34,-664 365.34,-628.4 43.2,-628.4"/>
-<polygon fill="none" stroke="black" points="43.2,-628.4 43.2,-664 365.34,-664 365.34,-628.4 43.2,-628.4"/>
-<text text-anchor="start" x="84.28" y="-641.8" font-family="Arial Bold" font-size="18.00">public.bookings</text>
-<text text-anchor="start" x="199.78" y="-641.8" font-family="Arial" font-size="14.00">    </text>
-<text text-anchor="start" x="230.89" y="-641.8" font-family="Arial" font-size="14.00" fill="#666666">[BASE TABLE]</text>
-<polygon fill="none" stroke="black" points="43.2,-597.6 43.2,-628.4 365.34,-628.4 365.34,-597.6 43.2,-597.6"/>
-<text text-anchor="start" x="50.2" y="-609.8" font-family="Arial" font-size="14.00">id </text>
-<text text-anchor="start" x="64.99" y="-609.8" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
-<polygon fill="none" stroke="black" points="43.2,-566.8 43.2,-597.6 365.34,-597.6 365.34,-566.8 43.2,-566.8"/>
-<text text-anchor="start" x="50.2" y="-579" font-family="Arial" font-size="14.00">operator_id </text>
-<text text-anchor="start" x="124.92" y="-579" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
-<polygon fill="none" stroke="black" points="43.2,-536 43.2,-566.8 365.34,-566.8 365.34,-536 43.2,-536"/>
-<text text-anchor="start" x="50.2" y="-548.2" font-family="Arial" font-size="14.00">customer_id </text>
-<text text-anchor="start" x="130.34" y="-548.2" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
-<polygon fill="none" stroke="black" points="43.2,-505.2 43.2,-536 365.34,-536 365.34,-505.2 43.2,-505.2"/>
-<text text-anchor="start" x="50.2" y="-517.4" font-family="Arial" font-size="14.00">confirmation_code </text>
-<text text-anchor="start" x="168.49" y="-517.4" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
-<polygon fill="none" stroke="black" points="43.2,-474.4 43.2,-505.2 365.34,-505.2 365.34,-474.4 43.2,-474.4"/>
-<text text-anchor="start" x="50.2" y="-486.6" font-family="Arial" font-size="14.00">status </text>
-<text text-anchor="start" x="91.44" y="-486.6" font-family="Arial" font-size="14.00" fill="#666666">[booking_status]</text>
-<polygon fill="none" stroke="black" points="43.2,-443.6 43.2,-474.4 365.34,-474.4 365.34,-443.6 43.2,-443.6"/>
-<text text-anchor="start" x="50.2" y="-455.8" font-family="Arial" font-size="14.00">stripe_payment_intent_id </text>
-<text text-anchor="start" x="210.52" y="-455.8" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
-<polygon fill="none" stroke="black" points="43.2,-412.8 43.2,-443.6 365.34,-443.6 365.34,-412.8 43.2,-412.8"/>
-<text text-anchor="start" x="50.2" y="-425" font-family="Arial" font-size="14.00">total_cents </text>
-<text text-anchor="start" x="121.8" y="-425" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
-<polygon fill="none" stroke="black" points="43.2,-382 43.2,-412.8 365.34,-412.8 365.34,-382 43.2,-382"/>
-<text text-anchor="start" x="50.2" y="-394.2" font-family="Arial" font-size="14.00">platform_fee_cents </text>
-<text text-anchor="start" x="173.16" y="-394.2" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
-<polygon fill="none" stroke="black" points="43.2,-351.2 43.2,-382 365.34,-382 365.34,-351.2 43.2,-351.2"/>
-<text text-anchor="start" x="50.2" y="-363.4" font-family="Arial" font-size="14.00">customer_name </text>
-<text text-anchor="start" x="154.47" y="-363.4" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
-<polygon fill="none" stroke="black" points="43.2,-320.4 43.2,-351.2 365.34,-351.2 365.34,-320.4 43.2,-320.4"/>
-<text text-anchor="start" x="50.2" y="-332.6" font-family="Arial" font-size="14.00">customer_email </text>
-<text text-anchor="start" x="152.9" y="-332.6" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
-<polygon fill="none" stroke="black" points="43.2,-289.6 43.2,-320.4 365.34,-320.4 365.34,-289.6 43.2,-289.6"/>
-<text text-anchor="start" x="50.2" y="-301.8" font-family="Arial" font-size="14.00">customer_phone </text>
-<text text-anchor="start" x="158.38" y="-301.8" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
-<polygon fill="none" stroke="black" points="43.2,-258.8 43.2,-289.6 365.34,-289.6 365.34,-258.8 43.2,-258.8"/>
-<text text-anchor="start" x="50.2" y="-271" font-family="Arial" font-size="14.00">notes </text>
-<text text-anchor="start" x="88.34" y="-271" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
-<polygon fill="none" stroke="black" points="43.2,-228 43.2,-258.8 365.34,-258.8 365.34,-228 43.2,-228"/>
-<text text-anchor="start" x="50.2" y="-240.2" font-family="Arial" font-size="14.00">created_at </text>
-<text text-anchor="start" x="120.25" y="-240.2" font-family="Arial" font-size="14.00" fill="#666666">[timestamp without time zone]</text>
-<polygon fill="none" stroke="black" points="43.2,-197.2 43.2,-228 365.34,-228 365.34,-197.2 43.2,-197.2"/>
-<text text-anchor="start" x="50.2" y="-209.4" font-family="Arial" font-size="14.00">updated_at </text>
-<text text-anchor="start" x="124.16" y="-209.4" font-family="Arial" font-size="14.00" fill="#666666">[timestamp without time zone]</text>
-<polygon fill="none" stroke="black" points="43.2,-166.4 43.2,-197.2 365.34,-197.2 365.34,-166.4 43.2,-166.4"/>
-<text text-anchor="start" x="50.2" y="-178.6" font-family="Arial" font-size="14.00">group_discount_cents </text>
-<text text-anchor="start" x="191.07" y="-178.6" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
-<polygon fill="none" stroke="black" points="43.2,-135.6 43.2,-166.4 365.34,-166.4 365.34,-135.6 43.2,-135.6"/>
-<text text-anchor="start" x="50.2" y="-147.8" font-family="Arial" font-size="14.00">terms_version </text>
-<text text-anchor="start" x="142.01" y="-147.8" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
-<polygon fill="none" stroke="black" points="43.2,-104.8 43.2,-135.6 365.34,-135.6 365.34,-104.8 43.2,-104.8"/>
-<text text-anchor="start" x="50.2" y="-117" font-family="Arial" font-size="14.00">terms_accepted_at </text>
-<text text-anchor="start" x="173.16" y="-117" font-family="Arial" font-size="14.00" fill="#666666">[timestamp without time zone]</text>
-<polygon fill="none" stroke="black" points="43.2,-74 43.2,-104.8 365.34,-104.8 365.34,-74 43.2,-74"/>
-<text text-anchor="start" x="50.2" y="-86.2" font-family="Arial" font-size="14.00">hold_expires_at </text>
-<text text-anchor="start" x="152.94" y="-86.2" font-family="Arial" font-size="14.00" fill="#666666">[timestamp without time zone]</text>
+<polygon fill="#efefef" stroke="none" points="43.2,-643.8 43.2,-679.4 365.34,-679.4 365.34,-643.8 43.2,-643.8"/>
+<polygon fill="none" stroke="black" points="43.2,-643.8 43.2,-679.4 365.34,-679.4 365.34,-643.8 43.2,-643.8"/>
+<text text-anchor="start" x="84.28" y="-657.2" font-family="Arial Bold" font-size="18.00">public.bookings</text>
+<text text-anchor="start" x="199.78" y="-657.2" font-family="Arial" font-size="14.00">    </text>
+<text text-anchor="start" x="230.89" y="-657.2" font-family="Arial" font-size="14.00" fill="#666666">[BASE TABLE]</text>
+<polygon fill="none" stroke="black" points="43.2,-613 43.2,-643.8 365.34,-643.8 365.34,-613 43.2,-613"/>
+<text text-anchor="start" x="50.2" y="-625.2" font-family="Arial" font-size="14.00">id </text>
+<text text-anchor="start" x="64.99" y="-625.2" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
+<polygon fill="none" stroke="black" points="43.2,-582.2 43.2,-613 365.34,-613 365.34,-582.2 43.2,-582.2"/>
+<text text-anchor="start" x="50.2" y="-594.4" font-family="Arial" font-size="14.00">operator_id </text>
+<text text-anchor="start" x="124.92" y="-594.4" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
+<polygon fill="none" stroke="black" points="43.2,-551.4 43.2,-582.2 365.34,-582.2 365.34,-551.4 43.2,-551.4"/>
+<text text-anchor="start" x="50.2" y="-563.6" font-family="Arial" font-size="14.00">customer_id </text>
+<text text-anchor="start" x="130.34" y="-563.6" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
+<polygon fill="none" stroke="black" points="43.2,-520.6 43.2,-551.4 365.34,-551.4 365.34,-520.6 43.2,-520.6"/>
+<text text-anchor="start" x="50.2" y="-532.8" font-family="Arial" font-size="14.00">confirmation_code </text>
+<text text-anchor="start" x="168.49" y="-532.8" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<polygon fill="none" stroke="black" points="43.2,-489.8 43.2,-520.6 365.34,-520.6 365.34,-489.8 43.2,-489.8"/>
+<text text-anchor="start" x="50.2" y="-502" font-family="Arial" font-size="14.00">status </text>
+<text text-anchor="start" x="91.44" y="-502" font-family="Arial" font-size="14.00" fill="#666666">[booking_status]</text>
+<polygon fill="none" stroke="black" points="43.2,-459 43.2,-489.8 365.34,-489.8 365.34,-459 43.2,-459"/>
+<text text-anchor="start" x="50.2" y="-471.2" font-family="Arial" font-size="14.00">stripe_payment_intent_id </text>
+<text text-anchor="start" x="210.52" y="-471.2" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<polygon fill="none" stroke="black" points="43.2,-428.2 43.2,-459 365.34,-459 365.34,-428.2 43.2,-428.2"/>
+<text text-anchor="start" x="50.2" y="-440.4" font-family="Arial" font-size="14.00">total_cents </text>
+<text text-anchor="start" x="121.8" y="-440.4" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
+<polygon fill="none" stroke="black" points="43.2,-397.4 43.2,-428.2 365.34,-428.2 365.34,-397.4 43.2,-397.4"/>
+<text text-anchor="start" x="50.2" y="-409.6" font-family="Arial" font-size="14.00">platform_fee_cents </text>
+<text text-anchor="start" x="173.16" y="-409.6" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
+<polygon fill="none" stroke="black" points="43.2,-366.6 43.2,-397.4 365.34,-397.4 365.34,-366.6 43.2,-366.6"/>
+<text text-anchor="start" x="50.2" y="-378.8" font-family="Arial" font-size="14.00">customer_name </text>
+<text text-anchor="start" x="154.47" y="-378.8" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<polygon fill="none" stroke="black" points="43.2,-335.8 43.2,-366.6 365.34,-366.6 365.34,-335.8 43.2,-335.8"/>
+<text text-anchor="start" x="50.2" y="-348" font-family="Arial" font-size="14.00">customer_email </text>
+<text text-anchor="start" x="152.9" y="-348" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<polygon fill="none" stroke="black" points="43.2,-305 43.2,-335.8 365.34,-335.8 365.34,-305 43.2,-305"/>
+<text text-anchor="start" x="50.2" y="-317.2" font-family="Arial" font-size="14.00">customer_phone </text>
+<text text-anchor="start" x="158.38" y="-317.2" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<polygon fill="none" stroke="black" points="43.2,-274.2 43.2,-305 365.34,-305 365.34,-274.2 43.2,-274.2"/>
+<text text-anchor="start" x="50.2" y="-286.4" font-family="Arial" font-size="14.00">notes </text>
+<text text-anchor="start" x="88.34" y="-286.4" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<polygon fill="none" stroke="black" points="43.2,-243.4 43.2,-274.2 365.34,-274.2 365.34,-243.4 43.2,-243.4"/>
+<text text-anchor="start" x="50.2" y="-255.6" font-family="Arial" font-size="14.00">created_at </text>
+<text text-anchor="start" x="120.25" y="-255.6" font-family="Arial" font-size="14.00" fill="#666666">[timestamp without time zone]</text>
+<polygon fill="none" stroke="black" points="43.2,-212.6 43.2,-243.4 365.34,-243.4 365.34,-212.6 43.2,-212.6"/>
+<text text-anchor="start" x="50.2" y="-224.8" font-family="Arial" font-size="14.00">updated_at </text>
+<text text-anchor="start" x="124.16" y="-224.8" font-family="Arial" font-size="14.00" fill="#666666">[timestamp without time zone]</text>
+<polygon fill="none" stroke="black" points="43.2,-181.8 43.2,-212.6 365.34,-212.6 365.34,-181.8 43.2,-181.8"/>
+<text text-anchor="start" x="50.2" y="-194" font-family="Arial" font-size="14.00">group_discount_cents </text>
+<text text-anchor="start" x="191.07" y="-194" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
+<polygon fill="none" stroke="black" points="43.2,-151 43.2,-181.8 365.34,-181.8 365.34,-151 43.2,-151"/>
+<text text-anchor="start" x="50.2" y="-163.2" font-family="Arial" font-size="14.00">terms_version </text>
+<text text-anchor="start" x="142.01" y="-163.2" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<polygon fill="none" stroke="black" points="43.2,-120.2 43.2,-151 365.34,-151 365.34,-120.2 43.2,-120.2"/>
+<text text-anchor="start" x="50.2" y="-132.4" font-family="Arial" font-size="14.00">terms_accepted_at </text>
+<text text-anchor="start" x="173.16" y="-132.4" font-family="Arial" font-size="14.00" fill="#666666">[timestamp without time zone]</text>
+<polygon fill="none" stroke="black" points="43.2,-89.4 43.2,-120.2 365.34,-120.2 365.34,-89.4 43.2,-89.4"/>
+<text text-anchor="start" x="50.2" y="-101.6" font-family="Arial" font-size="14.00">hold_expires_at </text>
+<text text-anchor="start" x="152.94" y="-101.6" font-family="Arial" font-size="14.00" fill="#666666">[timestamp without time zone]</text>
+<polygon fill="none" stroke="black" points="43.2,-58.6 43.2,-89.4 365.34,-89.4 365.34,-58.6 43.2,-58.6"/>
+<text text-anchor="start" x="50.2" y="-70.8" font-family="Arial" font-size="14.00">status_changed_at </text>
+<text text-anchor="start" x="172.41" y="-70.8" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
 </g>
 <!-- public.payments&#45;&gt;public.bookings -->
 <g id="edge1" class="edge">
 <title>public.payments:booking_id&#45;&gt;public.bookings:id</title>
-<path fill="none" stroke="black" d="M259.54,-1174.12C95.48,-1164.96 190.17,-928.81 270.66,-774 294.41,-728.3 341.4,-752.8 365.34,-707.2 384.81,-670.13 408.21,-613 366.34,-613"/>
-<polygon fill="black" stroke="black" points="259.32,-1174.12 269.2,-1178.89 264.66,-1174.26 268.99,-1174.38 268.99,-1174.38 268.99,-1174.38 264.66,-1174.26 269.44,-1169.89 259.32,-1174.12"/>
+<path fill="none" stroke="black" d="M259.53,-1174.12C95.13,-1164.76 181.25,-923.83 270.66,-774 295.19,-732.88 340.64,-763.62 365.34,-722.6 386.94,-686.73 408.21,-628.4 366.34,-628.4"/>
+<polygon fill="black" stroke="black" points="259.32,-1174.11 269.2,-1178.89 264.66,-1174.26 268.99,-1174.38 268.99,-1174.38 268.99,-1174.38 264.66,-1174.26 269.45,-1169.89 259.32,-1174.11"/>
 <text text-anchor="start" x="8.12" y="-1184.4" font-family="Arial" font-size="10.00">FOREIGN KEY (booking_id) REFERENCES bookings(id)</text>
 </g>
 <!-- public.operators -->
