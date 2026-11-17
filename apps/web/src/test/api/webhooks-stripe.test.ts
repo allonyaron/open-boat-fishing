@@ -70,22 +70,25 @@ describe("POST /api/webhooks/stripe", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 400 for an event from an unknown connected account", async () => {
+  it("acknowledges and ignores an event from an unknown connected account", async () => {
     vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
+      id: "evt_acct_unknown",
       type: "payment_intent.succeeded",
       account: "acct_unknown_00000",
       data: { object: {} },
     } as any);
     const { POST } = await import("@/app/api/webhooks/stripe/route");
     const res = await POST(req("{}", "sig"));
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
+    expect((await res.json()).ignored).toBe("connected_account");
     expect(handlePaymentIntentSucceeded).not.toHaveBeenCalled();
   });
 
-  it("processes an event whose account matches a known operator", async () => {
+  it("ignores an event from a known operator's connected account too (P3-2)", async () => {
     await testDb.update(operators).set({ stripeAccountId: "acct_known_123" }).where(eq(operators.id, ctx.operatorId));
     const pi = { id: "pi_1", metadata: { bookingId: "b1" } };
     vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
+      id: "evt_acct_known",
       type: "payment_intent.succeeded",
       account: "acct_known_123",
       data: { object: pi },
@@ -94,9 +97,8 @@ describe("POST /api/webhooks/stripe", () => {
     const { POST } = await import("@/app/api/webhooks/stripe/route");
     const res = await POST(req(JSON.stringify(pi), "sig"));
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.ok).toBe(true);
-    expect(handlePaymentIntentSucceeded).toHaveBeenCalledWith(pi);
+    expect((await res.json()).ignored).toBe("connected_account");
+    expect(handlePaymentIntentSucceeded).not.toHaveBeenCalled();
   });
 
   it("processes an event with no account field (single-deploy mode)", async () => {

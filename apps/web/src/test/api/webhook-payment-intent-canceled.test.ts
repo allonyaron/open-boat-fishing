@@ -57,6 +57,25 @@ describe("handlePaymentIntentCanceled", () => {
     expect(after.seatsRemaining).toBe(before.seatsRemaining);
   });
 
+  it("leaves a pending booking alone when the PI is not the booking's (P3-2)", async () => {
+    const [before] = await testDb
+      .select({ seatsRemaining: trips.seatsRemaining })
+      .from(trips)
+      .where(eq(trips.id, ctx.tripId));
+    const { bookingId } = await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_theirs" });
+
+    await handlePaymentIntentCanceled(pi({ id: "pi_forged_cancel", metadata: { bookingId } }));
+
+    const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(booking.status).toBe("pending");
+    const [after] = await testDb
+      .select({ seatsRemaining: trips.seatsRemaining })
+      .from(trips)
+      .where(eq(trips.id, ctx.tripId));
+    expect(after.seatsRemaining).toBe(before.seatsRemaining);
+    expect(sendPushToEmails).not.toHaveBeenCalled();
+  });
+
   it("is idempotent when the booking is already cancelled", async () => {
     const { bookingId } = await seedBooking(ctx, { status: "cancelled", stripePaymentIntentId: "pi_cancel_2" });
     await expect(

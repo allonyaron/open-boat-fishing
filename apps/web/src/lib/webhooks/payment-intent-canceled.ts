@@ -20,7 +20,9 @@ export async function handlePaymentIntentCanceled(pi: Stripe.PaymentIntent) {
   const bookingId = pi.metadata.bookingId;
   if (!bookingId) return;
 
-  const booking = await cancelPendingBooking(bookingId);
+  // Only the PI this booking was created for may cancel it (P3-2); the
+  // check runs under the booking lock.
+  const booking = await cancelPendingBooking(bookingId, { expectedPaymentIntentId: pi.id });
   if (!booking) return;
 
   console.log(`Booking cancelled, seats restored: ${booking.confirmationCode} (${bookingId})`);

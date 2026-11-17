@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { bookings, payments } from "@openboat/db";
+import { bookings, payments, operators, tickets } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
 vi.mock("@/lib/email", () => ({
@@ -19,8 +19,11 @@ import { handlePaymentIntentSucceeded } from "@/lib/webhooks/payment-intent-succ
 
 let ctx: SeedResult;
 
+const ACCT = "acct_test_succeeded";
+
 beforeAll(async () => {
   ctx = await seedOperator();
+  await testDb.update(operators).set({ stripeAccountId: ACCT }).where(eq(operators.id, ctx.operatorId));
 });
 
 afterAll(async () => {
@@ -36,6 +39,8 @@ function pi(overrides: Record<string, unknown>) {
   return {
     id: "pi_default",
     amount: 10000,
+    currency: "usd",
+    transfer_data: { destination: ACCT },
     status: "succeeded",
     payment_method_types: ["card"],
     latest_charge: null,
@@ -93,6 +98,77 @@ describe("handlePaymentIntentSucceeded", () => {
 
     const payment = await testDb.select().from(payments).where(eq(payments.bookingId, bookingId));
     expect(payment).toHaveLength(0);
+  });
+
+  describe("binds the PI to the booking (P3-2)", () => {
+    async function expectUntouched(bookingId: string) {
+      const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+      expect(booking.status).toBe("pending");
+      const [ticket] = await testDb.select().from(tickets).where(eq(tickets.bookingId, bookingId));
+      expect(ticket.status).toBe("held");
+      expect(await testDb.select().from(payments).where(eq(payments.bookingId, bookingId))).toHaveLength(0);
+      expect(stripe.refunds.create).not.toHaveBeenCalled();
+    }
+
+    it("does not confirm when the PI id is not the booking's", async () => {
+      const { bookingId } = await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_mine" });
+      await handlePaymentIntentSucceeded(pi({ id: "pi_someone_elses", metadata: { bookingId } }));
+      await expectUntouched(bookingId);
+    });
+
+    it("does not confirm when the booking has no PI yet", async () => {
+      const { bookingId } = await seedBooking(ctx, { status: "pending" });
+      await handlePaymentIntentSucceeded(pi({ id: "pi_early", metadata: { bookingId } }));
+      await expectUntouched(bookingId);
+    });
+
+    it("does not confirm when the amount differs from the booking total", async () => {
+      const { bookingId } = await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_cheap" });
+      await handlePaymentIntentSucceeded(pi({ id: "pi_cheap", amount: 50, metadata: { bookingId } }));
+      await expectUntouched(bookingId);
+    });
+
+    it("does not confirm when the currency is not usd", async () => {
+      const { bookingId } = await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_eur" });
+      await handlePaymentIntentSucceeded(pi({ id: "pi_eur", currency: "eur", metadata: { bookingId } }));
+      await expectUntouched(bookingId);
+    });
+
+    it("does not confirm when the destination is another account", async () => {
+      const { bookingId } = await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_dest" });
+      await handlePaymentIntentSucceeded(
+        pi({ id: "pi_dest", transfer_data: { destination: "acct_other" }, metadata: { bookingId } }),
+      );
+      await expectUntouched(bookingId);
+    });
+
+    it("does not confirm when the PI has no destination", async () => {
+      const { bookingId } = await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_nodest" });
+      await handlePaymentIntentSucceeded(pi({ id: "pi_nodest", transfer_data: undefined, metadata: { bookingId } }));
+      await expectUntouched(bookingId);
+    });
+
+    it("does not auto-refund a cancelled booking's PI when the PI is not the booking's", async () => {
+      const { bookingId } = await seedBooking(ctx, { status: "cancelled", stripePaymentIntentId: "pi_was_mine" });
+      await handlePaymentIntentSucceeded(pi({ id: "pi_forged", metadata: { bookingId } }));
+      expect(stripe.refunds.create).not.toHaveBeenCalled();
+    });
+  });
+
+  it("stores the fee Stripe actually took, not the expected one", async () => {
+    const { bookingId } = await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_fee_actual" });
+    vi.mocked(stripe.charges.retrieve).mockResolvedValue({
+      application_fee: "fee_2",
+      application_fee_amount: 300,
+      transfer: "tr_2",
+    } as any);
+
+    await handlePaymentIntentSucceeded(
+      pi({ id: "pi_fee_actual", latest_charge: "ch_2", metadata: { bookingId } }),
+    );
+
+    const [payment] = await testDb.select().from(payments).where(eq(payments.bookingId, bookingId));
+    expect(payment.applicationFeeCents).toBe(300);
   });
 
   it("captures applicationFeeId and stripeTransferId from the charge when latest_charge is present", async () => {
