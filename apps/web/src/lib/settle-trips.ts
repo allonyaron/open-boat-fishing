@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
-import { operators, trips, bookingItems, tickets } from "@openboat/db";
-import { and, eq, inArray, lt } from "drizzle-orm";
+import { operators, bookingItems, tickets } from "@openboat/db";
+import { and, eq, inArray } from "drizzle-orm";
 import { isLive } from "@/lib/tickets/queries";
+import { transitionTrips } from "@/lib/trips/status";
 
 /**
  * Lazy sail-signal: called before any revenue read. Two-step transition:
@@ -21,46 +22,26 @@ export async function settleTrips(operatorId: string): Promise<{ settled: number
   const graceHrs = operator?.settleGraceHrs ?? 48;
   const graceCutoff = new Date(now.getTime() - graceHrs * 60 * 60 * 1000);
 
-  // Step 1: scheduled → pending_settlement (departure has passed)
-  await db
-    .update(trips)
-    .set({ status: "pending_settlement", updatedAt: now })
-    .where(
-      and(
-        eq(trips.operatorId, operatorId),
-        eq(trips.status, "scheduled"),
-        lt(trips.startTime, now),
-      ),
+  return db.transaction(async (tx) => {
+    // Step 1: scheduled → pending_settlement (departure has passed)
+    await transitionTrips(tx, { operatorId, departedBefore: now }, "scheduled", "pending_settlement", {}, now);
+
+    // Step 2: pending_settlement → sailed (grace window cleared)
+    const tripIds = await transitionTrips(
+      tx,
+      { operatorId, departedBefore: graceCutoff },
+      "pending_settlement",
+      "sailed",
+      { sailedAt: now },
+      now,
     );
+    if (tripIds.length === 0) return { settled: 0 };
 
-  // Step 2: pending_settlement → sailed (grace window cleared)
-  const tripsToSettle = await db
-    .select({ id: trips.id })
-    .from(trips)
-    .where(
-      and(
-        eq(trips.operatorId, operatorId),
-        eq(trips.status, "pending_settlement"),
-        lt(trips.startTime, graceCutoff),
-      ),
-    );
-
-  if (tripsToSettle.length === 0) return { settled: 0 };
-
-  const tripIds = tripsToSettle.map((t) => t.id);
-
-  const items = await db
-    .select({ id: bookingItems.id })
-    .from(bookingItems)
-    .where(inArray(bookingItems.tripId, tripIds));
-
-  const itemIds = items.map((i) => i.id);
-
-  await db.transaction(async (tx) => {
-    await tx
-      .update(trips)
-      .set({ status: "sailed", sailedAt: now, updatedAt: now })
-      .where(inArray(trips.id, tripIds));
+    const items = await tx
+      .select({ id: bookingItems.id })
+      .from(bookingItems)
+      .where(and(inArray(bookingItems.tripId, tripIds), eq(bookingItems.operatorId, operatorId)));
+    const itemIds = items.map((i) => i.id);
 
     if (itemIds.length > 0) {
       await tx
@@ -75,7 +56,6 @@ export async function settleTrips(operatorId: string): Promise<{ settled: number
           ),
         );
     }
+    return { settled: tripIds.length };
   });
-
-  return { settled: tripsToSettle.length };
 }

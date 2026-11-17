@@ -1,7 +1,9 @@
 import { db } from "@/lib/db";
-import { bookings, bookingItems, trips } from "@openboat/db";
-import { and, eq, sql } from "drizzle-orm";
-import { moveTickets, type MovedTicket } from "@/lib/tickets/lifecycle";
+import { bookings } from "@openboat/db";
+import { eq } from "drizzle-orm";
+import { moveTickets } from "@/lib/tickets/lifecycle";
+import { giveBackSeatsForTickets } from "@/lib/inventory/seats";
+import { transitionBookings } from "./status";
 
 export type CancelledBooking = {
   id: string;
@@ -11,34 +13,6 @@ export type CancelledBooking = {
 };
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-/**
- * Gives back one seat per ticket that just left service, on that ticket's
- * trip. Counting the moved tickets rather than every ticket on the booking
- * means a ticket already refunded on its own isn't given back twice.
- */
-async function restoreSeats(tx: Tx, operatorId: string, bookingId: string, moved: MovedTicket[]) {
-  if (moved.length === 0) return;
-
-  const itemRows = await tx
-    .select({ id: bookingItems.id, tripId: bookingItems.tripId })
-    .from(bookingItems)
-    .where(and(eq(bookingItems.bookingId, bookingId), eq(bookingItems.operatorId, operatorId)));
-  const tripOf = new Map(itemRows.map((i) => [i.id, i.tripId]));
-
-  const seatsByTrip = new Map<string, number>();
-  for (const t of moved) {
-    const tripId = tripOf.get(t.bookingItemId)!;
-    seatsByTrip.set(tripId, (seatsByTrip.get(tripId) ?? 0) + 1);
-  }
-
-  for (const [tripId, count] of seatsByTrip) {
-    await tx
-      .update(trips)
-      .set({ seatsRemaining: sql`${trips.seatsRemaining} + ${count}` })
-      .where(and(eq(trips.id, tripId), eq(trips.operatorId, operatorId)));
-  }
-}
 
 /**
  * Atomically cancels a pending (unpaid) booking: voids its held tickets
@@ -104,12 +78,8 @@ export async function cancelPendingBookingInTx(
   // Tickets a cancelled trip already voided aren't held any more, so their
   // seats aren't given back a second time.
   const moved = await moveTickets(tx, { operatorId: booking.operatorId, bookingId }, "held", "voided");
-  await restoreSeats(tx, booking.operatorId, bookingId, moved);
-
-  await tx
-    .update(bookings)
-    .set({ status: "cancelled", updatedAt: new Date() })
-    .where(eq(bookings.id, bookingId));
+  await giveBackSeatsForTickets(tx, booking.operatorId, moved, "release");
+  await transitionBookings(tx, { operatorId: booking.operatorId, bookingId }, "pending", "cancelled");
 
   return {
     id: booking.id,
@@ -143,11 +113,7 @@ export async function cancelConfirmedBooking(bookingId: string): Promise<void> {
       ...(await moveTickets(tx, scope, "live", "refunded")),
       ...(await moveTickets(tx, scope, "disputed", "refunded")),
     ];
-    await restoreSeats(tx, fresh.operatorId, bookingId, moved);
-
-    await tx
-      .update(bookings)
-      .set({ status: "cancelled", updatedAt: new Date() })
-      .where(eq(bookings.id, bookingId));
+    await giveBackSeatsForTickets(tx, fresh.operatorId, moved, "refund");
+    await transitionBookings(tx, scope, "confirmed", "cancelled");
   });
 }

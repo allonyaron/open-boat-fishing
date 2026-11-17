@@ -2,27 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { trips, vessels, products, bookingItems, bookings, tickets, checkIns } from "@openboat/db";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
-import { liveTicketCount, seatHoldingTicketCount } from "@/lib/tickets/queries";
 import { isTicketLive, type TicketStatus } from "@/lib/tickets/status";
+import { InventoryError, setTripCapacity } from "@/lib/inventory/seats";
 
 /**
- * The part of a booking item's charged subtotal that pays for its live
- * tickets. The subtotal is net of any group discount; it's split across the
- * tickets that were paid for (live, refunded, disputed) in proportion to their
- * list prices, so a refunded or disputed ticket's share drops out. Unpaid
- * holds count for nothing.
+ * What a booking's live tickets paid: each ticket's priceCents is its share
+ * of the charge, net of any group discount, so a refunded or disputed
+ * ticket's share drops out and unpaid holds count for nothing.
  */
 function paidForLiveTickets(
-  subtotalCents: number,
   itemTickets: { priceCents: number; status: TicketStatus; voided: boolean }[],
 ): number {
-  const paid = itemTickets.filter((t) => t.status !== "held" && t.status !== "voided");
-  const listTotal = paid.reduce((s, t) => s + t.priceCents, 0);
-  if (listTotal === 0) return 0;
-  const liveList = paid.filter(isTicketLive).reduce((s, t) => s + t.priceCents, 0);
-  return Math.round((subtotalCents * liveList) / listTotal);
+  return itemTickets.filter(isTicketLive).reduce((s, t) => s + t.priceCents, 0);
 }
 
 export async function GET(req: NextRequest, { params }: { params: { tripId: string } }) {
@@ -121,7 +114,7 @@ export async function GET(req: NextRequest, { params }: { params: { tripId: stri
         notes: b.notes,
         status: b.status,
         totalCents: b.totalCents,
-        paidCents: items.reduce((s, i) => s + paidForLiveTickets(i.subtotalCents, bookingTickets.filter((t) => t.bookingItemId === i.id)), 0),
+        paidCents: paidForLiveTickets(bookingTickets),
         stripePaymentIntentId: b.stripePaymentIntentId,
         createdAt: b.createdAt,
         tickets: ticketList,
@@ -177,7 +170,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { tripId: st
   try {
     await db.transaction(async (tx) => {
       const [trip] = await tx
-        .select({ id: trips.id, capacity: trips.capacity, status: trips.status })
+        .select({ id: trips.id, status: trips.status })
         .from(trips)
         .where(and(eq(trips.id, tripId), eq(trips.operatorId, session.operatorId)))
         .for("update");
@@ -186,31 +179,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { tripId: st
       if (trip.status === "cancelled")
         throw Object.assign(new Error("Cannot edit a cancelled trip"), { status: 409 });
 
-      const set: PgUpdateSetSource<typeof trips> = { updatedAt: new Date() };
       let sold: number | undefined;
-
       if (hasCapacity) {
-        // The floor counts every seat taken, unpaid holds included; `sold` in
-        // the response counts paid tickets only.
-        let taken: number;
-        [{ sold, taken }] = await tx
-          .select({ sold: liveTicketCount(), taken: seatHoldingTicketCount() })
-          .from(trips)
-          .where(and(eq(trips.id, tripId), eq(trips.operatorId, session.operatorId)));
-
-        if (newCapacity < taken)
-          throw Object.assign(
-            new Error(
-              taken > sold
-                ? `Cannot set capacity below seats already taken (${taken}, including ${taken - sold} awaiting payment)`
-                : `Cannot set capacity below tickets already sold (${sold})`,
-            ),
-            { status: 422 },
-          );
-
-        set.capacity = newCapacity;
-        set.seatsRemaining = sql<number>`GREATEST(0, ${trips.seatsRemaining} + ${newCapacity - trip.capacity})`;
+        // The inventory module enforces the vessel's certificate capacity
+        // when it has one, and the floor of seats already taken (P7-3).
+        ({ sold } = await setTripCapacity(tx, {
+          operatorId: session.operatorId,
+          tripId,
+          capacity: newCapacity,
+          staffId: session.staffId,
+        }));
       }
+
+      const set: PgUpdateSetSource<typeof trips> = { updatedAt: new Date() };
       if (hasCutoff) set.onlineCutoffMinutes = newCutoff;
 
       const [updated] = await tx
@@ -226,6 +207,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { tripId: st
       result = { ...updated, sold };
     });
   } catch (err: unknown) {
+    if (err instanceof InventoryError) {
+      return NextResponse.json({ error: err.message }, { status: err.httpStatus });
+    }
     const e = err as { message?: string; status?: number };
     if (e.status) return NextResponse.json({ error: e.message }, { status: e.status });
     throw err;

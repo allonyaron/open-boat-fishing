@@ -55,7 +55,8 @@ export async function sendConfirmationEmail(
     } else {
       lineMap.set(key, {
         count: 1,
-        priceCents: t.priceCents,
+        // The fare shown per ticket; the email's total is the booking's.
+        priceCents: t.listPriceCents ?? t.priceCents,
         tripId: item.tripId,
         ticketType: t.ticketType,
       });

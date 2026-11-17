@@ -205,6 +205,7 @@ export const trips = pgTable("trips", {
   capacity: integer("capacity").notNull(),
   seatsRemaining: integer("seats_remaining").notNull(),
   status: tripStatusEnum("status").notNull().default("scheduled"),
+  statusChangedAt: timestamp("status_changed_at", { withTimezone: true }), // set by transitionTrips
   sailedAt: timestamp("sailed_at", { withTimezone: true }),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   cancellationReason: text("cancellation_reason"),
@@ -285,6 +286,7 @@ export const bookings = pgTable("bookings", {
   customerId: uuid("customer_id").references(() => customers.id), // null = guest
   confirmationCode: text("confirmation_code").notNull().unique(),  // 6-char alphanumeric
   status: bookingStatusEnum("status").notNull().default("pending"),
+  statusChangedAt: timestamp("status_changed_at", { withTimezone: true }), // set by transitionBookings
   stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
   totalCents: integer("total_cents").notNull(),
   platformFeeCents: integer("platform_fee_cents").notNull(),       // $1.50 × ticket count
@@ -326,7 +328,12 @@ export const tickets = pgTable("tickets", {
   bookingId: uuid("booking_id").notNull().references(() => bookings.id),
   operatorId: uuid("operator_id").notNull().references(() => operators.id),
   ticketType: ticketTypeEnum("ticket_type").notNull(),
+  // What this ticket's share of the charge was: its fare minus its share of
+  // any group discount (priceCart's netCents). Refunds pay this back.
   priceCents: integer("price_cents").notNull(),
+  // The fare before any discount, for display. Null on tickets written before
+  // it existed; read it as priceCents then.
+  listPriceCents: integer("list_price_cents"),
   feeAmountCents: integer("fee_amount_cents").notNull().default(150), // snapshot at write time
   feeStatus: feeStatusEnum("fee_status").notNull().default("held"),
   passengerName: text("passenger_name"),
@@ -358,13 +365,33 @@ export const checkIns = pgTable("check_ins", {
 // ─── Capacity Changes ─────────────────────────────────────────────────────────
 // Audit log of captain-initiated capacity adjustments on a trip.
 
+// Every change to trips.seats_remaining and trips.capacity, written by
+// lib/inventory only. sum(delta) over a trip's rows reconciles to its
+// seats_remaining; a recount row records any drift it corrected.
+export const seatChangeReasonEnum = pgEnum("seat_change_reason", [
+  "hold",          // seats taken for a new booking
+  "release",       // an unpaid hold gave its seats back
+  "refund",        // a paid ticket was refunded
+  "trip_cancel",   // the trip was cancelled
+  "capacity_edit", // staff changed the trip's capacity
+  "recount",       // seats_remaining reset to capacity - seats taken
+]);
+
 export const capacityChanges = pgTable("capacity_changes", {
   id: uuid("id").primaryKey().defaultRandom(),
   tripId: uuid("trip_id").notNull().references(() => trips.id),
   operatorId: uuid("operator_id").notNull().references(() => operators.id),
   staffId: uuid("staff_id").references(() => staff.id),
-  previousCapacity: integer("previous_capacity").notNull(),
-  newCapacity: integer("new_capacity").notNull(),
+  // Capacity before and after; null on rows that only moved seats_remaining.
+  previousCapacity: integer("previous_capacity"),
+  newCapacity: integer("new_capacity"),
+  // Change to seats_remaining (negative takes seats). Null on rows written
+  // before the ledger existed.
+  delta: integer("delta"),
+  reason: seatChangeReasonEnum("reason"),
+  seatsRemainingAfter: integer("seats_remaining_after"),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  ticketId: uuid("ticket_id").references(() => tickets.id, { onDelete: "set null" }),
   changedAt: timestamp("changed_at").notNull().defaultNow(),
 }, (t) => [
   index("capacity_changes_trip_idx").on(t.tripId),

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
-import { bookings, trips } from "@openboat/db";
-import { eq } from "drizzle-orm";
+import { seedOperator, cleanupOperator, seedBooking, testDb, cleanupBookings } from "../db-helpers";
+import { bookings, trips, capacityChanges } from "@openboat/db";
+import { eq, and } from "drizzle-orm";
 import { stripe } from "@/lib/stripe";
 
 // Mock Stripe so the cron doesn't make real API calls
@@ -29,6 +29,15 @@ function cronReq() {
   return new NextRequest("http://localhost/api/cron/expire-pending-bookings", {
     headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
   });
+}
+
+
+/** Ledger rows the cron's recount wrote for a trip: none means the seats were already right. */
+async function recountRows(tripId: string) {
+  return testDb
+    .select({ id: capacityChanges.id })
+    .from(capacityChanges)
+    .where(and(eq(capacityChanges.tripId, tripId), eq(capacityChanges.reason, "recount")));
 }
 
 describe("GET /api/cron/expire-pending-bookings", () => {
@@ -82,6 +91,8 @@ describe("GET /api/cron/expire-pending-bookings", () => {
       .from(trips)
       .where(eq(trips.id, ctx.tripId));
     expect(trip.seatsRemaining).toBe(20);
+    // Restored by the release itself: the cron's recount found nothing to fix.
+    expect(await recountRows(ctx.tripId)).toHaveLength(0);
   });
 
   it("skips a stale pending booking whose PI has already succeeded (H1 race guard)", async () => {
@@ -119,5 +130,26 @@ describe("GET /api/cron/expire-pending-bookings", () => {
       .from(trips)
       .where(eq(trips.id, ctx.tripId));
     expect(trip.seatsRemaining).toBe(19);
+  });
+  it("recounts drifted seats even on a night with no expired holds", async () => {
+    // No bookings on the trip, yet it shows 5 seats gone: drift a writer
+    // outside the inventory module would leave behind.
+    await cleanupBookings(ctx.tripId);
+    await testDb.update(trips).set({ seatsRemaining: 15 }).where(eq(trips.id, ctx.tripId));
+    const before = (await recountRows(ctx.tripId)).length;
+
+    const { GET } = await import("@/app/api/cron/expire-pending-bookings/route");
+    const res = await GET(cronReq());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.cancelled).toBe(0);
+    expect(body.seatsRecounted).toBeGreaterThanOrEqual(1);
+
+    const [trip] = await testDb
+      .select({ seatsRemaining: trips.seatsRemaining })
+      .from(trips)
+      .where(eq(trips.id, ctx.tripId));
+    expect(trip.seatsRemaining).toBe(20);
+    expect(await recountRows(ctx.tripId)).toHaveLength(before + 1);
   });
 });

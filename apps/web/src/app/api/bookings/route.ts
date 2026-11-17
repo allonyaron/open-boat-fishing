@@ -10,7 +10,7 @@ import {
   tickets,
   operators,
 } from "@openboat/db";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { randomBytes, randomUUID } from "crypto";
 import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { getOperatorContext, getOperatorId } from "@/lib/operator";
@@ -23,6 +23,7 @@ import { assertCartBookable, cartSchema, seatsByTrip } from "@/lib/bookings/cart
 import { loadPriceBook } from "@/lib/bookings/price-book";
 import { priceCart } from "@/lib/bookings/price-cart";
 import { isTicketLive } from "@/lib/tickets/status";
+import { InventoryError, takeSeats } from "@/lib/inventory/seats";
 import { z } from "zod";
 
 const WALLET_WINDOW_MS = 15 * 60 * 1000;
@@ -125,14 +126,6 @@ export async function POST(req: NextRequest) {
         const { totalCents, ticketCount, feeCents: platformFeeCents } = priced;
         const groupDiscountCents = priced.discountCents;
 
-        // Decrement seats now, while we hold the row locks
-        for (const [tripId, count] of Object.entries(seatRequestsByTrip)) {
-          await tx
-            .update(trips)
-            .set({ seatsRemaining: sql`${trips.seatsRemaining} - ${count}` })
-            .where(eq(trips.id, tripId));
-        }
-
         // Hold window: 10 min when any trip is near-full (<4 seats or <15% capacity),
         // 60 min otherwise (long enough that no countdown is shown).
         const nearFull = tripRows.some((trip) => {
@@ -167,6 +160,18 @@ export async function POST(req: NextRequest) {
           })
           .returning();
 
+        // Take the seats now, while we hold the row locks. assertCartBookable
+        // already checked them; the inventory module refuses rather than
+        // going negative if anything changed in between.
+        for (const tripId of Object.keys(seatRequestsByTrip).sort()) {
+          await takeSeats(tx, {
+            operatorId: operator.id,
+            tripId,
+            seats: seatRequestsByTrip[tripId],
+            bookingId: booking.id,
+          });
+        }
+
         for (const line of priced.lines) {
           const [bookingItem] = await tx
             .insert(bookingItems)
@@ -178,7 +183,8 @@ export async function POST(req: NextRequest) {
             })
             .returning();
 
-          // priceCents stays the list price until row 8 stores each ticket's net.
+          // priceCents is what this ticket's share of the charge is (a refund
+          // pays it back); listPriceCents is the fare shown.
           const ticketValues = line.tickets.map((t) => {
             const id = randomUUID();
             return {
@@ -187,7 +193,8 @@ export async function POST(req: NextRequest) {
               bookingId: booking.id,
               operatorId: operator.id,
               ticketType: t.ticketType as (typeof tickets.$inferInsert)["ticketType"],
-              priceCents: t.listCents,
+              priceCents: t.netCents,
+              listPriceCents: t.listCents,
               feeAmountCents: t.feeCents,
               feeStatus: "held" as const,
               // Takes the seat but can't board until payment_intent.succeeded
@@ -206,7 +213,7 @@ export async function POST(req: NextRequest) {
       },
     ));
   } catch (err: unknown) {
-    const status = (err as { httpStatus?: number }).httpStatus;
+    const status = err instanceof InventoryError ? err.httpStatus : (err as { httpStatus?: number }).httpStatus;
     if (status) {
       return NextResponse.json({ error: (err as Error).message }, { status });
     }
@@ -384,7 +391,9 @@ export async function GET(req: NextRequest) {
       tickets: itemTickets.map((t) => ({
         id: t.id,
         ticketType: t.ticketType,
+        // What the ticket paid (its share of the charge) and its fare.
         priceCents: t.priceCents,
+        listPriceCents: t.listPriceCents ?? t.priceCents,
         feeAmountCents: t.feeAmountCents,
         qrPayload: t.qrPayload,
         status: t.status,

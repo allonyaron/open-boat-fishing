@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/customer-auth";
 import { bookings, bookingItems, tickets, trips, vessels, products } from "@openboat/db";
-import { and, eq, inArray, desc } from "drizzle-orm";
+import { and, eq, inArray, desc, sql } from "drizzle-orm";
 import { isTicketLive } from "@/lib/tickets/status";
 
 export async function GET(req: NextRequest) {
@@ -48,6 +48,7 @@ export async function GET(req: NextRequest) {
         bookingItemId: tickets.bookingItemId,
         ticketType: tickets.ticketType,
         priceCents: tickets.priceCents,
+        listPriceCents: sql<number>`coalesce(${tickets.listPriceCents}, ${tickets.priceCents})`,
         status: tickets.status,
         voided: tickets.voided,
       })

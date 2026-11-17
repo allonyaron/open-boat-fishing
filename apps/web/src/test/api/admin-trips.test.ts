@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import { NextRequest, NextResponse } from "next/server";
 import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { trips } from "@openboat/db";
-import { eq } from "drizzle-orm";
+import { trips, tickets, bookingItems, capacityChanges } from "@openboat/db";
+import { eq, and, inArray, sql, desc } from "drizzle-orm";
 
 vi.mock("@/lib/session", () => ({
   requireAdmin: vi.fn(),
@@ -258,11 +258,16 @@ describe("PATCH /api/admin/trips/[tripId] — capacity", () => {
     expect(res.status).toBe(422);
   });
 
-  it("returns 200 and updates capacity correctly", async () => {
+  it("returns 200, sets seatsRemaining to capacity minus seats taken, and writes a ledger row", async () => {
     const [before] = await testDb
       .select({ capacity: trips.capacity, seatsRemaining: trips.seatsRemaining })
       .from(trips)
       .where(eq(trips.id, ctx.tripId));
+    const [{ taken }] = await testDb
+      .select({ taken: sql<number>`cast(count(*) as int)` })
+      .from(tickets)
+      .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
+      .where(and(eq(bookingItems.tripId, ctx.tripId), inArray(tickets.status, ["held", "live", "disputed"])));
 
     const newCapacity = before.capacity + 5;
     const { PATCH } = await import("@/app/api/admin/trips/[tripId]/route");
@@ -273,7 +278,21 @@ describe("PATCH /api/admin/trips/[tripId] — capacity", () => {
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.capacity).toBe(newCapacity);
-    expect(body.seatsRemaining).toBe(before.seatsRemaining + 5);
+    // A capacity edit is a recount by construction (AR-7): the seeded tickets
+    // never took seats, so this also corrects that drift.
+    expect(body.seatsRemaining).toBe(newCapacity - taken);
+
+    const [change] = await testDb
+      .select()
+      .from(capacityChanges)
+      .where(and(eq(capacityChanges.tripId, ctx.tripId), eq(capacityChanges.reason, "capacity_edit")))
+      .orderBy(desc(capacityChanges.changedAt))
+      .limit(1);
+    expect(change.previousCapacity).toBe(before.capacity);
+    expect(change.newCapacity).toBe(newCapacity);
+    expect(change.delta).toBe(newCapacity - taken - before.seatsRemaining);
+    expect(change.seatsRemainingAfter).toBe(newCapacity - taken);
+    expect(change.staffId).toBe(ctx.staffId);
   });
 });
 

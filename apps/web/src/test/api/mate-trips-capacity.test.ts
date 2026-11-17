@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { NextRequest } from "next/server";
 import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { trips, vessels, capacityChanges } from "@openboat/db";
-import { eq } from "drizzle-orm";
+import { trips, vessels, capacityChanges, tickets, bookingItems } from "@openboat/db";
+import { eq, and, inArray, sql } from "drizzle-orm";
 
 let ctx: SeedResult;
 let otherCtx: SeedResult;
@@ -116,26 +116,34 @@ describe("PATCH /api/mate/trips/[tripId]/capacity", () => {
       expect(body.error).toMatch(/tickets already sold/i);
     });
 
-    it("returns 200, adjusts seatsRemaining by the delta, and records a capacityChanges row", async () => {
+    it("returns 200, sets seatsRemaining to capacity minus seats taken, and records a ledger row", async () => {
       const [before] = await testDb
         .select({ capacity: trips.capacity, seatsRemaining: trips.seatsRemaining })
         .from(trips)
         .where(eq(trips.id, ctx.tripId));
+      const [{ taken }] = await testDb
+        .select({ taken: sql<number>`cast(count(*) as int)` })
+        .from(tickets)
+        .innerJoin(bookingItems, eq(tickets.bookingItemId, bookingItems.id))
+        .where(and(eq(bookingItems.tripId, ctx.tripId), inArray(tickets.status, ["held", "live", "disputed"])));
 
       const newCapacity = before.capacity + 4;
       const res = await callPatch(ctx.tripId, { capacity: newCapacity });
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.capacity).toBe(newCapacity);
-      expect(body.seatsRemaining).toBe(before.seatsRemaining + 4);
+      expect(body.seatsRemaining).toBe(newCapacity - taken);
+      expect(body.ticketsSold).toBe(2);
       expect(body.certificateCapacity).toBe(30);
 
       const [change] = await testDb
         .select()
         .from(capacityChanges)
-        .where(eq(capacityChanges.tripId, ctx.tripId));
+        .where(and(eq(capacityChanges.tripId, ctx.tripId), eq(capacityChanges.reason, "capacity_edit")));
       expect(change.previousCapacity).toBe(before.capacity);
       expect(change.newCapacity).toBe(newCapacity);
+      expect(change.delta).toBe(newCapacity - taken - before.seatsRemaining);
+      expect(change.seatsRemainingAfter).toBe(newCapacity - taken);
       expect(change.staffId).toBe(ctx.staffId);
     });
   });

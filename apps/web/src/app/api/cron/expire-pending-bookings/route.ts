@@ -4,7 +4,8 @@ import { stripe } from "@/lib/stripe";
 import { cancelPendingBooking } from "@/lib/bookings/cancel";
 import { notifyHoldsExpired } from "@/lib/bookings/reclaim-expired-holds";
 import { verifyCronAuth } from "@/lib/cron-auth";
-import { bookings, payments, rateLimits } from "@openboat/db";
+import { bookings, operators, payments, rateLimits } from "@openboat/db";
+import { recountUpcomingTrips } from "@/lib/inventory/seats";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -54,10 +55,6 @@ export async function GET(req: NextRequest) {
       ),
     )
     .limit(BATCH_LIMIT);
-
-  if (staleBookings.length === 0) {
-    return NextResponse.json({ ok: true, cancelled: 0 });
-  }
 
   let cancelled = 0;
   const errors: string[] = [];
@@ -113,12 +110,32 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Recount the next two weeks of trips against their tickets and report any
+  // drift (AR-7). seats_remaining is corrected either way; the log line is
+  // the signal that some writer bypassed the inventory module.
+  const operatorRows = await db.select({ id: operators.id }).from(operators);
+  const recountFrom = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const recountTo = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  let drifted = 0;
+  for (const op of operatorRows) {
+    const fixed = await db.transaction((tx) =>
+      recountUpcomingTrips(tx, { operatorId: op.id, from: recountFrom, to: recountTo }),
+    );
+    for (const r of fixed) {
+      console.error(
+        `Seat drift on trip ${r.tripId} (operator ${op.id}): seats_remaining was ${r.before}, recounted to ${r.after}`,
+      );
+    }
+    drifted += fixed.length;
+  }
+
   // Purge rate-limit rows older than 1 day to keep the table bounded.
   await db.delete(rateLimits).where(lt(rateLimits.windowStart, sql`NOW() - INTERVAL '1 day'`));
 
   return NextResponse.json({
     ok: errors.length === 0,
     cancelled,
+    seatsRecounted: drifted,
     ...(errors.length > 0 && { errors }),
   });
 }

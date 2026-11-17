@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { requireAdmin } from "@/lib/session";
-import { tickets, bookingItems, bookings, payments, trips } from "@openboat/db";
-import { and, eq, sql } from "drizzle-orm";
+import { tickets, bookingItems, bookings, payments } from "@openboat/db";
+import { and, eq } from "drizzle-orm";
 import { moveTickets } from "@/lib/tickets/lifecycle";
 import { isTicketLive } from "@/lib/tickets/status";
+import { giveBackSeatsForTickets } from "@/lib/inventory/seats";
 
 export async function POST(req: NextRequest, { params }: { params: { ticketId: string } }) {
   const auth = await requireAdmin(req);
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: { ticketId: s
     return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
   }
 
-  const { ticket, bookingItem, booking, payment } = row;
+  const { ticket, booking, payment } = row;
 
   if (!isTicketLive(ticket)) {
     return NextResponse.json(
@@ -44,7 +45,8 @@ export async function POST(req: NextRequest, { params }: { params: { ticketId: s
     return NextResponse.json({ error: "Booking is not in a refundable state" }, { status: 409 });
   }
 
-  // Issue the partial Stripe refund for the ticket price only.
+  // Issue the partial Stripe refund for what this ticket paid (its share of
+  // the charge, net of any group discount), not its list price (P2-2).
   // If we have the applicationFeeId, reverse the exact fee separately so it's precise.
   // Otherwise fall back to refund_application_fee: true (proportional).
   const hasExactFee = !!payment.applicationFeeId;
@@ -85,12 +87,7 @@ export async function POST(req: NextRequest, { params }: { params: { ticketId: s
       "live",
       "refunded",
     );
-    if (moved.length === 0) return;
-
-    await tx
-      .update(trips)
-      .set({ seatsRemaining: sql`${trips.seatsRemaining} + 1` })
-      .where(and(eq(trips.id, bookingItem.tripId), eq(trips.operatorId, session.operatorId)));
+    await giveBackSeatsForTickets(tx, session.operatorId, moved, "refund");
   });
 
   return NextResponse.json({ ok: true, ticketId, refundedCents: ticket.priceCents });

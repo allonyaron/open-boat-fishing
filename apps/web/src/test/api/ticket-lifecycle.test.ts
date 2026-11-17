@@ -6,8 +6,8 @@ import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
 import { seedOperator, cleanupOperator, seedBooking, cleanupBookings, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { bookings, operators, payments, tickets, trips } from "@openboat/db";
-import { eq } from "drizzle-orm";
+import { bookings, capacityChanges, operators, payments, tickets, trips } from "@openboat/db";
+import { and, eq } from "drizzle-orm";
 
 vi.mock("@/lib/stripe", () => ({
   stripe: {
@@ -132,6 +132,12 @@ describe("an unpaid hold that ends", () => {
 
     expect(await ticket(ticketId)).toEqual({ status: "voided", voided: true, feeStatus: "reversed" });
     expect(await seatsRemaining()).toBe(20);
+    // Given back by the release itself, not corrected by the cron's recount.
+    const recounts = await testDb
+      .select({ id: capacityChanges.id })
+      .from(capacityChanges)
+      .where(and(eq(capacityChanges.tripId, ctx.tripId), eq(capacityChanges.reason, "recount")));
+    expect(recounts).toHaveLength(0);
   });
 
   it("payment_intent.canceled voids the held ticket", async () => {

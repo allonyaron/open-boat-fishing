@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { bookings, bookingItems, trips, products, vessels, tickets } from "@openboat/db";
-import { and, eq, count } from "drizzle-orm";
+import { and, eq, count, sql } from "drizzle-orm";
 import { fmtTimeET } from "@/lib/format";
 import { dollars } from "@openboat/utils";
 
@@ -63,17 +63,19 @@ export async function getConfirmedBooking(
     .innerJoin(vessels, eq(vessels.id, trips.vesselId))
     .where(eq(bookingItems.bookingId, booking.id));
 
+  // Lines show the fare (list price); the subtotal is what was charged.
+  const fare = sql<number>`coalesce(${tickets.listPriceCents}, ${tickets.priceCents})`;
   const ticketBreakdown = await db
     .select({
       tripId: bookingItems.tripId,
       ticketType: tickets.ticketType,
-      priceCents: tickets.priceCents,
+      priceCents: fare,
       qty: count(),
     })
     .from(tickets)
     .innerJoin(bookingItems, eq(bookingItems.id, tickets.bookingItemId))
     .where(eq(tickets.bookingId, booking.id))
-    .groupBy(bookingItems.tripId, tickets.ticketType, tickets.priceCents);
+    .groupBy(bookingItems.tripId, tickets.ticketType, fare);
 
   const linesByTrip = new Map<string, string[]>();
   for (const row of ticketBreakdown) {

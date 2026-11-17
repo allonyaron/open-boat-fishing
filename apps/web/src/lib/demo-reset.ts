@@ -10,15 +10,17 @@ import {
   customers,
   magicLinkOtps,
   pushTokens,
+  capacityChanges,
 } from "@openboat/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 // Wipes booking-side activity and restores per-trip seat inventory. Preserves
 // customers (their accounts persist across the reset), fishing_reports (the
-// captain's posts are a feature we're showcasing), and capacity_changes (audit
-// trail of admin actions stays visible). Used by the nightly cron.
+// captain's posts are a feature we're showcasing), and capacity edits in
+// capacity_changes (the audit trail of staff actions stays visible). Used by
+// the nightly cron.
 export async function resetBookingActivity(
   tx: Tx,
   operatorId: string,
@@ -29,6 +31,16 @@ export async function resetBookingActivity(
   await tx.delete(tickets).where(eq(tickets.operatorId, operatorId));
   await tx.delete(bookingItems).where(eq(bookingItems.operatorId, operatorId));
   await tx.delete(bookings).where(eq(bookings.operatorId, operatorId));
+  // The seat ledger for the wiped bookings goes with them (seats are reset
+  // below); capacity edits stay as the audit trail of staff actions.
+  await tx
+    .delete(capacityChanges)
+    .where(
+      and(
+        eq(capacityChanges.operatorId, operatorId),
+        inArray(capacityChanges.reason, ["hold", "release", "refund", "trip_cancel", "recount"]),
+      ),
+    );
 
   const seats = await tx
     .update(trips)
