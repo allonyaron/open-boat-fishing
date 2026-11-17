@@ -1102,7 +1102,7 @@ says where each finding landed, so nobody follows two tables.
 | AR-4 | Fix Roadmap, Phase 3 (after rows 8, 10, 29) |
 | AR-5 | Pre-launch, row 24 |
 | AR-6 | Pre-launch, row 10 (rewritten; rows 9 and 11 build on it) |
-| AR-7 | Pre-launch, row 8 (rewritten; inventory module replaces `releaseBookingInventory`) |
+| AR-7 | Pre-launch, row 8 — done (PR #51), except the capacity CHECK |
 | AR-8 | Pre-launch, row 21 |
 | AR-9 | Pre-launch, row 12 (with P5-1, F1-8) |
 | AR-10 | Pre-launch, row 22 (with the rest of P3-5) |
@@ -1111,7 +1111,7 @@ says where each finding landed, so nobody follows two tables.
 | AR-13 | Before a second operator, row 30 (must precede the first store submission) |
 | AR-14 | Pre-launch, row 23 |
 | AR-15 | Phase 3 (remaining extractions); rows 8, 9, 14, 16 build the first modules |
-| AR-16 | Pre-launch, row 8 (`transition()` for bookings and trips) |
+| AR-16 | Pre-launch, row 8 — done (PR #51) |
 | AR-17 | Phase 3, with AR-15 |
 | AR-18 | Pre-launch, row 25 |
 | AR-19 | Phase 3 (after row 30) |

@@ -15,7 +15,7 @@ order. The next thing to do is the first row without a ✅; the "Before a second
 **Each row is one branch and one PR** (see Git Workflow). When a row lands, mark it ✅ in its row with the PR number
 and what was verified, and note anything left open in that row.
 
-**Done so far (2026-11-16):** rows 1, 2b, 3, 4, 4b, 5, 7, 18, 19. **Next:** row 6 (P3-2), then row 8.
+**Done so far (2026-11-17):** rows 1, 2b, 3, 4, 4b, 5, 6, 7, 8 (except its CHECK, open item 1), 18, 19. **Next:** row 10 (Stripe event inbox and command outbox), then row 9, which builds on it. Small rows (8's CHECK, 21–25) can go in between.
 
 **Deployment facts that are not in the tracker:** `DEMO_MODE=true` enables the demo banner, the nightly reset cron
 (`/api/cron/reset-demo-data`, not registered in `vercel.json` on Hobby) and the "Clear demo customers" button;
@@ -103,8 +103,11 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 - Every query on a tenant table (`bookings`, `tickets`, `booking_items`, `trips`, `vessels`, `products`, `customers`, `magic_link_otps`, `schedules`, `fishing_reports`) must include `eq(table.operatorId, operatorId)`. A missing filter leaks data across operators.
 
 **Seat inventory**
-- Seat decrements must use SQL arithmetic inside a `FOR UPDATE` transaction: `sql\`${trips.seatsRemaining} - ${count}\`` after `.for("update")`. No read-check-write at the application level.
-- Seat restores (cancellation, Stripe PI failure) must also use SQL arithmetic in their own transaction.
+- Only `lib/inventory/seats.ts` writes `trips.seats_remaining` or `trips.capacity` (`takeSeats`, `giveBackSeats`, `giveBackSeatsForTickets`, `recountSeats`, `setTripCapacity`). Each change is SQL arithmetic under the trip lock and writes a `capacity_changes` ledger row. No read-check-write at the application level.
+- Seats come back only for tickets `moveTickets` just moved (`giveBackSeatsForTickets`), never from a caller's own count, and never on a cancelled trip.
+
+**Status transitions**
+- `bookings.status` changes only through `transitionBookings` (`lib/bookings/status.ts`) and `trips.status` only through `transitionTrips` (`lib/trips/status.ts`): a transition table and one conditional UPDATE each. Act only on the ids they return.
 
 **Payments**
 - Use `stripe.paymentIntents.create()` with `transfer_data.destination` and `application_fee_amount`. Never `stripe.charges.create()`.
@@ -118,6 +121,7 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 **Webhook integrity**
 - The Stripe webhook handler must call `stripe.webhooks.constructEvent()` with the raw (un-parsed) request body before reading any event data.
 - Guard against duplicate delivery: check current booking/ticket status before applying any state transition. An already-cancelled booking must not be re-cancelled.
+- Never trust `metadata.bookingId` alone: a `payment_intent.*` event acts on a booking only if the PI id equals the booking's stored PI (and, for succeeded, amount, currency and destination match). Events carrying `event.account` are ignored.
 
 **Cron security**
 - Every `/api/cron/*` route must verify `Authorization: Bearer ${CRON_SECRET}` before any business logic. Return 401 immediately if missing or wrong.
@@ -128,7 +132,8 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 - `voided` is kept in step with `status` (true unless held or live) until a later release drops it; `isLive` also requires it false for refunds made by code deployed before `status`.
 
 **Cancellation atomicity**
-- Full cancellation is one DB transaction: move the booking's tickets out of service through `moveTickets` (held → voided, live → refunded), restore seats for the tickets it moved via SQL arithmetic, set `booking.status = 'cancelled'`. No partial cancellation path.
+- Full cancellation is one DB transaction: move the booking's tickets out of service through `moveTickets` (held → voided, live → refunded), give back seats for the tickets it moved through `giveBackSeatsForTickets`, then `transitionBookings(… → 'cancelled')`. No partial cancellation path.
+- `tickets.price_cents` is what the ticket paid (net of any group discount); `list_price_cents` is the fare. Refunds pay `price_cents`; display uses `list_price_cents ?? price_cents`.
 
 **Fee lifecycle**
 - Fees are inserted as `fee_status = 'held'`. Only the fee-earn cron (or lazy earn on revenue report render) may transition them to `'earned'`, and only on live tickets. Revenue queries must filter `WHERE fee_status = 'earned'` — never count `'held'` fees — and count reversals only on tickets that were paid (refunded, disputed).
