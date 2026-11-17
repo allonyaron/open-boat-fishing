@@ -41,9 +41,15 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
 
   if (tripItems.length === 0) {
     // No bookings — just mark the trip cancelled
-    const moved = await db.transaction((tx) =>
-      transitionTrips(tx, { operatorId: session.operatorId, tripId }, trip.status, "cancelled", cancelExtra),
-    );
+    const moved = await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ status: trips.status })
+        .from(trips)
+        .where(and(eq(trips.id, tripId), eq(trips.operatorId, session.operatorId)))
+        .for("update");
+      if (!current || current.status === "cancelled") return [];
+      return transitionTrips(tx, { operatorId: session.operatorId, tripId }, current.status, "cancelled", cancelExtra);
+    });
     if (moved.length === 0) {
       return NextResponse.json({ error: "Trip is already cancelled" }, { status: 409 });
     }
@@ -128,6 +134,17 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
   const ticketItemIds = tripItems.map((i) => i.id);
 
   const { ticketsOut, cancelled } = await db.transaction(async (tx) => {
+    // Lock the trip and read its status now, not the one read before the
+    // refunds: settlement may have moved it to pending_settlement meanwhile.
+    // A concurrent cancel that already committed is the only reason to stop,
+    // and stopping here, before any write, leaves nothing half-done.
+    const [current] = await tx
+      .select({ status: trips.status })
+      .from(trips)
+      .where(and(eq(trips.id, tripId), eq(trips.operatorId, session.operatorId)))
+      .for("update");
+    if (!current || current.status === "cancelled") return { ticketsOut: 0, cancelled: false };
+
     // Take this trip's tickets out of service and reverse their fees: paid
     // ones were refunded above, unpaid holds never charged anything. Their
     // seats come back before the trip is cancelled (the inventory module
@@ -139,17 +156,15 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
     ];
     await giveBackSeatsForTickets(tx, session.operatorId, moved, "trip_cancel");
 
-    // Mark trip cancelled; if another request got there first, nothing else
-    // here has an effect either, so report it.
-    const tripMoved = await transitionTrips(
+    // Mark trip cancelled, from the status it has under the lock.
+    await transitionTrips(
       tx,
       { operatorId: session.operatorId, tripId },
-      trip.status,
+      current.status,
       "cancelled",
       cancelExtra,
       now,
     );
-    if (tripMoved.length === 0) return { ticketsOut: moved.length, cancelled: false };
 
     // Cancel bookings with no live tickets left anywhere else
     const fullyRefundedBookingIds = refundPlans.filter((p) => p.fullRefund).map((p) => p.booking.id);
