@@ -56,10 +56,6 @@ export async function GET(req: NextRequest) {
     )
     .limit(BATCH_LIMIT);
 
-  if (staleBookings.length === 0) {
-    return NextResponse.json({ ok: true, cancelled: 0 });
-  }
-
   let cancelled = 0;
   const errors: string[] = [];
 
