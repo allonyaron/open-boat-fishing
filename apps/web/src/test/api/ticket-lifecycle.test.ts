@@ -6,7 +6,7 @@ import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
 import { seedOperator, cleanupOperator, seedBooking, cleanupBookings, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { bookings, payments, tickets, trips } from "@openboat/db";
+import { bookings, operators, payments, tickets, trips } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
 vi.mock("@/lib/stripe", () => ({
@@ -32,8 +32,13 @@ import { settleTrips } from "@/lib/settle-trips";
 
 let ctx: SeedResult;
 
+// The succeeded and canceled handlers act only on a PI bound to the booking
+// (P3-2): the booking's own PI id, paid to this operator's account.
+const ACCT = "acct_test_lifecycle";
+
 beforeAll(async () => {
   ctx = await seedOperator();
+  await testDb.update(operators).set({ stripeAccountId: ACCT }).where(eq(operators.id, ctx.operatorId));
 });
 
 afterAll(async () => {
@@ -103,6 +108,8 @@ function pi(overrides: Record<string, unknown>) {
   return {
     id: `pi_${randomUUID().slice(0, 8)}`,
     amount: 10000,
+    currency: "usd",
+    transfer_data: { destination: ACCT },
     status: "succeeded",
     payment_method_types: ["card"],
     latest_charge: null,
@@ -129,9 +136,10 @@ describe("an unpaid hold that ends", () => {
 
   it("payment_intent.canceled voids the held ticket", async () => {
     await setSeats(19);
-    const { bookingId, ticketId } = await seedBooking(ctx);
+    const piId = `pi_${randomUUID().slice(0, 8)}`;
+    const { bookingId, ticketId } = await seedBooking(ctx, { stripePaymentIntentId: piId });
 
-    await handlePaymentIntentCanceled(pi({ status: "canceled", metadata: { bookingId } }));
+    await handlePaymentIntentCanceled(pi({ id: piId, status: "canceled", metadata: { bookingId } }));
 
     expect(await ticket(ticketId)).toEqual({ status: "voided", voided: true, feeStatus: "reversed" });
     expect(await seatsRemaining()).toBe(20);
@@ -149,8 +157,12 @@ describe("an unpaid hold that ends", () => {
 
 describe("payment_intent.succeeded", () => {
   it("makes held tickets live, once", async () => {
-    const { bookingId, ticketId } = await seedBooking(ctx, { holdExpiresAt: new Date(Date.now() + 600_000) });
-    const event = pi({ metadata: { bookingId } });
+    const piId = `pi_${randomUUID().slice(0, 8)}`;
+    const { bookingId, ticketId } = await seedBooking(ctx, {
+      holdExpiresAt: new Date(Date.now() + 600_000),
+      stripePaymentIntentId: piId,
+    });
+    const event = pi({ id: piId, metadata: { bookingId } });
 
     await handlePaymentIntentSucceeded(event);
     expect(await ticket(ticketId)).toEqual({ status: "live", voided: false, feeStatus: "held" });
@@ -160,12 +172,14 @@ describe("payment_intent.succeeded", () => {
   });
 
   it("doesn't bring back a ticket that was voided while the booking was pending", async () => {
+    const piId = `pi_${randomUUID().slice(0, 8)}`;
     const { bookingId, ticketId } = await seedBooking(ctx, {
       ticketStatus: "voided",
       holdExpiresAt: new Date(Date.now() + 600_000),
+      stripePaymentIntentId: piId,
     });
 
-    await handlePaymentIntentSucceeded(pi({ metadata: { bookingId } }));
+    await handlePaymentIntentSucceeded(pi({ id: piId, metadata: { bookingId } }));
 
     expect(await ticket(ticketId)).toEqual({ status: "voided", voided: true, feeStatus: "reversed" });
   });
