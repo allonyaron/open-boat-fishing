@@ -6,9 +6,34 @@ import { getPostHogServer } from "@/lib/posthog";
 import { sendConfirmationEmail } from "@/lib/notifications/send-confirmation-email";
 import { moveTickets } from "@/lib/tickets/lifecycle";
 import { transitionBookings } from "@/lib/bookings/status";
-import { bookings, tickets, payments } from "@openboat/db";
+import { bookings, tickets, payments, operators } from "@openboat/db";
 import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
+
+/**
+ * Why `pi` cannot stand for `booking`, or null when it can. Exported for tests.
+ */
+export function paymentIntentMismatch(
+  pi: Pick<Stripe.PaymentIntent, "id" | "amount" | "currency" | "transfer_data">,
+  booking: { stripePaymentIntentId: string | null; totalCents: number },
+  operatorStripeAccountId: string | null,
+): string | null {
+  if (booking.stripePaymentIntentId !== pi.id) {
+    return `booking has PI ${booking.stripePaymentIntentId ?? "none"}`;
+  }
+  if (pi.amount !== booking.totalCents) {
+    return `amount ${pi.amount} != booking total ${booking.totalCents}`;
+  }
+  if (pi.currency !== "usd") return `currency ${pi.currency}`;
+  const destination =
+    typeof pi.transfer_data?.destination === "string"
+      ? pi.transfer_data.destination
+      : pi.transfer_data?.destination?.id ?? null;
+  if (!operatorStripeAccountId || destination !== operatorStripeAccountId) {
+    return `destination ${destination ?? "none"} != operator account ${operatorStripeAccountId ?? "none"}`;
+  }
+  return null;
+}
 
 export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
   const bookingId = pi.metadata.bookingId;
@@ -22,11 +47,15 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
   const chargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : null;
   let applicationFeeId: string | null = null;
   let stripeTransferId: string | null = null;
+  // The fee Stripe actually took, not the one the booking expected.
+  let applicationFeeCents: number | null = null;
   if (chargeId) {
     try {
       const charge = await stripe.charges.retrieve(chargeId);
       applicationFeeId = typeof charge.application_fee === "string" ? charge.application_fee : null;
       stripeTransferId = typeof charge.transfer === "string" ? charge.transfer : null;
+      applicationFeeCents =
+        typeof charge.application_fee_amount === "number" ? charge.application_fee_amount : null;
     } catch (err) {
       console.error("Failed to retrieve charge for fee IDs:", err);
     }
@@ -43,6 +72,23 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
 
     if (!fresh) {
       console.error("payment_intent.succeeded: booking not found", bookingId);
+      return null;
+    }
+
+    // The booking named in metadata must be the one this PI was created for:
+    // same PI id, same amount and currency, paid to this operator's account.
+    // metadata is writable by whoever owns the PI, so none of it is trusted
+    // on its own (P3-2). A mismatch is never retried: Stripe would send the
+    // same event again.
+    const [operator] = await tx
+      .select({ stripeAccountId: operators.stripeAccountId })
+      .from(operators)
+      .where(eq(operators.id, fresh.operatorId));
+    const mismatch = paymentIntentMismatch(pi, fresh, operator?.stripeAccountId ?? null);
+    if (mismatch) {
+      console.error(
+        `payment_intent.succeeded: PI ${pi.id} does not match booking ${bookingId} (${mismatch}); not confirming`,
+      );
       return null;
     }
 
@@ -78,7 +124,7 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
       applicationFeeId,
       stripeTransferId,
       amountCents: pi.amount,
-      applicationFeeCents: fresh.platformFeeCents,
+      applicationFeeCents: applicationFeeCents ?? fresh.platformFeeCents,
       status: pi.status,
       metadata: pi.metadata,
     });

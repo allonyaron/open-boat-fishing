@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { stripe } from "@/lib/stripe";
 import { handlePaymentIntentSucceeded } from "@/lib/webhooks/payment-intent-succeeded";
 import { handlePaymentIntentCanceled } from "@/lib/webhooks/payment-intent-canceled";
 import { handleChargeRefunded } from "@/lib/webhooks/charge-refunded";
 import { handleChargeDisputeCreated } from "@/lib/webhooks/charge-dispute-created";
-import { operators } from "@openboat/db";
-import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -29,20 +26,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  // Centralized mode: platform-level Connect webhooks carry event.account
-  // (the connected account that generated the event). Validate it against a
-  // known operator before processing — rejects events from unknown accounts.
-  // Single-deploy webhooks are registered on the connected account directly
-  // and do not carry event.account; skip this check in that case.
+  // Every PaymentIntent this app creates is a destination charge on the
+  // platform account, so the events it acts on never carry event.account.
+  // An event that does comes from a connected account's own activity (a
+  // Connect endpoint listening to connected accounts), which this handler
+  // must not act on: an operator could otherwise pay a $0.50 PI on their
+  // own account with another booking's id in metadata and have it
+  // confirmed (P3-2). Acknowledge and drop.
   if (event.account) {
-    const [operator] = await db
-      .select({ id: operators.id })
-      .from(operators)
-      .where(eq(operators.stripeAccountId, event.account));
-    if (!operator) {
-      console.error(`Webhook from unknown connected account: ${event.account}`);
-      return NextResponse.json({ error: "Unknown account" }, { status: 400 });
-    }
+    console.warn(
+      `Stripe webhook: ignoring ${event.type} ${event.id} from connected account ${event.account}`,
+    );
+    return NextResponse.json({ ok: true, ignored: "connected_account" });
   }
 
   if (event.type === "payment_intent.succeeded") {

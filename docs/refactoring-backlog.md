@@ -6,7 +6,7 @@ Captured before starting Step 11 / fishing-reports work. Goal: domain-driven str
 
 ## 1. Domain-Driven Module Structure
 
-**Status: Partially done**
+**Status: Superseded on 2026-11-16 by `CODE_REVIEW.md` rows 8, 9, 14, 16 and Fix Roadmap Phase 3 (AR-15). Do not start from here.**
 
 **Problem:** Business logic is scattered across API route files. A route file for `/api/bookings` contains seat decrement logic, fee calculation, Stripe PI creation, and email dispatch all inline.
 
@@ -56,7 +56,7 @@ Captured before starting Step 11 / fishing-reports work. Goal: domain-driven str
 
 ## 6. Middleware — Domain Lookup Caching (future, post-launch)
 
-**Not urgent** — the Neon HTTP round-trip is ~5–10ms p99. But at scale (many requests, many operators), caching the `domain → operator_id` mapping in Vercel KV (or edge config) would eliminate the per-request DB hit.
+**Superseded on 2026-11-16: the seam for this is `resolveTenant` in `CODE_REVIEW.md` row 28 (AR-3).** Not urgent — the Neon HTTP round-trip is ~5–10ms p99. But at scale (many requests, many operators), caching the `domain → operator_id` mapping in Vercel KV (or edge config) would eliminate the per-request DB hit.
 
 **Design:** On cache miss, query `domains` table and write to KV with a TTL of ~5 min. On domain add/update (via platform admin), invalidate the KV key. Would require adding Vercel KV to the centralized deployment's infra.
 
@@ -83,6 +83,6 @@ Captured before starting Step 11 / fishing-reports work. Goal: domain-driven str
 2. ~~**Item 4 (session factory)**~~ ✅ Done
 3. ~~**Item 3 (operator context helper)**~~ ✅ Done
 4. ~~**Item 2 (server-component operator helper)**~~ ✅ Done
-5. **Item 1 (booking creation extraction)** — test coverage now in place; ready to extract when the time is right
-6. **Item 6 (middleware caching)** — post-launch only
+5. ~~Item 1~~ — superseded by `CODE_REVIEW.md` rows 8/9/14/16 and Phase 3
+6. ~~Item 6~~ — superseded by `CODE_REVIEW.md` row 28
 7. **Item 7 (lint warnings)** — any time; small, independent
