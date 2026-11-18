@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/session";
 import { cancelTrip } from "@/lib/bookings/cancel-trip";
 
+// A full boat is a few Stripe calls per booking, made one after another.
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest, { params }: { params: { tripId: string } }) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;

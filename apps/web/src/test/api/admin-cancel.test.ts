@@ -29,6 +29,7 @@ vi.mock("@/lib/push", () => ({
 
 import { requireAdmin } from "@/lib/session";
 import { stripe } from "@/lib/stripe";
+import { sendPushToEmails } from "@/lib/push";
 
 let ctx: SeedResult;
 // Each seedFreshTrip call gets a unique far-future date to avoid the
@@ -54,7 +55,18 @@ beforeEach(() => {
   vi.mocked(stripe.paymentIntents.retrieve).mockResolvedValue({ status: "requires_payment_method" } as any);
   vi.mocked(stripe.paymentIntents.cancel).mockReset();
   vi.mocked(stripe.paymentIntents.cancel).mockResolvedValue({ status: "canceled" } as any);
+  vi.mocked(sendPushToEmails).mockClear();
 });
+
+function pushBodyFor(email: string) {
+  const call = vi.mocked(sendPushToEmails).mock.calls.find(([, emails]) => emails.includes(email));
+  return call?.[2].body;
+}
+
+async function emailOf(bookingId: string) {
+  const [b] = await testDb.select({ email: bookings.customerEmail }).from(bookings).where(eq(bookings.id, bookingId));
+  return b.email!;
+}
 
 async function seedFreshTrip(status: "scheduled" | "cancelled" = "scheduled", seatsRemaining = 20) {
   const month = String((freshTripIdx % 12) + 1).padStart(2, "0");
@@ -317,6 +329,7 @@ describe("trip cancel settles every booking on the trip (row 9)", () => {
     expect(await seatsLeft(tripId)).toBe(18);
     expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith(piId, { cancellation_reason: "requested_by_customer" });
     expect(stripe.refunds.create).not.toHaveBeenCalled();
+    expect(pushBodyFor(await emailOf(bookingId))).toMatch(/haven't been charged/);
   });
 
   it("refunds in full a payment that lands after its trip was cancelled", async () => {
@@ -329,6 +342,8 @@ describe("trip cancel settles every booking on the trip (row 9)", () => {
     const { POST } = await import("@/app/api/admin/trips/[tripId]/cancel/route");
     await POST(postReq(tripId), { params: { tripId } });
     expect(stripe.paymentIntents.cancel).not.toHaveBeenCalled();
+    // The payment went through before it could be cancelled: it will be refunded.
+    expect(pushBodyFor(await emailOf(bookingId))).toMatch(/refund is on the way/);
 
     const { handlePaymentIntentSucceeded } = await import("@/lib/webhooks/payment-intent-succeeded");
     const result = await handlePaymentIntentSucceeded({

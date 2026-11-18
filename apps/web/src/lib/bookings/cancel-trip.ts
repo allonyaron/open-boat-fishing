@@ -193,22 +193,26 @@ export async function finishTripCancellation(
   const acted = settled.filter((s): s is Exclude<Settled, { kind: "none" }> => s.kind !== "none");
   if (acted.length === 0) return null;
 
-  // After commit: the refunds (what doesn't go through stays queued for the
-  // cron), then the unpaid bookings' PaymentIntents. The booking is already
-  // cancelled, so the canceled webhook sends no push of its own.
+  // After commit: first the unpaid bookings' PaymentIntents, which nothing
+  // retries once their booking is cancelled, then the refunds (what doesn't
+  // go through stays queued for the cron). The booking is already cancelled,
+  // so the canceled webhook sends no push of its own. A payment that went
+  // through anyway is refunded in full by the succeeded handler.
   const paidOnes = acted.filter((s) => s.kind === "paid");
-  const sent = await sendCommands(paidOnes.flatMap((s) => (s.commandId ? [s.commandId] : [])));
+  const unpaidEmails: string[] = [];
+  const paidEmails = paidOnes.flatMap((s) => (s.email ? [s.email] : []));
   let paymentsNotCancelled = 0;
   for (const s of acted) {
-    if (s.kind !== "pending" || !s.paymentIntentId) continue;
-    const pi = await cancelPaymentIntentForRelease(s.paymentIntentId, "requested_by_customer");
+    if (s.kind !== "pending") continue;
+    const pi = s.paymentIntentId
+      ? await cancelPaymentIntentForRelease(s.paymentIntentId, "requested_by_customer")
+      : "canceled";
     if (pi !== "canceled") paymentsNotCancelled++;
+    if (s.email) (pi === "paid" ? paidEmails : unpaidEmails).push(s.email);
   }
+  const sent = await sendCommands(paidOnes.flatMap((s) => (s.commandId ? [s.commandId] : [])));
 
-  await notifyTripCancelled(operatorId, tripId, {
-    paid: paidOnes.flatMap((s) => (s.email ? [s.email] : [])),
-    unpaid: acted.flatMap((s) => (s.kind === "pending" && s.email ? [s.email] : [])),
-  });
+  await notifyTripCancelled(operatorId, tripId, { paid: paidEmails, unpaid: unpaidEmails });
 
   return {
     bookingsCancelled: acted.filter((s) => s.kind === "pending" || s.cancelled).length,
@@ -242,6 +246,10 @@ export async function cancelTrip(
       .for("update");
     if (!trip) return "not_found" as const;
     if (trip.status === "cancelled") return "was_cancelled" as const;
+    if (trip.status === "sailed") {
+      // Allowed (weather calls can come late), but it refunds a boat that went out (P4-9).
+      console.warn(`Cancelling an already-sailed trip: ${tripId} — requires manual review`);
+    }
     await transitionTrips(
       tx,
       { operatorId, tripId },
