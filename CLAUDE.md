@@ -15,7 +15,7 @@ order. The next thing to do is the first row without a ✅; the "Before a second
 **Each row is one branch and one PR** (see Git Workflow). When a row lands, mark it ✅ in its row with the PR number
 and what was verified, and note anything left open in that row.
 
-**Done so far (2026-11-17):** rows 1, 2b, 3, 4, 4b, 5, 6, 7, 8 (except its CHECK, open item 1), 18, 19. **Next:** row 10 (Stripe event inbox and command outbox), then row 9, which builds on it. Small rows (8's CHECK, 21–25) can go in between.
+**Done so far (2026-11-18):** rows 1, 2b, 3, 4, 4b, 5, 6, 7, 8 (except its CHECK, open item 1), 10, 18, 19. **Next:** row 9 (`cancelTrip`, sends its refunds through `lib/payments/commands`), then row 11 (reads the Stripe event inbox). Small rows (8's CHECK, 21–25) can go in between.
 
 **Deployment facts that are not in the tracker:** `DEMO_MODE=true` enables the demo banner, the nightly reset cron
 (`/api/cron/reset-demo-data`, not registered in `vercel.json` on Hobby) and the "Clear demo customers" button;
@@ -122,6 +122,8 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 - The Stripe webhook handler must call `stripe.webhooks.constructEvent()` with the raw (un-parsed) request body before reading any event data.
 - Guard against duplicate delivery: check current booking/ticket status before applying any state transition. An already-cancelled booking must not be re-cancelled.
 - Never trust `metadata.bookingId` alone: a `payment_intent.*` event acts on a booking only if the PI id equals the booking's stored PI (and, for succeeded, amount, currency and destination match). Events carrying `event.account` are ignored.
+- Every Stripe event goes through the inbox (`lib/stripe-events/inbox.ts`): saved before it is acted on, processed once, and a handler returns an outcome (handled, ignored, needs_review) or throws to be retried. Handlers find bookings by `bookings.stripe_payment_intent_id`, never by metadata.
+- Every refund goes through the outbox (`lib/payments/commands.ts`): `queueRefund` / `queueFeeRefund` in the transaction that changes the tickets, `sendCommand` after commit. Nothing calls `stripe.refunds.create` or `stripe.applicationFees.createRefund` directly.
 
 **Cron security**
 - Every `/api/cron/*` route must verify `Authorization: Bearer ${CRON_SECRET}` before any business logic. Return 401 immediately if missing or wrong.
