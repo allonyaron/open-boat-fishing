@@ -24,6 +24,7 @@ import {
   PlusIcon,
   BoatSwatch,
 } from "@/components/admin/merchant";
+import { tripCancelledMessage } from "@/components/admin/merchant/refundMessages";
 
 type DialogState =
   | { type: "cancel"; tripId: string }
@@ -130,11 +131,8 @@ export default function CalendarPage() {
         showToast(body.error ?? "Couldn't cancel the trip.", "error");
         return;
       }
-      showToast(
-        body.bookingsCancelled > 0
-          ? `Trip cancelled. ${body.ticketsVoided} refund${body.ticketsVoided === 1 ? "" : "s"} ${body.ticketsVoided === 1 ? "is" : "are"} on their way.`
-          : "Trip cancelled.",
-      );
+      const msg = tripCancelledMessage(body.refunds);
+      showToast(msg.text, msg.kind);
       setDialog(null);
       await refreshAfterAction();
     } finally {

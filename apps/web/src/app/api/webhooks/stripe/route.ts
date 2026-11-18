@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { stripe } from "@/lib/stripe";
-import { handlePaymentIntentSucceeded } from "@/lib/webhooks/payment-intent-succeeded";
-import { handlePaymentIntentCanceled } from "@/lib/webhooks/payment-intent-canceled";
-import { handleChargeRefunded } from "@/lib/webhooks/charge-refunded";
-import { handleChargeDisputeCreated } from "@/lib/webhooks/charge-dispute-created";
 import type Stripe from "stripe";
+import { processEvent, recordEvent } from "@/lib/stripe-events/inbox";
+import { dispatchStripeEvent } from "@/lib/stripe-events/dispatch";
 
 export const dynamic = "force-dynamic";
 
@@ -26,28 +24,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  // Every PaymentIntent this app creates is a destination charge on the
-  // platform account, so the events it acts on never carry event.account.
-  // An event that does comes from a connected account's own activity (a
-  // Connect endpoint listening to connected accounts), which this handler
-  // must not act on: an operator could otherwise pay a $0.50 PI on their
-  // own account with another booking's id in metadata and have it
-  // confirmed (P3-2). Acknowledge and drop.
-  if (event.account) {
-    console.warn(
-      `Stripe webhook: ignoring ${event.type} ${event.id} from connected account ${event.account}`,
-    );
-    return NextResponse.json({ ok: true, ignored: "connected_account" });
+  // Save the event before acting on it, then process it once (row 10). A
+  // redelivery of a finished event changes nothing. If processing fails in a
+  // way a retry can fix, answer 500 so Stripe redelivers; the expiry cron
+  // also drains unfinished events.
+  await recordEvent(event);
+  const result = await processEvent(event.id, dispatchStripeEvent);
+  if (result === "retry") {
+    return NextResponse.json({ error: "Processing failed; will retry" }, { status: 500 });
   }
-
-  if (event.type === "payment_intent.succeeded") {
-    await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
-  } else if (event.type === "payment_intent.canceled") {
-    await handlePaymentIntentCanceled(event.data.object as Stripe.PaymentIntent);
-  } else if (event.type === "charge.refunded") {
-    await handleChargeRefunded(event.data.object as Stripe.Charge);
-  } else if (event.type === "charge.dispute.created") {
-    await handleChargeDisputeCreated(event.data.object as Stripe.Dispute);
+  if (result === "busy") {
+    // Another delivery is processing it and may yet fail: ask Stripe to try
+    // again later rather than acknowledging it.
+    return NextResponse.json({ error: "Already being processed" }, { status: 409 });
   }
 
   return NextResponse.json({ ok: true });

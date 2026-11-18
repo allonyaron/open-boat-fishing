@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import { NextRequest, NextResponse } from "next/server";
 import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { bookings, bookingItems, tickets, payments, trips } from "@openboat/db";
-import { eq } from "drizzle-orm";
+import { bookings, bookingItems, tickets, payments, trips, stripeCommands } from "@openboat/db";
+import { eq, and, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 vi.mock("@/lib/session", () => ({
@@ -141,9 +141,23 @@ describe("POST /api/admin/tickets/[ticketId]/refund", () => {
     expect(body.ticketId).toBe(ticketId);
     expect(body.refundedCents).toBe(10000);
 
+    expect(body.refund).toBe("sent");
+    // The refund was recorded before it was sent; its id is the idempotency
+    // key and travels in the refund's metadata (row 10).
+    const [command] = await testDb
+      .select()
+      .from(stripeCommands)
+      .where(and(eq(stripeCommands.kind, "refund"), eq(stripeCommands.amountCents, 10000)))
+      .orderBy(desc(stripeCommands.createdAt))
+      .limit(1);
+    expect(command).toMatchObject({ status: "sent", stripeObjectId: "re_test_mock", reason: "admin_ticket_refund" });
     expect(stripe.refunds.create).toHaveBeenCalledWith(
-      expect.objectContaining({ payment_intent: expect.stringContaining("pi_test_") }),
-      expect.objectContaining({ idempotencyKey: expect.stringContaining("ticket-refund:") }),
+      expect.objectContaining({
+        payment_intent: expect.stringContaining("pi_test_"),
+        amount: 10000,
+        metadata: expect.objectContaining({ command_id: command.id, ticketId }),
+      }),
+      { idempotencyKey: command.id },
     );
 
     const [updatedTicket] = await testDb
@@ -157,5 +171,28 @@ describe("POST /api/admin/tickets/[ticketId]/refund", () => {
       .from(trips)
       .where(eq(trips.id, ctx.tripId));
     expect(tripAfter.seatsRemaining).toBe(tripBefore.seatsRemaining + 1);
+  });
+
+  it("refunds the ticket and queues the money when Stripe is unreachable", async () => {
+    vi.mocked(stripe.refunds.create).mockRejectedValueOnce(
+      Object.assign(new Error("connection reset"), { type: "StripeConnectionError" }),
+    );
+    const { ticketId } = await seedRefundableBooking();
+
+    const { POST } = await import("@/app/api/admin/tickets/[ticketId]/refund/route");
+    const res = await POST(postReq(ticketId), { params: { ticketId } });
+    expect(res.status).toBe(200);
+    expect((await res.json()).refund).toBe("queued");
+
+    const [t] = await testDb.select({ status: tickets.status }).from(tickets).where(eq(tickets.id, ticketId));
+    expect(t.status).toBe("refunded");
+    const [command] = await testDb
+      .select()
+      .from(stripeCommands)
+      .where(eq(stripeCommands.reason, "admin_ticket_refund"))
+      .orderBy(desc(stripeCommands.createdAt))
+      .limit(1);
+    expect(command).toMatchObject({ status: "pending", attempts: 1 });
+    expect(command.lastError).toMatch(/connection reset/);
   });
 });

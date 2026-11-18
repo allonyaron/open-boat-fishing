@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { stripe } from "@/lib/stripe";
 import { requireAdmin } from "@/lib/session";
 import { sendPushToEmails } from "@/lib/push";
 import { trips, bookingItems, bookings, tickets, vessels, products } from "@openboat/db";
@@ -10,6 +9,7 @@ import { isLive } from "@/lib/tickets/queries";
 import { giveBackSeatsForTickets } from "@/lib/inventory/seats";
 import { transitionTrips } from "@/lib/trips/status";
 import { transitionBookings } from "@/lib/bookings/status";
+import { queueRefund, sendCommands } from "@/lib/payments/commands";
 
 export async function POST(req: NextRequest, { params }: { params: { tripId: string } }) {
   const auth = await requireAdmin(req);
@@ -57,106 +57,40 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
   }
 
   const bookingIds = [...new Set(tripItems.map((i) => i.bookingId))];
+  const affectedBookings = await db
+    .select()
+    .from(bookings)
+    .where(and(inArray(bookings.id, bookingIds), eq(bookings.operatorId, session.operatorId)));
+  const bookingById = new Map(affectedBookings.map((b) => [b.id, b]));
 
-  // Load the affected bookings and every live ticket they hold, on this trip
-  // and on others. Refunds pay back what the live tickets on this trip paid
-  // (their share of the charge, net of any discount); a ticket already
-  // refunded on its own is not refunded again (P4-2, P2-2).
-  const [affectedBookings, liveTickets] = await Promise.all([
-    db.select().from(bookings).where(inArray(bookings.id, bookingIds)),
-    db
-      .select({
-        id: tickets.id,
-        bookingId: tickets.bookingId,
-        priceCents: tickets.priceCents,
-        tripId: bookingItems.tripId,
-      })
-      .from(tickets)
-      .innerJoin(bookingItems, eq(bookingItems.id, tickets.bookingItemId))
-      .where(and(inArray(tickets.bookingId, bookingIds), eq(tickets.operatorId, session.operatorId), isLive)),
-  ]);
-
-  // Per booking: refund the live tickets on this trip; cancel the booking if
-  // it has no live tickets left anywhere else.
-  type RefundPlan = {
-    booking: (typeof affectedBookings)[0];
-    refundCents: number;
-    fullRefund: boolean;
-  };
-
-  const refundPlans: RefundPlan[] = [];
-  for (const booking of affectedBookings) {
-    if (booking.status !== "confirmed" || !booking.stripePaymentIntentId) continue;
-
-    const live = liveTickets.filter((t) => t.bookingId === booking.id);
-    const onThisTrip = live.filter((t) => t.tripId === tripId);
-    if (onThisTrip.length === 0) continue;
-    const fullRefund = onThisTrip.length === live.length;
-    const refundCents = onThisTrip.reduce((s, t) => s + t.priceCents, 0);
-
-    refundPlans.push({ booking, refundCents, fullRefund });
-  }
-
-  // Issue all Stripe refunds before touching the DB
-  const refundErrors: { bookingId: string; error: string }[] = [];
-  for (const plan of refundPlans) {
-    try {
-      const refundParams: Parameters<typeof stripe.refunds.create>[0] = {
-        payment_intent: plan.booking.stripePaymentIntentId!,
-        refund_application_fee: true,
-        reverse_transfer: true,
-        metadata: { reason: reason ?? "trip_cancelled", tripId, bookingId: plan.booking.id },
-      };
-      // Always the amount the live tickets paid: with an earlier per-ticket
-      // refund on the same charge, "refund everything" would be too much.
-      refundParams.amount = plan.refundCents;
-      await stripe.refunds.create(refundParams, {
-        idempotencyKey: `refund:${plan.booking.id}:${tripId}`,
-      });
-    } catch (err) {
-      console.error(`Stripe refund failed for booking ${plan.booking.id}:`, err);
-      refundErrors.push({ bookingId: plan.booking.id, error: String(err) });
-    }
-  }
-
-  if (refundErrors.length > 0) {
-    return NextResponse.json(
-      {
-        error: "Some refunds failed — cancellation aborted. Check Stripe dashboard.",
-        failed: refundErrors,
-      },
-      { status: 502 },
-    );
-  }
-
-  // All refunds OK — commit state changes atomically
   const now = new Date();
   const ticketItemIds = tripItems.map((i) => i.id);
 
-  const { ticketsOut, cancelled } = await db.transaction(async (tx) => {
-    // Lock the trip and read its status now, not the one read before the
-    // refunds: settlement may have moved it to pending_settlement meanwhile.
-    // A concurrent cancel that already committed is the only reason to stop,
-    // and stopping here, before any write, leaves nothing half-done.
+  // One transaction: the trip, its tickets, their seats, the bookings and the
+  // refund requests change together (row 10). Refunds are recorded here and
+  // sent after commit, so a Stripe failure no longer aborts the cancellation
+  // or leaves some refunds sent and none recorded (P4-3): an unsent refund
+  // stays queued and is retried, or shows on the Money page.
+  const outcome = await db.transaction(async (tx) => {
+    // Lock the trip and read its status now: settlement may have moved it to
+    // pending_settlement since it was read above. A concurrent cancel that
+    // already committed is the only reason to stop, before any write.
     const [current] = await tx
       .select({ status: trips.status })
       .from(trips)
       .where(and(eq(trips.id, tripId), eq(trips.operatorId, session.operatorId)))
       .for("update");
-    if (!current || current.status === "cancelled") return { ticketsOut: 0, cancelled: false };
+    if (!current || current.status === "cancelled") return null;
 
     // Take this trip's tickets out of service and reverse their fees: paid
-    // ones were refunded above, unpaid holds never charged anything. Their
+    // ones are refunded below, unpaid holds never charged anything. Their
     // seats come back before the trip is cancelled (the inventory module
     // gives nothing back on a cancelled trip), so the ledger reconciles.
     const scope = { operatorId: session.operatorId, bookingItemIds: ticketItemIds };
-    const moved = [
-      ...(await moveTickets(tx, scope, "live", "refunded")),
-      ...(await moveTickets(tx, scope, "held", "voided")),
-    ];
-    await giveBackSeatsForTickets(tx, session.operatorId, moved, "trip_cancel");
+    const refunded = await moveTickets(tx, scope, "live", "refunded");
+    const voided = await moveTickets(tx, scope, "held", "voided");
+    await giveBackSeatsForTickets(tx, session.operatorId, [...refunded, ...voided], "trip_cancel");
 
-    // Mark trip cancelled, from the status it has under the lock.
     await transitionTrips(
       tx,
       { operatorId: session.operatorId, tripId },
@@ -166,22 +100,71 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
       now,
     );
 
-    // Cancel bookings with no live tickets left anywhere else
-    const fullyRefundedBookingIds = refundPlans.filter((p) => p.fullRefund).map((p) => p.booking.id);
-    await transitionBookings(
+    // Refund what the tickets just taken out of service paid (their share of
+    // the charge, net of any discount), per booking. A ticket refunded on its
+    // own earlier wasn't live, so it isn't refunded again (P4-2, P2-2).
+    const paid = refunded.length
+      ? await tx
+          .select({ bookingId: tickets.bookingId, priceCents: tickets.priceCents })
+          .from(tickets)
+          .where(and(inArray(tickets.id, refunded.map((t) => t.id)), eq(tickets.operatorId, session.operatorId)))
+      : [];
+    const centsByBooking = new Map<string, number>();
+    for (const t of paid) centsByBooking.set(t.bookingId, (centsByBooking.get(t.bookingId) ?? 0) + t.priceCents);
+
+    const commandIds: string[] = [];
+    for (const [bookingId, cents] of centsByBooking) {
+      const booking = bookingById.get(bookingId);
+      if (!booking?.stripePaymentIntentId || cents <= 0) continue;
+      commandIds.push(
+        await queueRefund(tx, {
+          operatorId: session.operatorId,
+          bookingId,
+          paymentIntentId: booking.stripePaymentIntentId,
+          amountCents: cents,
+          reason: "trip_cancelled",
+          reverseTransfer: true,
+          refundApplicationFee: true,
+          metadata: { tripId, ...(reason && { cancelReason: reason.slice(0, 200) }) },
+        }),
+      );
+    }
+
+    // Cancel the bookings that have no live tickets left on any trip.
+    const stillLive = centsByBooking.size
+      ? await tx
+          .select({ bookingId: tickets.bookingId })
+          .from(tickets)
+          .where(
+            and(
+              inArray(tickets.bookingId, [...centsByBooking.keys()]),
+              eq(tickets.operatorId, session.operatorId),
+              isLive,
+            ),
+          )
+      : [];
+    const keepOpen = new Set(stillLive.map((t) => t.bookingId));
+    const bookingsCancelled = await transitionBookings(
       tx,
-      { operatorId: session.operatorId, bookingIds: fullyRefundedBookingIds },
+      {
+        operatorId: session.operatorId,
+        bookingIds: [...centsByBooking.keys()].filter((id) => !keepOpen.has(id)),
+      },
       "confirmed",
       "cancelled",
       now,
     );
-    return { ticketsOut: moved.length, cancelled: true };
+
+    return { ticketsOut: refunded.length + voided.length, bookingsCancelled: bookingsCancelled.length, commandIds };
   });
 
-  if (!cancelled) {
+  if (!outcome) {
     return NextResponse.json({ error: "Trip is already cancelled" }, { status: 409 });
   }
-  const count = ticketsOut;
+  const count = outcome.ticketsOut;
+
+  // Send the refunds now; what doesn't go through stays queued.
+  const refunds = await sendCommands(outcome.commandIds);
 
   // Fire cancellation push notifications (best-effort, non-blocking)
   const passengerEmails = affectedBookings.map((b) => b.customerEmail).filter(Boolean) as string[];
@@ -210,8 +193,9 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
   return NextResponse.json({
     ok: true,
     tripId,
-    bookingsCancelled: refundPlans.filter((p) => p.fullRefund).length,
+    bookingsCancelled: outcome.bookingsCancelled,
     ticketsVoided: Number(count),
     refundedAt: now.toISOString(),
+    refunds: { sent: refunds.sent + refunds.confirmed, queued: refunds.pending, failed: refunds.failed },
   });
 }

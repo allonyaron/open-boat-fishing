@@ -16,7 +16,10 @@ vi.mock("@/lib/stripe", () => ({
       cancel: vi.fn().mockResolvedValue({ status: "canceled" }),
     },
     charges: { retrieve: vi.fn() },
-    refunds: { create: vi.fn().mockResolvedValue({ id: "re_test" }) },
+    refunds: {
+      create: vi.fn().mockResolvedValue({ id: "re_test" }),
+      list: vi.fn().mockResolvedValue({ data: [] }),
+    },
     applicationFees: { createRefund: vi.fn().mockResolvedValue({ id: "fr_test" }) },
   },
 }));

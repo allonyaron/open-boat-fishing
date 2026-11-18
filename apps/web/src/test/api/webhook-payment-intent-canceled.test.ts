@@ -30,8 +30,17 @@ function pi(overrides: Record<string, unknown>) {
 }
 
 describe("handlePaymentIntentCanceled", () => {
-  it("does nothing when bookingId is missing from metadata", async () => {
-    await expect(handlePaymentIntentCanceled(pi({ id: "pi_no_meta", metadata: {} }))).resolves.toBeUndefined();
+  it("ignores a cancelled PI that no booking has", async () => {
+    const result = await handlePaymentIntentCanceled(pi({ id: "pi_no_booking", metadata: {} }));
+    expect(result.outcome).toBe("ignored");
+  });
+
+  it("finds the booking by its PI id, not by metadata", async () => {
+    const { bookingId } = await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_by_id" });
+    const result = await handlePaymentIntentCanceled(pi({ id: "pi_by_id", metadata: {} }));
+    expect(result.outcome).toBe("handled");
+    const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(booking.status).toBe("cancelled");
   });
 
   it("cancels a pending booking and restores seats", async () => {
@@ -78,9 +87,8 @@ describe("handlePaymentIntentCanceled", () => {
 
   it("is idempotent when the booking is already cancelled", async () => {
     const { bookingId } = await seedBooking(ctx, { status: "cancelled", stripePaymentIntentId: "pi_cancel_2" });
-    await expect(
-      handlePaymentIntentCanceled(pi({ id: "pi_cancel_2", metadata: { bookingId } })),
-    ).resolves.toBeUndefined();
+    const result = await handlePaymentIntentCanceled(pi({ id: "pi_cancel_2", metadata: { bookingId } }));
+    expect(result.outcome).toBe("handled");
     const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
     expect(booking.status).toBe("cancelled");
   });

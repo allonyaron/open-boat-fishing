@@ -31,6 +31,7 @@ import {
   cancelReasonLabel,
   UndoIcon,
 } from "@/components/admin/merchant";
+import { ticketRefundedMessage } from "@/components/admin/merchant/refundMessages";
 import { BookingListDeskPhone, BookingListDock, BookingTableDesk, type PassengerActions, type ShownBooking } from "./PassengerViews";
 import { PrintSheet } from "./PrintSheet";
 import {
@@ -159,7 +160,8 @@ export default function PassengerListPage() {
         showToast(body.error ?? "Couldn't refund this ticket.", "error");
         return;
       }
-      showToast(`Refunded ${fmtMoney(body.refundedCents)}. The seat is back on sale.`);
+      const msg = ticketRefundedMessage(body.refundedCents, body.refund);
+      showToast(msg.text, msg.kind);
       setRefundTarget(null);
       await load();
     } finally {

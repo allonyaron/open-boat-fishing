@@ -1,24 +1,28 @@
+// POST /api/webhooks/stripe: verifies the signature, saves the event to the
+// inbox, processes it once, and answers 500 when a retry could fix a failure
+// (row 10). The handlers are mocked; their own behavior has its own tests.
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { randomUUID } from "crypto";
 import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { operators } from "@openboat/db";
+import { stripeEvents } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
 vi.mock("@/lib/stripe", () => ({
   stripe: { webhooks: { constructEvent: vi.fn() } },
 }));
 vi.mock("@/lib/webhooks/payment-intent-succeeded", () => ({
-  handlePaymentIntentSucceeded: vi.fn().mockResolvedValue(undefined),
+  handlePaymentIntentSucceeded: vi.fn(),
 }));
 vi.mock("@/lib/webhooks/payment-intent-canceled", () => ({
-  handlePaymentIntentCanceled: vi.fn().mockResolvedValue(undefined),
+  handlePaymentIntentCanceled: vi.fn(),
 }));
 vi.mock("@/lib/webhooks/charge-refunded", () => ({
-  handleChargeRefunded: vi.fn().mockResolvedValue(undefined),
+  handleChargeRefunded: vi.fn(),
 }));
 vi.mock("@/lib/webhooks/charge-dispute-created", () => ({
-  handleChargeDisputeCreated: vi.fn().mockResolvedValue(undefined),
+  handleChargeDisputeCreated: vi.fn(),
 }));
 
 import { stripe } from "@/lib/stripe";
@@ -37,12 +41,19 @@ afterAll(async () => {
   await cleanupOperator(ctx.operatorId);
 });
 
+const handlers = [
+  handlePaymentIntentSucceeded,
+  handlePaymentIntentCanceled,
+  handleChargeRefunded,
+  handleChargeDisputeCreated,
+];
+
 beforeEach(() => {
   vi.mocked(stripe.webhooks.constructEvent).mockReset();
-  vi.mocked(handlePaymentIntentSucceeded).mockClear();
-  vi.mocked(handlePaymentIntentCanceled).mockClear();
-  vi.mocked(handleChargeRefunded).mockClear();
-  vi.mocked(handleChargeDisputeCreated).mockClear();
+  for (const h of handlers) {
+    vi.mocked(h).mockReset();
+    vi.mocked(h).mockResolvedValue({ outcome: "handled", operatorId: ctx?.operatorId } as never);
+  }
 });
 
 function req(body: string, sig?: string) {
@@ -53,114 +64,131 @@ function req(body: string, sig?: string) {
   });
 }
 
+const ids: string[] = [];
+function event(type: string, object: object, extra: Record<string, unknown> = {}) {
+  const id = `evt_${randomUUID().replace(/-/g, "").slice(0, 20)}`;
+  ids.push(id);
+  return { id, type, created: Math.floor(Date.now() / 1000), livemode: false, data: { object }, ...extra };
+}
+
+async function deliver(evt: object) {
+  vi.mocked(stripe.webhooks.constructEvent).mockReturnValue(evt as never);
+  const { POST } = await import("@/app/api/webhooks/stripe/route");
+  return POST(req(JSON.stringify(evt), "sig"));
+}
+
+async function stored(id: string) {
+  const [row] = await testDb.select().from(stripeEvents).where(eq(stripeEvents.id, id));
+  return row;
+}
+
+afterAll(async () => {
+  for (const id of ids) await testDb.delete(stripeEvents).where(eq(stripeEvents.id, id));
+});
+
 describe("POST /api/webhooks/stripe", () => {
   it("returns 400 when the stripe-signature header is missing", async () => {
     const { POST } = await import("@/app/api/webhooks/stripe/route");
     const res = await POST(req("{}"));
     expect(res.status).toBe(400);
-    expect(stripe.webhooks.constructEvent).not.toHaveBeenCalled();
   });
 
-  it("returns 400 when signature verification throws", async () => {
+  it("returns 400 and saves nothing when the signature doesn't verify", async () => {
     vi.mocked(stripe.webhooks.constructEvent).mockImplementation(() => {
       throw new Error("signature mismatch");
     });
     const { POST } = await import("@/app/api/webhooks/stripe/route");
-    const res = await POST(req("{}", "bad-sig"));
+    const res = await POST(req("{}", "bad"));
     expect(res.status).toBe(400);
   });
 
-  it("acknowledges and ignores an event from an unknown connected account", async () => {
-    vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
-      id: "evt_acct_unknown",
-      type: "payment_intent.succeeded",
-      account: "acct_unknown_00000",
-      data: { object: {} },
-    } as any);
-    const { POST } = await import("@/app/api/webhooks/stripe/route");
-    const res = await POST(req("{}", "sig"));
-    expect(res.status).toBe(200);
-    expect((await res.json()).ignored).toBe("connected_account");
+  it("saves the event, dispatches it by type, and records the handler's outcome", async () => {
+    const cases: [string, unknown][] = [
+      ["payment_intent.succeeded", handlePaymentIntentSucceeded],
+      ["payment_intent.canceled", handlePaymentIntentCanceled],
+      ["charge.refunded", handleChargeRefunded],
+      ["charge.dispute.created", handleChargeDisputeCreated],
+    ];
+    for (const [type, handler] of cases) {
+      const object = { id: `obj_${type}` };
+      const evt = event(type, object);
+      const res = await deliver(evt);
+      expect(res.status).toBe(200);
+      expect(handler).toHaveBeenCalledWith(object);
+      const row = await stored(evt.id);
+      expect(row).toMatchObject({ type, outcome: "handled", operatorId: ctx.operatorId, attempts: 1 });
+      expect(row.processedAt).not.toBeNull();
+    }
+  });
+
+  it("processes a redelivered event only once", async () => {
+    const evt = event("payment_intent.succeeded", { id: "pi_twice" });
+    expect((await deliver(evt)).status).toBe(200);
+    expect((await deliver(evt)).status).toBe(200);
+    expect(handlePaymentIntentSucceeded).toHaveBeenCalledTimes(1);
+    expect((await stored(evt.id)).attempts).toBe(1);
+  });
+
+  it("answers 500 when the handler fails, keeps the error, and finishes the event on redelivery", async () => {
+    vi.mocked(handleChargeRefunded).mockRejectedValueOnce(new Error("Stripe timed out"));
+    const evt = event("charge.refunded", { id: "ch_retry" });
+
+    const first = await deliver(evt);
+    expect(first.status).toBe(500);
+    const failed = await stored(evt.id);
+    expect(failed.processedAt).toBeNull();
+    expect(failed.claimedAt).toBeNull();
+    expect(failed.lastError).toMatch(/Stripe timed out/);
+
+    const second = await deliver(evt);
+    expect(second.status).toBe(200);
+    const done = await stored(evt.id);
+    expect(done).toMatchObject({ outcome: "handled", attempts: 2 });
+    expect(done.processedAt).not.toBeNull();
+  });
+
+  it("answers 409 to a redelivery while another delivery holds the claim, so Stripe keeps retrying", async () => {
+    const evt = event("payment_intent.succeeded", { id: "pi_claimed" });
+    // A first delivery that timed out mid-handler leaves its claim behind.
+    await testDb.insert(stripeEvents).values({
+      id: evt.id,
+      type: evt.type,
+      livemode: false,
+      stripeCreatedAt: new Date(),
+      payload: evt,
+      claimedAt: new Date(),
+      attempts: 1,
+    });
+    const res = await deliver(evt);
+    expect(res.status).toBe(409);
     expect(handlePaymentIntentSucceeded).not.toHaveBeenCalled();
+    expect((await stored(evt.id)).processedAt).toBeNull();
   });
 
-  it("ignores an event from a known operator's connected account too (P3-2)", async () => {
-    await testDb.update(operators).set({ stripeAccountId: "acct_known_123" }).where(eq(operators.id, ctx.operatorId));
-    const pi = { id: "pi_1", metadata: { bookingId: "b1" } };
-    vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
-      id: "evt_acct_known",
-      type: "payment_intent.succeeded",
-      account: "acct_known_123",
-      data: { object: pi },
-    } as any);
-
-    const { POST } = await import("@/app/api/webhooks/stripe/route");
-    const res = await POST(req(JSON.stringify(pi), "sig"));
-    expect(res.status).toBe(200);
-    expect((await res.json()).ignored).toBe("connected_account");
-    expect(handlePaymentIntentSucceeded).not.toHaveBeenCalled();
-  });
-
-  it("processes an event with no account field (single-deploy mode)", async () => {
-    const pi = { id: "pi_2", metadata: { bookingId: "b2" } };
-    vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
-      type: "payment_intent.succeeded",
-      data: { object: pi },
-    } as any);
-
-    const { POST } = await import("@/app/api/webhooks/stripe/route");
-    const res = await POST(req(JSON.stringify(pi), "sig"));
-    expect(res.status).toBe(200);
-    expect(handlePaymentIntentSucceeded).toHaveBeenCalledWith(pi);
-  });
-
-  it("dispatches payment_intent.canceled to its handler", async () => {
-    const pi = { id: "pi_3" };
-    vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
-      type: "payment_intent.canceled",
-      data: { object: pi },
-    } as any);
-    const { POST } = await import("@/app/api/webhooks/stripe/route");
-    const res = await POST(req(JSON.stringify(pi), "sig"));
-    expect(res.status).toBe(200);
-    expect(handlePaymentIntentCanceled).toHaveBeenCalledWith(pi);
-  });
-
-  it("dispatches charge.refunded to its handler", async () => {
-    const charge = { id: "ch_1" };
-    vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
-      type: "charge.refunded",
-      data: { object: charge },
-    } as any);
-    const { POST } = await import("@/app/api/webhooks/stripe/route");
-    const res = await POST(req(JSON.stringify(charge), "sig"));
-    expect(res.status).toBe(200);
-    expect(handleChargeRefunded).toHaveBeenCalledWith(charge);
-  });
-
-  it("dispatches charge.dispute.created to its handler", async () => {
-    const dispute = { id: "dp_1" };
-    vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
-      type: "charge.dispute.created",
-      data: { object: dispute },
-    } as any);
-    const { POST } = await import("@/app/api/webhooks/stripe/route");
-    const res = await POST(req(JSON.stringify(dispute), "sig"));
-    expect(res.status).toBe(200);
-    expect(handleChargeDisputeCreated).toHaveBeenCalledWith(dispute);
-  });
-
-  it("returns 200 ok:true and calls no handler for an unrecognized event type", async () => {
-    vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
-      type: "customer.created",
-      data: { object: {} },
-    } as any);
-    const { POST } = await import("@/app/api/webhooks/stripe/route");
-    const res = await POST(req("{}", "sig"));
+  it("records an event from a connected account as ignored and calls no handler (P3-2)", async () => {
+    const evt = event("payment_intent.succeeded", { id: "pi_acct" }, { account: "acct_someone" });
+    const res = await deliver(evt);
     expect(res.status).toBe(200);
     expect(handlePaymentIntentSucceeded).not.toHaveBeenCalled();
-    expect(handlePaymentIntentCanceled).not.toHaveBeenCalled();
-    expect(handleChargeRefunded).not.toHaveBeenCalled();
-    expect(handleChargeDisputeCreated).not.toHaveBeenCalled();
+    expect(await stored(evt.id)).toMatchObject({ outcome: "ignored", account: "acct_someone" });
+  });
+
+  it("records an event type it doesn't handle as ignored", async () => {
+    const evt = event("customer.created", {});
+    const res = await deliver(evt);
+    expect(res.status).toBe(200);
+    for (const h of handlers) expect(h).not.toHaveBeenCalled();
+    expect(await stored(evt.id)).toMatchObject({ outcome: "ignored" });
+  });
+
+  it("stores a needs_review outcome with its note", async () => {
+    vi.mocked(handleChargeDisputeCreated).mockResolvedValueOnce({
+      outcome: "needs_review",
+      operatorId: ctx.operatorId,
+      note: "Dispute opened",
+    } as never);
+    const evt = event("charge.dispute.created", { id: "dp_review" });
+    expect((await deliver(evt)).status).toBe(200);
+    expect(await stored(evt.id)).toMatchObject({ outcome: "needs_review", lastError: "Dispute opened" });
   });
 });

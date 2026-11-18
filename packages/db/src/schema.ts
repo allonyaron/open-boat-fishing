@@ -625,3 +625,82 @@ export const rateLimits = pgTable("rate_limits", {
   count: integer("count").notNull().default(1),
   windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Stripe events (inbox) ───────────────────────────────────────────────────
+// Every webhook event, saved before it is acted on (row 10, AR-6). The webhook
+// inserts the row (a duplicate delivery is a no-op on the primary key), then
+// processes it; a retryable failure leaves processed_at null and the webhook
+// answers 500 so Stripe redelivers. The expiry cron drains anything left over.
+// Platform-level: an event names its operator only once it is resolved.
+
+export const stripeEventOutcomeEnum = pgEnum("stripe_event_outcome", [
+  "handled",      // acted on
+  "ignored",      // not ours (another deployment's payment, a connected account's own event) or nothing to do
+  "needs_review", // ours, but the app can't act on it safely: shown on the Money page
+]);
+
+export const stripeEvents = pgTable("stripe_events", {
+  id: text("id").primaryKey(),                       // Stripe event id (evt_…)
+  type: text("type").notNull(),
+  account: text("account"),                          // set only on events from a connected account
+  livemode: boolean("livemode").notNull(),
+  stripeCreatedAt: timestamp("stripe_created_at", { withTimezone: true }).notNull(),
+  payload: jsonb("payload").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  outcome: stripeEventOutcomeEnum("outcome"),
+  operatorId: uuid("operator_id").references(() => operators.id),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),   // a person dealt with a needs_review event
+  resolvedBy: uuid("resolved_by").references(() => staff.id, { onDelete: "set null" }),
+}, (t) => [
+  index("stripe_events_unprocessed_idx").on(t.stripeCreatedAt).where(sql`${t.processedAt} is null`),
+  index("stripe_events_operator_outcome_idx").on(t.operatorId, t.outcome),
+]);
+
+// ─── Stripe commands (outbox) ────────────────────────────────────────────────
+// Every refund the app asks Stripe for, written in the same transaction as the
+// ticket and seat changes it pays for, then sent (row 10, AR-6). The row id is
+// the Stripe idempotency key and travels in the refund's metadata as
+// command_id, so a retry sends the same request and a lost answer can be found
+// again on Stripe. Unsent rows are retried by the expiry cron.
+
+export const stripeCommandKindEnum = pgEnum("stripe_command_kind", [
+  "refund",     // refund (part of) a PaymentIntent
+  "fee_refund", // refund (part of) the platform's application fee
+]);
+
+export const stripeCommandStatusEnum = pgEnum("stripe_command_status", [
+  "pending",   // written, not yet accepted by Stripe
+  "sent",      // Stripe accepted it; a refund is confirmed when charge.refunded arrives
+  "confirmed", // done
+  "failed",    // Stripe refused it: shown on the Money page
+]);
+
+export const stripeCommands = pgTable("stripe_commands", {
+  id: uuid("id").primaryKey(),
+  operatorId: uuid("operator_id").notNull().references(() => operators.id),
+  kind: stripeCommandKindEnum("kind").notNull(),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  reason: text("reason").notNull(),                  // admin_ticket_refund, trip_cancelled, auto_refund, dashboard_refund_fee
+  targetId: text("target_id").notNull(),             // pi_… for a refund, fee_… for a fee refund
+  amountCents: integer("amount_cents"),              // null = everything left
+  params: jsonb("params").notNull(),                 // the exact request sent to Stripe
+  dedupeKey: text("dedupe_key").unique(),            // set when the same command could be queued twice
+  status: stripeCommandStatusEnum("status").notNull().default("pending"),
+  stripeObjectId: text("stripe_object_id"),          // re_… or fr_…
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),   // a person dealt with a failed command
+  resolvedBy: uuid("resolved_by").references(() => staff.id, { onDelete: "set null" }),
+}, (t) => [
+  index("stripe_commands_status_idx").on(t.status, t.createdAt),
+  index("stripe_commands_operator_status_idx").on(t.operatorId, t.status),
+  index("stripe_commands_booking_idx").on(t.bookingId),
+]);

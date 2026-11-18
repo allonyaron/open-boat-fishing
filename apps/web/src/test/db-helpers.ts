@@ -5,7 +5,11 @@
  * (operator → vessel → product → prices → schedule → trip + staff).
  * Call `cleanupOperator(operatorId)` in afterAll to delete everything.
  */
-import { createDb } from "@openboat/db";
+import {
+  createDb,
+  stripeEvents,
+  stripeCommands,
+} from "@openboat/db";
 import {
   operators,
   vessels,
@@ -302,5 +306,7 @@ export async function cleanupOperator(operatorId: string) {
   await testDb.delete(domains).where(eq(domains.operatorId, operatorId));
   await testDb.delete(pushTokens).where(eq(pushTokens.operatorId, operatorId));
   await testDb.delete(customers).where(eq(customers.operatorId, operatorId));
+  await testDb.delete(stripeEvents).where(eq(stripeEvents.operatorId, operatorId));
+  await testDb.delete(stripeCommands).where(eq(stripeCommands.operatorId, operatorId));
   await testDb.delete(operators).where(eq(operators.id, operatorId));
 }
