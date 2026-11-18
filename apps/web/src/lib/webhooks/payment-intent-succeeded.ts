@@ -6,6 +6,7 @@ import { getPostHogServer } from "@/lib/posthog";
 import { sendConfirmationEmail } from "@/lib/notifications/send-confirmation-email";
 import { moveTickets } from "@/lib/tickets/lifecycle";
 import { transitionBookings } from "@/lib/bookings/status";
+import { queueRefund, sendCommand } from "@/lib/payments/commands";
 import { bookings, tickets, payments, operators } from "@openboat/db";
 import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -139,19 +140,25 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent): Pr
 
   if (result.kind === "cancelled") {
     // The payment landed on a booking that had already been cancelled (its
-    // hold expired, or its trip was cancelled): refund it in full. A failure
-    // throws, so the event is retried with the same idempotency key.
-    await stripe.refunds.create(
-      {
-        payment_intent: pi.id,
-        reverse_transfer: true,
-        refund_application_fee: true,
-        metadata: { reason: "auto_refund", bookingId },
-      },
-      { idempotencyKey: `auto-refund:${pi.id}` },
-    );
-    console.log(`Auto-refunded PI ${pi.id} — booking ${bookingId} was already cancelled when payment arrived`);
-    return { outcome: "handled", operatorId, note: "booking was cancelled; payment refunded" };
+    // hold expired, or its trip was cancelled): refund it in full. The refund
+    // is recorded once per payment (dedupe key), so a retried event doesn't
+    // queue a second one, and a failed send is retried by the cron.
+    const commandId = await queueRefund(db, {
+      operatorId,
+      bookingId,
+      paymentIntentId: pi.id,
+      amountCents: null,
+      reason: "auto_refund",
+      reverseTransfer: true,
+      refundApplicationFee: true,
+      dedupeKey: `auto-refund:${pi.id}`,
+    });
+    const sent = await sendCommand(commandId);
+    return {
+      outcome: "handled",
+      operatorId,
+      note: `Booking was cancelled; payment refunded in full (refund ${sent})`,
+    };
   }
 
   const booking = result.booking;

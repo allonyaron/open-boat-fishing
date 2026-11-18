@@ -114,9 +114,18 @@ describe("handlePaymentIntentSucceeded", () => {
     await handlePaymentIntentSucceeded(pi({ id: "pi_race", metadata: { bookingId } }));
 
     expect(stripe.refunds.create).toHaveBeenCalledWith(
-      expect.objectContaining({ payment_intent: "pi_race", reverse_transfer: true, refund_application_fee: true }),
-      { idempotencyKey: "auto-refund:pi_race" },
+      expect.objectContaining({
+        payment_intent: "pi_race",
+        reverse_transfer: true,
+        refund_application_fee: true,
+        metadata: expect.objectContaining({ reason: "auto_refund" }),
+      }),
+      { idempotencyKey: expect.any(String) },
     );
+
+    // A retried event finds the same recorded refund and doesn't send another.
+    await handlePaymentIntentSucceeded(pi({ id: "pi_race", metadata: { bookingId } }));
+    expect(stripe.refunds.create).toHaveBeenCalledTimes(1);
 
     const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
     expect(booking.status).toBe("cancelled");

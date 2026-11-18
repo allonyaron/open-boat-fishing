@@ -1,7 +1,8 @@
+import { randomUUID } from "crypto";
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { bookings, operators, payments, tickets, trips } from "@openboat/db";
+import { bookings, operators, payments, tickets, trips, stripeCommands } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
 vi.mock("@/lib/stripe", () => ({
@@ -123,9 +124,15 @@ describe("handleChargeRefunded", () => {
     const bookingId = await seedPaidBooking("pi_full", "fee_full_1");
     await testDb.update(trips).set({ seatsRemaining: before.seatsRemaining - 1 }).where(eq(trips.id, ctx.tripId));
 
+    // Refunded from the Stripe Dashboard: no refund carries the app's metadata.
+    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [{ id: "re_dash_full", metadata: {} }] } as any);
     await handleChargeRefunded(charge({ id: "ch_full", amount: 10000, amount_refunded: 10000, payment_intent: "pi_full" }));
 
-    expect(stripe.applicationFees.createRefund).toHaveBeenCalledWith("fee_full_1");
+    expect(stripe.applicationFees.createRefund).toHaveBeenCalledWith(
+      "fee_full_1",
+      expect.objectContaining({ metadata: expect.objectContaining({ reason: "dashboard_refund_fee" }) }),
+      { idempotencyKey: expect.any(String) },
+    );
 
     const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
     expect(booking.status).toBe("cancelled");
@@ -145,11 +152,39 @@ describe("handleChargeRefunded", () => {
       Object.assign(new Error("already refunded"), { code: "fee_refund_already_refunded" }),
     );
     const bookingId = await seedPaidBooking("pi_dup_refund", "fee_dup_1");
+    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [{ id: "re_dash_dup", metadata: {} }] } as any);
 
     await handleChargeRefunded(charge({ id: "ch_dup", amount: 10000, amount_refunded: 10000, payment_intent: "pi_dup_refund" }));
 
     const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
     expect(booking.status).toBe("cancelled");
+  });
+
+  it("doesn't reverse the fee again when the app made the refunds itself, and confirms their commands", async () => {
+    const bookingId = await seedPaidBooking("pi_ours_full", "fee_ours_1");
+    const commandId = randomUUID();
+    await testDb.insert(stripeCommands).values({
+      id: commandId,
+      operatorId: ctx.operatorId,
+      kind: "refund",
+      bookingId,
+      reason: "trip_cancelled",
+      targetId: "pi_ours_full",
+      amountCents: 10000,
+      params: {},
+      status: "sent",
+    });
+    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({
+      data: [{ id: "re_ours", metadata: { command_id: commandId, reason: "trip_cancelled" } }],
+    } as any);
+
+    const result = await handleChargeRefunded(
+      charge({ id: "ch_ours_full", amount: 10000, amount_refunded: 10000, payment_intent: "pi_ours_full" }),
+    );
+    expect(result.outcome).toBe("handled");
+    expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
+    const [cmd] = await testDb.select().from(stripeCommands).where(eq(stripeCommands.id, commandId));
+    expect(cmd).toMatchObject({ status: "confirmed", stripeObjectId: "re_ours" });
   });
 
   it("skips the application fee reversal call when applicationFeeId is null", async () => {

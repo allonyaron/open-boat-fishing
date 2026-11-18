@@ -6,6 +6,7 @@ import { cancelConfirmedBooking } from "@/lib/bookings/cancel";
 import type Stripe from "stripe";
 import { OutOfOrderEventError, type EventResult } from "@/lib/stripe-events/inbox";
 import { bookingForPaymentIntent, destinationOf, operatorForAccount } from "@/lib/stripe-events/ownership";
+import { confirmRefundCommands, queueFeeRefund, sendCommand } from "@/lib/payments/commands";
 
 /** The `reason` metadata the app puts on the refunds it issues itself. */
 const APP_REFUND_REASONS = new Set(["admin_ticket_refund", "trip_cancelled", "auto_refund"]);
@@ -51,9 +52,14 @@ export async function handleChargeRefunded(charge: Stripe.Charge): Promise<Event
     return { outcome: "needs_review", operatorId, note: `Charge ${charge.id} refunded but no booking has PI ${piId}` };
   }
 
+  // Which refunds on this charge did the app issue? Its own are confirmed
+  // against their commands; the rest came from outside the app (the
+  // Stripe Dashboard).
+  const refunds = await stripe.refunds.list({ charge: charge.id, limit: 100 });
+  await confirmRefundCommands(refunds.data);
+  const foreign = refunds.data.filter((r) => !isAppRefund(r));
+
   if (charge.amount_refunded < charge.amount) {
-    const refunds = await stripe.refunds.list({ charge: charge.id, limit: 100 });
-    const foreign = refunds.data.filter((r) => !isAppRefund(r));
     if (foreign.length === 0) return { outcome: "handled", operatorId: payment.operatorId };
     return {
       outcome: "needs_review",
@@ -62,15 +68,19 @@ export async function handleChargeRefunded(charge: Stripe.Charge): Promise<Event
     };
   }
 
-  // Reverse the platform fee before cancelling. "Already refunded" counts as
-  // done, so a redelivery doesn't fail; any other error throws and the event
-  // is retried.
-  if (payment.applicationFeeId) {
-    try {
-      await stripe.applicationFees.createRefund(payment.applicationFeeId);
-    } catch (err) {
-      if ((err as { code?: string })?.code !== "fee_refund_already_refunded") throw err;
-    }
+  // Fully refunded. The app's own refunds already returned the platform fee
+  // (in proportion, or exactly per ticket); a refund from outside the app
+  // didn't, so reverse what is left of it, once per charge.
+  if (foreign.length > 0 && payment.applicationFeeId) {
+    const commandId = await queueFeeRefund(db, {
+      operatorId: payment.operatorId,
+      bookingId: payment.bookingId,
+      applicationFeeId: payment.applicationFeeId,
+      amountCents: null,
+      reason: "dashboard_refund_fee",
+      dedupeKey: `fee-refund:${charge.id}`,
+    });
+    await sendCommand(commandId);
   }
 
   await cancelConfirmedBooking(payment.bookingId);

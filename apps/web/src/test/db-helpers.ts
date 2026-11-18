@@ -8,6 +8,7 @@
 import {
   createDb,
   stripeEvents,
+  stripeCommands,
 } from "@openboat/db";
 import {
   operators,
@@ -306,5 +307,6 @@ export async function cleanupOperator(operatorId: string) {
   await testDb.delete(pushTokens).where(eq(pushTokens.operatorId, operatorId));
   await testDb.delete(customers).where(eq(customers.operatorId, operatorId));
   await testDb.delete(stripeEvents).where(eq(stripeEvents.operatorId, operatorId));
+  await testDb.delete(stripeCommands).where(eq(stripeCommands.operatorId, operatorId));
   await testDb.delete(operators).where(eq(operators.id, operatorId));
 }

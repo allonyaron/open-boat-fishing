@@ -172,9 +172,13 @@ describe("POST /api/admin/trips/[tripId]/cancel", () => {
     expect(body.bookingsCancelled).toBe(1);
     expect(body.ticketsVoided).toBe(1);
 
+    expect(body.refunds).toEqual({ sent: 1, queued: 0, failed: 0 });
     expect(stripe.refunds.create).toHaveBeenCalledWith(
-      expect.objectContaining({ payment_intent: expect.stringContaining("pi_test_") }),
-      expect.objectContaining({ idempotencyKey: expect.stringContaining("refund:") }),
+      expect.objectContaining({
+        payment_intent: expect.stringContaining("pi_test_"),
+        metadata: expect.objectContaining({ reason: "trip_cancelled", tripId }),
+      }),
+      { idempotencyKey: expect.any(String) },
     );
 
     const [booking] = await testDb
@@ -189,5 +193,24 @@ describe("POST /api/admin/trips/[tripId]/cancel", () => {
       .from(tickets)
       .where(eq(tickets.bookingId, bookingId));
     expect(ticket).toEqual({ status: "refunded", voided: true, feeStatus: "reversed" });
+  });
+
+  it("still cancels the trip when a refund can't be sent, and queues it", async () => {
+    vi.mocked(stripe.refunds.create).mockRejectedValueOnce(
+      Object.assign(new Error("Stripe is down"), { type: "StripeAPIError" }),
+    );
+    const tripId = await seedFreshTrip();
+    const { bookingId } = await seedConfirmedBooking(tripId);
+
+    const { POST } = await import("@/app/api/admin/trips/[tripId]/cancel/route");
+    const res = await POST(postReq(tripId), { params: { tripId } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.refunds).toEqual({ sent: 0, queued: 1, failed: 0 });
+
+    const [trip] = await testDb.select({ status: trips.status }).from(trips).where(eq(trips.id, tripId));
+    expect(trip.status).toBe("cancelled");
+    const [booking] = await testDb.select({ status: bookings.status }).from(bookings).where(eq(bookings.id, bookingId));
+    expect(booking.status).toBe("cancelled");
   });
 });
