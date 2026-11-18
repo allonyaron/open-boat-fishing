@@ -183,7 +183,7 @@ The top bar has **Dock view / Desk view** (big buttons vs compact tables) and **
 1. In the passenger list, click **"Refund"** on a ticket.
 2. Confirm with **"Refund this ticket · $NN"**.
 3. In Terminal 2, you may see Stripe activity.
-4. The ticket shows **Refunded** and "Seat is back on sale"; the fee is reversed (see Money).
+4. The ticket shows **Refunded** at once and its seat goes back on sale. The refund is recorded first and sent to Stripe after, so the message says which happened: "Refunded $NN" (sent), "…will go back once Stripe responds" (queued, retried automatically), or "…Stripe refused…" (see Money → Needs attention).
 
 ### Step 6 — Money (`/admin/money`)
 
@@ -191,6 +191,7 @@ The top bar has **Dock view / Desk view** (big buttons vs compact tables) and **
 2. A banner says whether payouts are on (Stripe connected) or not set up yet.
 3. Readouts: **Earned / Held until they sail / Given back**, then a trip-by-trip ledger.
 4. Try the **30 days / 90 days / 12 months** switch — the numbers update.
+5. **Needs attention** (only shown when something is waiting): refunds Stripe refused, refunds still unsent after 15 minutes, chargebacks, refunds made in the Stripe Dashboard and payments no booking has. **Try again** resends a refund; **Mark dealt with** records who cleared it.
 
 **Note:** fees show as "Held" until the trip is `sailed` and the settle grace window (48h) passes. To see "Earned" fees immediately, you'd need a sailed trip — covered in the fishing report section below.
 
@@ -200,13 +201,15 @@ The top bar has **Dock view / Desk view** (big buttons vs compact tables) and **
 2. Pick a reason (Weather, Engine or boat trouble, Not enough people booked, or Other) — the confirm button stays disabled until you do.
 3. Click **"Cancel and refund (N)"**.
 4. What happens automatically:
-   - All tickets are refunded via Stripe
+   - Each paid booking's refund is recorded and sent to Stripe; one that can't be sent stays queued (Money → Needs attention) and the trip is cancelled anyway
    - All fees reversed (`fee_status → reversed`)
    - Seats restored to inventory
    - A push notification fires to every passenger email
    - Trip status → `cancelled`
 5. In Terminal 2 you'll see the refund webhook events.
 6. The trip row shows **Cancelled** and "Trip is off · <reason> · N people refunded".
+
+**Automated:** `e2e/admin-money.spec.ts` covers steps 5–7 (refund, Needs attention, trip cancel) in CI. To run it locally: seed with `seed-demo.ts`, `seed-admin.ts` and `seed-e2e-admin.ts` (re-run the last before every run; the spec changes its data), start the web app, then `E2E_BASE_URL=http://localhost:<port> node_modules/.bin/playwright test e2e/admin-money.spec.ts --project=desktop`.
 
 ---
 
