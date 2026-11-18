@@ -7,8 +7,12 @@ import { eq } from "drizzle-orm";
 
 vi.mock("@/lib/stripe", () => ({
   stripe: {
-    applicationFees: { createRefund: vi.fn().mockResolvedValue({ id: "fr_test" }) },
+    applicationFees: {
+      createRefund: vi.fn().mockResolvedValue({ id: "fr_test" }),
+      retrieve: vi.fn().mockResolvedValue({ amount: 150, amount_refunded: 0 }),
+    },
     refunds: { list: vi.fn().mockResolvedValue({ data: [] }) },
+    paymentIntents: { retrieve: vi.fn().mockResolvedValue({ metadata: {}, transfer_data: null }) },
   },
 }));
 
@@ -30,6 +34,8 @@ afterAll(async () => {
 
 beforeEach(() => {
   vi.mocked(stripe.applicationFees.createRefund).mockClear();
+  vi.mocked(stripe.applicationFees.retrieve).mockReset();
+  vi.mocked(stripe.applicationFees.retrieve).mockResolvedValue({ amount: 150, amount_refunded: 0 } as any);
   vi.mocked(stripe.refunds.list).mockReset();
   vi.mocked(stripe.refunds.list).mockResolvedValue({ data: [] } as any);
 });
@@ -147,15 +153,16 @@ describe("handleChargeRefunded", () => {
     expect(after.seatsRemaining).toBe(before.seatsRemaining);
   });
 
-  it("treats an already-refunded application fee as success and still cancels the booking", async () => {
-    vi.mocked(stripe.applicationFees.createRefund).mockRejectedValueOnce(
-      Object.assign(new Error("already refunded"), { code: "fee_refund_already_refunded" }),
-    );
+  it("skips the fee reversal when the Dashboard refund already returned the fee, and records no refused refund", async () => {
+    vi.mocked(stripe.applicationFees.retrieve).mockResolvedValueOnce({ amount: 150, amount_refunded: 150 } as any);
     const bookingId = await seedPaidBooking("pi_dup_refund", "fee_dup_1");
     vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [{ id: "re_dash_dup", metadata: {} }] } as any);
 
     await handleChargeRefunded(charge({ id: "ch_dup", amount: 10000, amount_refunded: 10000, payment_intent: "pi_dup_refund" }));
 
+    expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
+    const commands = await testDb.select().from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
+    expect(commands).toHaveLength(0);
     const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
     expect(booking.status).toBe("cancelled");
   });

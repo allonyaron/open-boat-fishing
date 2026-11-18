@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { moveTickets } from "@/lib/tickets/lifecycle";
 import type Stripe from "stripe";
 import { OutOfOrderEventError, type EventResult } from "@/lib/stripe-events/inbox";
-import { bookingForPaymentIntent, destinationOf, operatorForAccount } from "@/lib/stripe-events/ownership";
+import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
 import { bookingLabel, usd } from "@/lib/stripe-events/notes";
 
 // A customer opened a dispute (chargeback). The booking's live tickets move to
@@ -35,11 +35,11 @@ export async function handleChargeDisputeCreated(dispute: Stripe.Dispute): Promi
     }
     // Not a booking here: whose payment is it? The dispute names only the PI.
     const pi = await stripe.paymentIntents.retrieve(piId);
-    const operatorId = await operatorForAccount(destinationOf(pi));
-    if (!operatorId) return { outcome: "ignored", note: "not a payment of this deployment" };
+    const owner = await orphanPaymentOwner(destinationOf(pi), pi.metadata);
+    if (!owner.ours) return { outcome: "ignored", note: owner.why };
     return {
       outcome: "needs_review",
-      operatorId,
+      operatorId: owner.operatorId,
       note: `A customer disputed ${usd(dispute.amount)} (${dispute.reason}) on a payment no booking has (${piId}). Respond in the Stripe Dashboard.`,
     };
   }

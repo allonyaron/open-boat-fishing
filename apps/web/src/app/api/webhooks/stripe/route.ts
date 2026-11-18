@@ -33,6 +33,11 @@ export async function POST(req: NextRequest) {
   if (result === "retry") {
     return NextResponse.json({ error: "Processing failed; will retry" }, { status: 500 });
   }
+  if (result === "busy") {
+    // Another delivery is processing it and may yet fail: ask Stripe to try
+    // again later rather than acknowledging it.
+    return NextResponse.json({ error: "Already being processed" }, { status: 409 });
+  }
 
   return NextResponse.json({ ok: true });
 }

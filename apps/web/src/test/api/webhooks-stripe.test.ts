@@ -147,6 +147,24 @@ describe("POST /api/webhooks/stripe", () => {
     expect(done.processedAt).not.toBeNull();
   });
 
+  it("answers 409 to a redelivery while another delivery holds the claim, so Stripe keeps retrying", async () => {
+    const evt = event("payment_intent.succeeded", { id: "pi_claimed" });
+    // A first delivery that timed out mid-handler leaves its claim behind.
+    await testDb.insert(stripeEvents).values({
+      id: evt.id,
+      type: evt.type,
+      livemode: false,
+      stripeCreatedAt: new Date(),
+      payload: evt,
+      claimedAt: new Date(),
+      attempts: 1,
+    });
+    const res = await deliver(evt);
+    expect(res.status).toBe(409);
+    expect(handlePaymentIntentSucceeded).not.toHaveBeenCalled();
+    expect((await stored(evt.id)).processedAt).toBeNull();
+  });
+
   it("records an event from a connected account as ignored and calls no handler (P3-2)", async () => {
     const evt = event("payment_intent.succeeded", { id: "pi_acct" }, { account: "acct_someone" });
     const res = await deliver(evt);

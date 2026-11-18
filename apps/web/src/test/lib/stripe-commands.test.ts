@@ -130,6 +130,22 @@ describe("sendCommand", () => {
     expect(await command(id)).toMatchObject({ status: "sent", stripeObjectId: "re_earlier", attempts: 2 });
   });
 
+  it("uses a fresh idempotency key on a retry once no earlier refund is found", async () => {
+    vi.mocked(stripe.refunds.create).mockRejectedValueOnce(
+      Object.assign(new Error("Internal server error"), { type: "StripeAPIError" }),
+    );
+    const id = await refund("pi_s5");
+    expect(await sendCommand(id)).toBe("pending");
+
+    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [] } as never);
+    vi.mocked(stripe.refunds.create).mockResolvedValueOnce({ id: "re_second" } as never);
+    expect(await sendCommand(id)).toBe("sent");
+    expect(vi.mocked(stripe.refunds.create).mock.calls.map((c) => c[1])).toEqual([
+      { idempotencyKey: id },
+      { idempotencyKey: `${id}:2` },
+    ]);
+  });
+
   it("marks a command failed when Stripe refuses the request", async () => {
     vi.mocked(stripe.refunds.create).mockRejectedValueOnce(
       Object.assign(new Error("Refund amount is greater than unrefunded amount"), {

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bookings, operators } from "@openboat/db";
 
@@ -36,4 +36,33 @@ export async function bookingForPaymentIntent(
     .from(bookings)
     .where(eq(bookings.stripePaymentIntentId, paymentIntentId));
   return row ?? null;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Whether a payment no booking here has belongs to this deployment, and so
+ * needs review, or to another one sharing the platform's Stripe account (the
+ * test-mode demo shares its connected account with previews and local dev).
+ *
+ * The destination must be one of this database's operators. Then, if the
+ * payment's metadata names a booking that doesn't exist here, another
+ * deployment created it. Metadata only decides between ignoring and
+ * reviewing; it never confirms or cancels anything.
+ */
+export async function orphanPaymentOwner(
+  destination: string | null,
+  metadata: Record<string, string> | null | undefined,
+): Promise<{ ours: true; operatorId: string } | { ours: false; why: string }> {
+  const operatorId = await operatorForAccount(destination);
+  if (!operatorId) return { ours: false, why: "not a payment of this deployment" };
+  const ref = metadata?.bookingId;
+  if (ref && UUID.test(ref)) {
+    const [row] = await db
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(and(eq(bookings.id, ref), eq(bookings.operatorId, operatorId)));
+    if (!row) return { ours: false, why: "its booking is from another deployment sharing the Stripe account" };
+  }
+  return { ours: true, operatorId };
 }

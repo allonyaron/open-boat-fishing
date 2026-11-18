@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { payments, tickets } from "@openboat/db";
+import { payments, tickets, operators } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
 vi.mock("@/lib/stripe", () => ({
@@ -49,6 +49,17 @@ describe("handleChargeDisputeCreated", () => {
       transfer_data: { destination: "acct_elsewhere" },
     } as any);
     const result = await handleChargeDisputeCreated(dispute({ payment_intent: "pi_unknown_dispute" }));
+    expect(result.outcome).toBe("ignored");
+  });
+
+  it("ignores a dispute whose booking reference is from another deployment on the same Stripe account", async () => {
+    await testDb.update(operators).set({ stripeAccountId: "acct_shared_dispute" }).where(eq(operators.id, ctx.operatorId));
+    vi.mocked(stripe.paymentIntents.retrieve).mockResolvedValueOnce({
+      id: "pi_preview_dispute",
+      transfer_data: { destination: "acct_shared_dispute" },
+      metadata: { bookingId: "0b9f2c4e-8a1d-4c3b-9e7f-5a6d2c1b0e9f" },
+    } as any);
+    const result = await handleChargeDisputeCreated(dispute({ payment_intent: "pi_preview_dispute" }));
     expect(result.outcome).toBe("ignored");
   });
 

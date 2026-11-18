@@ -9,10 +9,10 @@ import { stripeCommands } from "@openboat/db";
 // same transaction as the ticket and seat changes it pays for, and sent after
 // that transaction commits:
 //
-// - The row id is the Stripe idempotency key and the refund's
-//   metadata.command_id, so a retry sends the same request, and a request
-//   whose answer was lost can be found on Stripe again even after Stripe's
-//   24-hour idempotency window (P4-3).
+// - The row id is the refund's metadata.command_id and the first attempt's
+//   idempotency key. A retry first looks on Stripe for a refund an earlier
+//   attempt made (by command_id), so a lost answer never becomes a second
+//   refund, even after Stripe's 24-hour idempotency window (P4-3).
 // - A network, rate-limit or server error leaves the command pending; the
 //   expiry cron retries it. A request Stripe refuses is marked failed and
 //   shows on the Money page.
@@ -195,13 +195,19 @@ export async function sendCommand(commandId: string, now: Date = new Date()): Pr
     const earlier = cmd.attempts > 1 ? await findEarlierAttempt(cmd) : null;
     let objectId = earlier;
     if (!objectId) {
+      // Stripe saves a failed result (a 500, say) under its idempotency key
+      // and replays it for 24 hours, so each attempt after the first gets its
+      // own key. That's safe because the lookup above has just found no
+      // refund from an earlier attempt; command_id in the metadata stays the
+      // same, so every attempt can still be found.
+      const idempotencyKey = cmd.attempts === 1 ? cmd.id : `${cmd.id}:${cmd.attempts}`;
       const created =
         cmd.kind === "refund"
-          ? await stripe.refunds.create(cmd.params as Stripe.RefundCreateParams, { idempotencyKey: cmd.id })
+          ? await stripe.refunds.create(cmd.params as Stripe.RefundCreateParams, { idempotencyKey })
           : await stripe.applicationFees.createRefund(
               cmd.targetId,
               cmd.params as Stripe.ApplicationFeeCreateRefundParams,
-              { idempotencyKey: cmd.id },
+              { idempotencyKey },
             );
       objectId = created.id;
     }

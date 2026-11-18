@@ -59,12 +59,13 @@ describe("processEvent", () => {
     await testDb.update(stripeEvents).set({ claimedAt: now }).where(eq(stripeEvents.id, e.id));
 
     const dispatch = vi.fn(handled);
-    expect(await processEvent(e.id, dispatch, new Date(now.getTime() + 1000))).toBe("skipped");
+    expect(await processEvent(e.id, dispatch, new Date(now.getTime() + 1000))).toBe("busy");
     expect(dispatch).not.toHaveBeenCalled();
 
     const later = new Date(now.getTime() + CLAIM_LEASE_MS + 1000);
     expect(await processEvent(e.id, dispatch, later)).toBe("processed");
     expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(await processEvent(e.id, dispatch, later)).toBe("done");
   });
 
   it("gives up as needs_review once the event is older than three days", async () => {

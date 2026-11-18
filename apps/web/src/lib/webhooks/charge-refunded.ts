@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { cancelConfirmedBooking } from "@/lib/bookings/cancel";
 import type Stripe from "stripe";
 import { OutOfOrderEventError, type EventResult } from "@/lib/stripe-events/inbox";
-import { bookingForPaymentIntent, destinationOf, operatorForAccount } from "@/lib/stripe-events/ownership";
+import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
 import { confirmRefundCommands, queueFeeRefund, sendCommand } from "@/lib/payments/commands";
 import { bookingLabel, usd } from "@/lib/stripe-events/notes";
 
@@ -48,11 +48,13 @@ export async function handleChargeRefunded(charge: Stripe.Charge): Promise<Event
       // its payment landed; this is the auto-refund of that payment.
       return { outcome: "handled", operatorId: booking.operatorId, note: "refund of a payment on a cancelled booking" };
     }
-    const operatorId = await operatorForAccount(destinationOf(charge));
-    if (!operatorId) return { outcome: "ignored", note: "not a payment of this deployment" };
+    // Whose payment is it? The PI carries the booking reference.
+    const pi = await stripe.paymentIntents.retrieve(piId);
+    const owner = await orphanPaymentOwner(destinationOf(pi) ?? destinationOf(charge), pi.metadata);
+    if (!owner.ours) return { outcome: "ignored", note: owner.why };
     return {
       outcome: "needs_review",
-      operatorId,
+      operatorId: owner.operatorId,
       note: `${usd(charge.amount_refunded)} was refunded on a payment no booking has (${piId}).`,
     };
   }
@@ -75,8 +77,17 @@ export async function handleChargeRefunded(charge: Stripe.Charge): Promise<Event
 
   // Fully refunded. The app's own refunds already returned the platform fee
   // (in proportion, or exactly per ticket); a refund from outside the app
-  // didn't, so reverse what is left of it, once per charge.
-  if (foreign.length > 0 && payment.applicationFeeId) {
+  // may not have, so reverse what is left of it, once per charge. A Dashboard
+  // refund can return the fee itself: check first, so a fee with nothing left
+  // doesn't become a refused refund on the Money page.
+  const feeLeft =
+    foreign.length > 0 && payment.applicationFeeId
+      ? await (async () => {
+          const fee = await stripe.applicationFees.retrieve(payment.applicationFeeId!);
+          return fee.amount - fee.amount_refunded;
+        })()
+      : 0;
+  if (feeLeft > 0 && payment.applicationFeeId) {
     const commandId = await queueFeeRefund(db, {
       operatorId: payment.operatorId,
       bookingId: payment.bookingId,

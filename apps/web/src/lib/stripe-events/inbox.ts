@@ -61,13 +61,16 @@ export async function recordEvent(event: Stripe.Event): Promise<void> {
     .onConflictDoNothing({ target: stripeEvents.id });
 }
 
-export type ProcessResult = "processed" | "retry" | "skipped";
+export type ProcessResult = "processed" | "retry" | "done" | "busy";
 
 /**
  * Processes a saved event once.
- * - processed: finished (handled, ignored or needs_review).
+ * - processed: finished now (handled, ignored or needs_review).
  * - retry: the handler failed; the event stays unfinished for a redelivery or the drain.
- * - skipped: already finished, or another worker holds an unexpired claim.
+ * - done: it was already finished (a redelivery).
+ * - busy: another worker holds an unexpired claim. That worker may still
+ *   fail (a timed-out lambda leaves its claim), so the webhook must not
+ *   answer 200, or Stripe stops redelivering.
  */
 export async function processEvent(
   eventId: string,
@@ -87,7 +90,13 @@ export async function processEvent(
     )
     .returning({ payload: stripeEvents.payload, stripeCreatedAt: stripeEvents.stripeCreatedAt });
 
-  if (!claimed) return "skipped";
+  if (!claimed) {
+    const [row] = await db
+      .select({ processedAt: stripeEvents.processedAt })
+      .from(stripeEvents)
+      .where(eq(stripeEvents.id, eventId));
+    return row?.processedAt ? "done" : "busy";
+  }
 
   try {
     const result = await dispatch(claimed.payload as Stripe.Event);

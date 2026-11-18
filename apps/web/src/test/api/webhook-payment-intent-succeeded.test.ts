@@ -56,6 +56,14 @@ describe("handlePaymentIntentSucceeded", () => {
     expect(stripe.charges.retrieve).not.toHaveBeenCalled();
   });
 
+  it("ignores a payment whose booking reference is from another deployment on the same Stripe account", async () => {
+    const result = await handlePaymentIntentSucceeded(
+      pi({ id: "pi_preview", metadata: { bookingId: "0b9f2c4e-8a1d-4c3b-9e7f-5a6d2c1b0e9f" } }),
+    );
+    expect(result.outcome).toBe("ignored");
+    expect(result.note).toMatch(/another deployment/);
+  });
+
   it("ignores a payment to another deployment's account", async () => {
     const result = await handlePaymentIntentSucceeded(
       pi({ id: "pi_elsewhere", transfer_data: { destination: "acct_elsewhere" }, metadata: {} }),

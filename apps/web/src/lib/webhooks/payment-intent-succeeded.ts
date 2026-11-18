@@ -11,7 +11,7 @@ import { bookings, tickets, payments, operators } from "@openboat/db";
 import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import type { EventResult } from "@/lib/stripe-events/inbox";
-import { bookingForPaymentIntent, destinationOf, operatorForAccount } from "@/lib/stripe-events/ownership";
+import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
 import { bookingLabel, usd } from "@/lib/stripe-events/notes";
 
 /**
@@ -44,11 +44,11 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent): Pr
   // by metadata, which whoever owns the PI can write (P3-2).
   const found = await bookingForPaymentIntent(pi.id);
   if (!found) {
-    const operatorId = await operatorForAccount(destinationOf(pi));
-    if (!operatorId) return { outcome: "ignored", note: "not a payment of this deployment" };
+    const owner = await orphanPaymentOwner(destinationOf(pi), pi.metadata);
+    if (!owner.ours) return { outcome: "ignored", note: owner.why };
     return {
       outcome: "needs_review",
-      operatorId,
+      operatorId: owner.operatorId,
       note: `A payment of ${usd(pi.amount)} went through but no booking has it (${pi.id}). Refund it in the Stripe Dashboard if it shouldn't stand.`,
     };
   }
