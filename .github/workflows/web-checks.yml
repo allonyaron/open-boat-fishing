@@ -159,6 +159,10 @@ jobs:
           pnpm exec tsx src/seed-trips-demo.ts
           pnpm exec tsx src/seed-test-trip.ts
           pnpm exec tsx src/seed-test-customers.ts
+          # Admin sign-in (admin@example.com) and the admin money spec's own
+          # trips, bookings and refused refund.
+          pnpm exec tsx src/seed-admin.ts
+          pnpm exec tsx src/seed-e2e-admin.ts
           OPERATOR_ID=$(psql "$DATABASE_URL" -tAc "SELECT id FROM operators WHERE slug = 'mv-open-boat'")
           test -n "$OPERATOR_ID"
           echo "OPERATOR_ID=$OPERATOR_ID" >> "$GITHUB_ENV"
@@ -192,6 +196,15 @@ jobs:
         env:
           E2E_BASE_URL: "http://localhost:3100"
         run: pnpm exec playwright test e2e/booking-flow.spec.ts e2e/booking-cart-interactions.spec.ts e2e/booking-calendar.spec.ts
+
+      - name: Admin money actions (Playwright)
+        # Office refund, trip cancel and the Money page's "Needs attention"
+        # (row 10). Chromium only: the production build's Secure admin cookie
+        # is dropped by WebKit on http://localhost. The server's Stripe key is
+        # a placeholder, so refunds stay queued and nothing reaches Stripe.
+        env:
+          E2E_BASE_URL: "http://localhost:3100"
+        run: pnpm exec playwright test e2e/admin-money.spec.ts --project=desktop
 
       - name: Upload Playwright results and server log
         if: failure()
