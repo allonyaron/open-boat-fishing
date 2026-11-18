@@ -1101,7 +1101,7 @@ says where each finding landed, so nobody follows two tables.
 | AR-3 | Before a second operator, row 28 |
 | AR-4 | Fix Roadmap, Phase 3 (after rows 8, 10, 29) |
 | AR-5 | Pre-launch, row 24 |
-| AR-6 | Pre-launch, row 10 (rewritten; rows 9 and 11 build on it) |
+| AR-6 | Pre-launch, row 10 — done (PR #53); its open items moved to row 11, row 9 and AR-4 |
 | AR-7 | Pre-launch, row 8 — done (PR #51), except the capacity CHECK |
 | AR-8 | Pre-launch, row 21 |
 | AR-9 | Pre-launch, row 12 (with P5-1, F1-8) |
