@@ -625,3 +625,35 @@ export const rateLimits = pgTable("rate_limits", {
   count: integer("count").notNull().default(1),
   windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Stripe events (inbox) ───────────────────────────────────────────────────
+// Every webhook event, saved before it is acted on (row 10, AR-6). The webhook
+// inserts the row (a duplicate delivery is a no-op on the primary key), then
+// processes it; a retryable failure leaves processed_at null and the webhook
+// answers 500 so Stripe redelivers. The expiry cron drains anything left over.
+// Platform-level: an event names its operator only once it is resolved.
+
+export const stripeEventOutcomeEnum = pgEnum("stripe_event_outcome", [
+  "handled",      // acted on
+  "ignored",      // not ours (another deployment's payment, a connected account's own event) or nothing to do
+  "needs_review", // ours, but the app can't act on it safely: shown on the Money page
+]);
+
+export const stripeEvents = pgTable("stripe_events", {
+  id: text("id").primaryKey(),                       // Stripe event id (evt_…)
+  type: text("type").notNull(),
+  account: text("account"),                          // set only on events from a connected account
+  livemode: boolean("livemode").notNull(),
+  stripeCreatedAt: timestamp("stripe_created_at", { withTimezone: true }).notNull(),
+  payload: jsonb("payload").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  outcome: stripeEventOutcomeEnum("outcome"),
+  operatorId: uuid("operator_id").references(() => operators.id),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+}, (t) => [
+  index("stripe_events_unprocessed_idx").on(t.stripeCreatedAt).where(sql`${t.processedAt} is null`),
+  index("stripe_events_operator_outcome_idx").on(t.operatorId, t.outcome),
+]);

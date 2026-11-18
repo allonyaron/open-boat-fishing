@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { bookings, payments, tickets, trips } from "@openboat/db";
+import { bookings, operators, payments, tickets, trips } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
 vi.mock("@/lib/stripe", () => ({
   stripe: {
     applicationFees: { createRefund: vi.fn().mockResolvedValue({ id: "fr_test" }) },
+    refunds: { list: vi.fn().mockResolvedValue({ data: [] }) },
   },
 }));
 
@@ -15,8 +16,11 @@ import { handleChargeRefunded } from "@/lib/webhooks/charge-refunded";
 
 let ctx: SeedResult;
 
+const ACCT = "acct_test_refunded";
+
 beforeAll(async () => {
   ctx = await seedOperator();
+  await testDb.update(operators).set({ stripeAccountId: ACCT }).where(eq(operators.id, ctx.operatorId));
 });
 
 afterAll(async () => {
@@ -25,6 +29,8 @@ afterAll(async () => {
 
 beforeEach(() => {
   vi.mocked(stripe.applicationFees.createRefund).mockClear();
+  vi.mocked(stripe.refunds.list).mockReset();
+  vi.mocked(stripe.refunds.list).mockResolvedValue({ data: [] } as any);
 });
 
 async function seedPaidBooking(piId: string, applicationFeeId: string | null = "fee_abc") {
@@ -52,27 +58,60 @@ function charge(overrides: Record<string, unknown>) {
 }
 
 describe("handleChargeRefunded", () => {
-  it("logs and leaves the booking alone on a partial refund", async () => {
+  it("needs review when a partial refund came from outside the app, and leaves the booking alone", async () => {
     const bookingId = await seedPaidBooking("pi_partial");
-    await handleChargeRefunded(charge({ id: "ch_partial", amount: 10000, amount_refunded: 5000, payment_intent: "pi_partial" }));
+    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({
+      data: [{ id: "re_dash", amount: 5000, metadata: {} }],
+    } as any);
+    const result = await handleChargeRefunded(
+      charge({ id: "ch_partial", amount: 10000, amount_refunded: 5000, payment_intent: "pi_partial" }),
+    );
 
+    expect(result).toMatchObject({ outcome: "needs_review", operatorId: ctx.operatorId });
     const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
     expect(booking.status).toBe("confirmed");
     expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
   });
 
-  it("does nothing when the charge has no payment_intent", async () => {
-    await expect(
-      handleChargeRefunded(charge({ id: "ch_no_pi", payment_intent: null })),
-    ).resolves.toBeUndefined();
+  it("treats a partial refund the app issued itself as handled", async () => {
+    const bookingId = await seedPaidBooking("pi_partial_ours");
+    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({
+      data: [{ id: "re_office", amount: 5000, metadata: { reason: "admin_ticket_refund" } }],
+    } as any);
+    const result = await handleChargeRefunded(
+      charge({ id: "ch_partial_ours", amount: 10000, amount_refunded: 5000, payment_intent: "pi_partial_ours" }),
+    );
+    expect(result).toMatchObject({ outcome: "handled" });
+    const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(booking.status).toBe("confirmed");
+  });
+
+  it("ignores a charge with no payment_intent", async () => {
+    const result = await handleChargeRefunded(charge({ id: "ch_no_pi", payment_intent: null }));
+    expect(result.outcome).toBe("ignored");
     expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
   });
 
-  it("does nothing when no payment row matches the payment_intent", async () => {
-    await expect(
-      handleChargeRefunded(charge({ id: "ch_unknown_pi", payment_intent: "pi_unknown_xyz" })),
-    ).resolves.toBeUndefined();
+  it("ignores a refund of another deployment's payment", async () => {
+    const result = await handleChargeRefunded(
+      charge({ id: "ch_unknown_pi", payment_intent: "pi_unknown_xyz", transfer_data: { destination: "acct_elsewhere" } }),
+    );
+    expect(result.outcome).toBe("ignored");
     expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
+  });
+
+  it("needs review when the payment is this operator's but no booking has it", async () => {
+    const result = await handleChargeRefunded(
+      charge({ id: "ch_orphan", payment_intent: "pi_orphan", transfer_data: { destination: ACCT } }),
+    );
+    expect(result).toMatchObject({ outcome: "needs_review", operatorId: ctx.operatorId });
+  });
+
+  it("throws to be retried when the refund arrives before the payment was recorded (P3-8)", async () => {
+    await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_early_refund" });
+    await expect(
+      handleChargeRefunded(charge({ id: "ch_early", payment_intent: "pi_early_refund" })),
+    ).rejects.toThrow(/before its payment was recorded/);
   });
 
   it("on a full refund: reverses the application fee, cancels the booking, voids tickets, and restores seats", async () => {

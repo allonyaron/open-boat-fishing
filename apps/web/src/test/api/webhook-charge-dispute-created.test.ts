@@ -1,8 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { payments, tickets } from "@openboat/db";
 import { eq } from "drizzle-orm";
+
+vi.mock("@/lib/stripe", () => ({
+  stripe: { paymentIntents: { retrieve: vi.fn() } },
+}));
+
+import { stripe } from "@/lib/stripe";
 import { handleChargeDisputeCreated } from "@/lib/webhooks/charge-dispute-created";
 
 let ctx: SeedResult;
@@ -33,14 +39,33 @@ function dispute(overrides: Record<string, unknown>) {
 }
 
 describe("handleChargeDisputeCreated", () => {
-  it("does nothing when the dispute has no payment_intent", async () => {
-    await expect(handleChargeDisputeCreated(dispute({ payment_intent: null }))).resolves.toBeUndefined();
+  it("ignores a dispute with no payment_intent", async () => {
+    expect((await handleChargeDisputeCreated(dispute({ payment_intent: null }))).outcome).toBe("ignored");
   });
 
-  it("does nothing when no payment row matches the payment_intent", async () => {
+  it("ignores a dispute on another deployment's payment", async () => {
+    vi.mocked(stripe.paymentIntents.retrieve).mockResolvedValueOnce({
+      id: "pi_unknown_dispute",
+      transfer_data: { destination: "acct_elsewhere" },
+    } as any);
+    const result = await handleChargeDisputeCreated(dispute({ payment_intent: "pi_unknown_dispute" }));
+    expect(result.outcome).toBe("ignored");
+  });
+
+  it("throws to be retried when the dispute arrives before the payment was recorded (P3-8)", async () => {
+    await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_dispute_early" });
     await expect(
-      handleChargeDisputeCreated(dispute({ payment_intent: "pi_unknown_dispute" })),
-    ).resolves.toBeUndefined();
+      handleChargeDisputeCreated(dispute({ id: "dp_early", payment_intent: "pi_dispute_early" })),
+    ).rejects.toThrow(/before its payment was recorded/);
+  });
+
+  it("finishes as needs_review so someone responds to the dispute", async () => {
+    await seedPaidBooking("pi_dispute_review");
+    const result = await handleChargeDisputeCreated(
+      dispute({ id: "dp_review", amount: 10000, reason: "fraudulent", payment_intent: "pi_dispute_review" }),
+    );
+    expect(result).toMatchObject({ outcome: "needs_review", operatorId: ctx.operatorId });
+    expect(result.note).toMatch(/dp_review/);
   });
 
   it("voids all tickets on the booking and marks their fee reversed", async () => {
@@ -55,9 +80,8 @@ describe("handleChargeDisputeCreated", () => {
   it("is idempotent when tickets are already voided", async () => {
     const bookingId = await seedPaidBooking("pi_dispute_2");
     await handleChargeDisputeCreated(dispute({ id: "dp_2", payment_intent: "pi_dispute_2" }));
-    await expect(
-      handleChargeDisputeCreated(dispute({ id: "dp_2_retry", payment_intent: "pi_dispute_2" })),
-    ).resolves.toBeUndefined();
+    const again = await handleChargeDisputeCreated(dispute({ id: "dp_2_retry", payment_intent: "pi_dispute_2" }));
+    expect(again.note).toMatch(/0 ticket\(s\)/);
 
     const ticketRows = await testDb.select().from(tickets).where(eq(tickets.bookingId, bookingId));
     expect(ticketRows.every((t) => t.voided === true)).toBe(true);

@@ -3,6 +3,8 @@ import { sendPushToEmails } from "@/lib/push";
 import { cancelPendingBooking } from "@/lib/bookings/cancel";
 import { notifyHoldsExpired } from "@/lib/bookings/reclaim-expired-holds";
 import type Stripe from "stripe";
+import type { EventResult } from "@/lib/stripe-events/inbox";
+import { bookingForPaymentIntent } from "@/lib/stripe-events/ownership";
 
 // Restore seats when a PaymentIntent is explicitly cancelled (customer abandoned
 // checkout and Stripe cancelled the PI, or we cancelled it programmatically).
@@ -16,21 +18,24 @@ import type Stripe from "stripe";
 // - abandoned: the hold expired (cron, reclaim). The same "Booking Expired"
 //   push those send.
 // - anything else (a cancel from the Stripe Dashboard, say): "Booking Cancelled".
-export async function handlePaymentIntentCanceled(pi: Stripe.PaymentIntent) {
-  const bookingId = pi.metadata.bookingId;
-  if (!bookingId) return;
+export async function handlePaymentIntentCanceled(pi: Stripe.PaymentIntent): Promise<EventResult> {
+  // Found by the PI id the booking stored, never by metadata (P3-2). No
+  // booking means no seats are held for it: nothing to do.
+  const found = await bookingForPaymentIntent(pi.id);
+  if (!found) return { outcome: "ignored", note: "no booking has this payment" };
+  const bookingId = found.id;
 
-  // Only the PI this booking was created for may cancel it (P3-2); the
-  // check runs under the booking lock.
+  // The PI id is checked again under the booking lock.
   const booking = await cancelPendingBooking(bookingId, { expectedPaymentIntentId: pi.id });
-  if (!booking) return;
+  if (!booking) return { outcome: "handled", operatorId: found.operatorId, note: "booking was not pending" };
 
   console.log(`Booking cancelled, seats restored: ${booking.confirmationCode} (${bookingId})`);
 
-  if (pi.cancellation_reason === "requested_by_customer") return;
+  const handled: EventResult = { outcome: "handled", operatorId: booking.operatorId };
+  if (pi.cancellation_reason === "requested_by_customer") return handled;
   if (pi.cancellation_reason === "abandoned") {
     notifyHoldsExpired([booking]);
-    return;
+    return handled;
   }
 
   if (booking.customerEmail) {
@@ -47,4 +52,5 @@ export async function handlePaymentIntentCanceled(pi: Stripe.PaymentIntent) {
       ).catch((err) => console.error("Push error on PI cancellation:", err)),
     );
   }
+  return handled;
 }
