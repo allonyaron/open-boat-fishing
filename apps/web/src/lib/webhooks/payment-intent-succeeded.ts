@@ -6,9 +6,10 @@ import { getPostHogServer } from "@/lib/posthog";
 import { sendConfirmationEmail } from "@/lib/notifications/send-confirmation-email";
 import { moveTickets } from "@/lib/tickets/lifecycle";
 import { transitionBookings } from "@/lib/bookings/status";
+import { cancelPendingBookingInTx } from "@/lib/bookings/cancel";
 import { queueRefund, sendCommand } from "@/lib/payments/commands";
-import { bookings, tickets, payments, operators } from "@openboat/db";
-import { eq, sql } from "drizzle-orm";
+import { bookings, bookingItems, tickets, trips, payments, operators } from "@openboat/db";
+import { and, eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import type { EventResult } from "@/lib/stripe-events/inbox";
 import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
@@ -105,6 +106,20 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent): Pr
     // Auto-refund the PI so the customer isn't charged for a cancelled booking.
     if (fresh.status === "cancelled") return { kind: "cancelled" };
 
+    // A trip on the booking was cancelled while it was still unpaid (row 9).
+    // Trip cancel normally cancels the booking itself; if this payment got
+    // here first, the booking is cancelled now and the payment refunded.
+    const [onCancelledTrip] = await tx
+      .select({ id: trips.id })
+      .from(bookingItems)
+      .innerJoin(trips, eq(trips.id, bookingItems.tripId))
+      .where(and(eq(bookingItems.bookingId, bookingId), eq(trips.status, "cancelled")))
+      .limit(1);
+    if (onCancelledTrip) {
+      await cancelPendingBookingInTx(tx, bookingId);
+      return { kind: "cancelled" };
+    }
+
     // Confirm the booking (seats were already taken at booking creation)
     await transitionBookings(tx, { operatorId: fresh.operatorId, bookingId }, "pending", "confirmed");
 
@@ -141,7 +156,7 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent): Pr
 
   if (result.kind === "cancelled") {
     // The payment landed on a booking that had already been cancelled (its
-    // hold expired, or its trip was cancelled): refund it in full. The refund
+    // hold expired, or a trip on it was cancelled): refund it in full. The refund
     // is recorded once per payment (dedupe key), so a retried event doesn't
     // queue a second one, and a failed send is retried by the cron.
     const commandId = await queueRefund(db, {

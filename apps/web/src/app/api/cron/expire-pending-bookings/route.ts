@@ -9,6 +9,7 @@ import { recountUpcomingTrips } from "@/lib/inventory/seats";
 import { drainEvents } from "@/lib/stripe-events/inbox";
 import { dispatchStripeEvent } from "@/lib/stripe-events/dispatch";
 import { sendPendingCommands } from "@/lib/payments/commands";
+import { finishCancelledTrips } from "@/lib/bookings/cancel-trip";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -135,6 +136,9 @@ export async function GET(req: NextRequest) {
   // Retry Stripe events still unfinished (row 10): the backstop for Stripe's
   // own redeliveries, which a 500 from the webhook triggers.
   const stripeEventsDrained = await drainEvents(dispatchStripeEvent, { now });
+  // Finish trip cancellations whose request died before every booking was
+  // settled (row 9); their refunds go out with the queued ones below.
+  const cancelledTripsFinished = await finishCancelledTrips(now);
   // Send refunds still queued (Stripe was down, or the request timed out).
   const stripeCommandsSent = await sendPendingCommands({ now });
 
@@ -147,6 +151,7 @@ export async function GET(req: NextRequest) {
     seatsRecounted: drifted,
     stripeEvents: stripeEventsDrained,
     stripeCommands: stripeCommandsSent,
+    cancelledTripsFinished,
     ...(errors.length > 0 && { errors }),
   });
 }
