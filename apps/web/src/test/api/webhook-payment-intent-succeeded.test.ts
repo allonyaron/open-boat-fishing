@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { bookings, payments, operators, tickets } from "@openboat/db";
+import { bookings, bookingItems, payments, operators, tickets, trips } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
 vi.mock("@/lib/email", () => ({
@@ -140,6 +140,43 @@ describe("handlePaymentIntentSucceeded", () => {
 
     const payment = await testDb.select().from(payments).where(eq(payments.bookingId, bookingId));
     expect(payment).toHaveLength(0);
+  });
+
+  it("cancels and refunds a pending booking whose trip was cancelled before it was paid (row 9)", async () => {
+    const { bookingId, bookingItemId, ticketId } = await seedBooking(ctx, {
+      status: "pending",
+      stripePaymentIntentId: "pi_trip_gone",
+    });
+    const [cancelledTrip] = await testDb
+      .insert(trips)
+      .values({
+        operatorId: ctx.operatorId,
+        scheduleId: ctx.scheduleId,
+        vesselId: ctx.vesselId,
+        productId: ctx.productId,
+        departureDate: "2069-06-01",
+        startTime: new Date("2069-06-01T08:00:00Z"),
+        endTime: new Date("2069-06-01T16:00:00Z"),
+        capacity: 20,
+        seatsRemaining: 19,
+        status: "cancelled",
+        cancelledAt: new Date(),
+      })
+      .returning({ id: trips.id });
+    await testDb.update(bookingItems).set({ tripId: cancelledTrip.id }).where(eq(bookingItems.id, bookingItemId));
+
+    const result = await handlePaymentIntentSucceeded(pi({ id: "pi_trip_gone", metadata: {} }));
+    expect(result.outcome).toBe("handled");
+
+    const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(booking.status).toBe("cancelled");
+    const [ticket] = await testDb.select().from(tickets).where(eq(tickets.id, ticketId));
+    expect(ticket.status).toBe("voided");
+    expect(await testDb.select().from(payments).where(eq(payments.bookingId, bookingId))).toHaveLength(0);
+    expect(stripe.refunds.create).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_intent: "pi_trip_gone", metadata: expect.objectContaining({ reason: "auto_refund" }) }),
+      { idempotencyKey: expect.any(String) },
+    );
   });
 
   describe("binds the PI to the booking (P3-2)", () => {

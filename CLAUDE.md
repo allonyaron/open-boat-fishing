@@ -88,7 +88,7 @@ open-boat-fishing/
 
 **Trip materialization:** On schedule save — write all `trips` rows for the full date range immediately. Use `(schedule_id, departure_date)` unique constraint to prevent duplicates on re-run.
 
-**Cancellation is one atomic transaction:** refund every ticket, reverse every fee, set status, fire notifications. See `docs/data-model.md` for the full status transition diagram.
+**Cancellation:** a booking is cancelled in one atomic transaction (tickets out of service, fees reversed, seats back, status set), and its refunds are queued in that transaction. A trip cancel first closes the trip, then cancels its bookings one by one (see Architecture Invariants). See `docs/data-model.md` for the full status transition diagram.
 
 **Analytics:** PostHog is wired into the booking funnel (BookingCalendar, CheckoutForm, CheckoutClient) and the `payment_intent.succeeded` webhook. `src/lib/posthog.ts` is the server-side client; `src/components/PostHogProvider.tsx` wraps the app for client-side events.
 
@@ -135,6 +135,8 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 
 **Cancellation atomicity**
 - Full cancellation is one DB transaction: move the booking's tickets out of service through `moveTickets` (held → voided, live → refunded), give back seats for the tickets it moved through `giveBackSeatsForTickets`, then `transitionBookings(… → 'cancelled')`. No partial cancellation path.
+- Trip cancellation is `cancelTrip` (`lib/bookings/cancel-trip.ts`), in two phases. Phase 1 commits the trip's `cancelled` status on its own, which stops sales. Phase 2 settles each booking on the trip in its own transaction, locking the booking first: an unpaid booking is cancelled on every trip it covers and its PaymentIntent cancelled after commit; a paid one has this trip's live tickets refunded, for everything left on the payment if no ticket holding a seat remains (and the booking is then cancelled). Phase 2 can run again: calling the cancel route again or the expiry cron (`finishCancelledTrips`) finishes a cancellation that stopped partway.
+- `payment_intent.succeeded` never confirms a booking that is cancelled or that is on a cancelled trip: it cancels it and refunds the payment in full.
 - `tickets.price_cents` is what the ticket paid (net of any group discount); `list_price_cents` is the fare. Refunds pay `price_cents`; display uses `list_price_cents ?? price_cents`.
 
 **Fee lifecycle**
