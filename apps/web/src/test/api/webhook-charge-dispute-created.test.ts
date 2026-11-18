@@ -65,7 +65,7 @@ describe("handleChargeDisputeCreated", () => {
       dispute({ id: "dp_review", amount: 10000, reason: "fraudulent", payment_intent: "pi_dispute_review" }),
     );
     expect(result).toMatchObject({ outcome: "needs_review", operatorId: ctx.operatorId });
-    expect(result.note).toMatch(/dp_review/);
+    expect(result.note).toMatch(/^Booking \w+: the customer disputed \$100\.00 \(fraudulent\)\. 1 ticket can't board/);
   });
 
   it("voids all tickets on the booking and marks their fee reversed", async () => {
@@ -81,7 +81,7 @@ describe("handleChargeDisputeCreated", () => {
     const bookingId = await seedPaidBooking("pi_dispute_2");
     await handleChargeDisputeCreated(dispute({ id: "dp_2", payment_intent: "pi_dispute_2" }));
     const again = await handleChargeDisputeCreated(dispute({ id: "dp_2_retry", payment_intent: "pi_dispute_2" }));
-    expect(again.note).toMatch(/0 ticket\(s\)/);
+    expect(again.note).toMatch(/0 tickets can't board/);
 
     const ticketRows = await testDb.select().from(tickets).where(eq(tickets.bookingId, bookingId));
     expect(ticketRows.every((t) => t.voided === true)).toBe(true);

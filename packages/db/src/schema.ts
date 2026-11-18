@@ -653,6 +653,8 @@ export const stripeEvents = pgTable("stripe_events", {
   operatorId: uuid("operator_id").references(() => operators.id),
   attempts: integer("attempts").notNull().default(0),
   lastError: text("last_error"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),   // a person dealt with a needs_review event
+  resolvedBy: uuid("resolved_by").references(() => staff.id, { onDelete: "set null" }),
 }, (t) => [
   index("stripe_events_unprocessed_idx").on(t.stripeCreatedAt).where(sql`${t.processedAt} is null`),
   index("stripe_events_operator_outcome_idx").on(t.operatorId, t.outcome),
@@ -695,6 +697,8 @@ export const stripeCommands = pgTable("stripe_commands", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),   // a person dealt with a failed command
+  resolvedBy: uuid("resolved_by").references(() => staff.id, { onDelete: "set null" }),
 }, (t) => [
   index("stripe_commands_status_idx").on(t.status, t.createdAt),
   index("stripe_commands_operator_status_idx").on(t.operatorId, t.status),

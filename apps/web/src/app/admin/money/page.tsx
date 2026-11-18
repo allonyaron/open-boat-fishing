@@ -20,6 +20,7 @@ import {
   ExternalIcon,
   type LightKind,
 } from "@/components/admin/merchant";
+import { NeedsAttention } from "./NeedsAttention";
 
 type OperatorInfo = { stripeAccountId: string | null; stripeOnboardingComplete: boolean };
 
@@ -216,6 +217,8 @@ export default function MoneyPage() {
                 </a>
               </div>
             ))}
+
+          <NeedsAttention />
 
           <div className="grid grid-cols-3 max-lg:grid-cols-1 bg-ob-panel border-2 border-ob-rule rounded-ob overflow-hidden">
             {buckets.map((b) => (

@@ -25,6 +25,8 @@ Outbox of refunds the app asks Stripe for (row 10). Written in the same transact
 | created_at       | timestamp with time zone | now()                            | false    |          |                                         |                                                                                                                                                                            |
 | sent_at          | timestamp with time zone |                                  | true     |          |                                         |                                                                                                                                                                            |
 | confirmed_at     | timestamp with time zone |                                  | true     |          |                                         |                                                                                                                                                                            |
+| resolved_at      | timestamp with time zone |                                  | true     |          |                                         | When a person marked a failed command dealt with on the Money page (for example, refunded by hand in Stripe).                                                              |
+| resolved_by      | uuid                     |                                  | true     |          | [public.staff](public.staff.md)         | Staff member who marked it dealt with.                                                                                                                                     |
 
 ## Constraints
 
@@ -32,6 +34,7 @@ Outbox of refunds the app asks Stripe for (row 10). Written in the same transact
 | ------------------------------------------- | ----------- | ------------------------------------------------------------------- |
 | stripe_commands_booking_id_bookings_id_fk   | FOREIGN KEY | FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE SET NULL |
 | stripe_commands_operator_id_operators_id_fk | FOREIGN KEY | FOREIGN KEY (operator_id) REFERENCES operators(id)                  |
+| stripe_commands_resolved_by_staff_id_fk     | FOREIGN KEY | FOREIGN KEY (resolved_by) REFERENCES staff(id) ON DELETE SET NULL   |
 | stripe_commands_pkey                        | PRIMARY KEY | PRIMARY KEY (id)                                                    |
 | stripe_commands_dedupe_key_unique           | UNIQUE      | UNIQUE (dedupe_key)                                                 |
 

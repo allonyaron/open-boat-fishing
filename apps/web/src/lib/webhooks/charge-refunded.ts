@@ -7,6 +7,7 @@ import type Stripe from "stripe";
 import { OutOfOrderEventError, type EventResult } from "@/lib/stripe-events/inbox";
 import { bookingForPaymentIntent, destinationOf, operatorForAccount } from "@/lib/stripe-events/ownership";
 import { confirmRefundCommands, queueFeeRefund, sendCommand } from "@/lib/payments/commands";
+import { bookingLabel, usd } from "@/lib/stripe-events/notes";
 
 /** The `reason` metadata the app puts on the refunds it issues itself. */
 const APP_REFUND_REASONS = new Set(["admin_ticket_refund", "trip_cancelled", "auto_refund"]);
@@ -49,7 +50,11 @@ export async function handleChargeRefunded(charge: Stripe.Charge): Promise<Event
     }
     const operatorId = await operatorForAccount(destinationOf(charge));
     if (!operatorId) return { outcome: "ignored", note: "not a payment of this deployment" };
-    return { outcome: "needs_review", operatorId, note: `Charge ${charge.id} refunded but no booking has PI ${piId}` };
+    return {
+      outcome: "needs_review",
+      operatorId,
+      note: `${usd(charge.amount_refunded)} was refunded on a payment no booking has (${piId}).`,
+    };
   }
 
   // Which refunds on this charge did the app issue? Its own are confirmed
@@ -64,7 +69,7 @@ export async function handleChargeRefunded(charge: Stripe.Charge): Promise<Event
     return {
       outcome: "needs_review",
       operatorId: payment.operatorId,
-      note: `Partial refund from outside the app on booking ${payment.bookingId} (charge ${charge.id}, ${charge.amount_refunded} of ${charge.amount} cents refunded): decide which tickets it covers`,
+      note: `${await bookingLabel(payment.bookingId)}: ${usd(charge.amount_refunded)} of ${usd(charge.amount)} was refunded in the Stripe Dashboard, so the app can't tell which tickets it covers. Their tickets can still board.`,
     };
   }
 

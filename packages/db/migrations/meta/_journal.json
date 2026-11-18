@@ -141,6 +141,13 @@
       "when": 1794968186744,
       "tag": "0019_stripe_commands_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794968503366,
+      "tag": "0020_stripe_attention_resolved",
+      "breakpoints": true
     }
   ]
 }

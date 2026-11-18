@@ -12,6 +12,7 @@ import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import type { EventResult } from "@/lib/stripe-events/inbox";
 import { bookingForPaymentIntent, destinationOf, operatorForAccount } from "@/lib/stripe-events/ownership";
+import { bookingLabel, usd } from "@/lib/stripe-events/notes";
 
 /**
  * Why `pi` cannot stand for `booking`, or null when it can. Exported for tests.
@@ -48,7 +49,7 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent): Pr
     return {
       outcome: "needs_review",
       operatorId,
-      note: `Payment ${pi.id} of ${pi.amount} cents succeeded but no booking has it`,
+      note: `A payment of ${usd(pi.amount)} went through but no booking has it (${pi.id}). Refund it in the Stripe Dashboard if it shouldn't stand.`,
     };
   }
   const bookingId = found.id;
@@ -133,7 +134,7 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent): Pr
     return {
       outcome: "needs_review",
       operatorId,
-      note: `Payment ${pi.id} doesn't match booking ${bookingId} (${result.reason}); not confirmed`,
+      note: `${await bookingLabel(bookingId)}: a payment of ${usd(pi.amount)} didn't match it (${result.reason}), so the booking wasn't confirmed.`,
     };
   }
   if (result.kind === "already_confirmed") return { outcome: "handled", operatorId };

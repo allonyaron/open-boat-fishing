@@ -1007,124 +1007,136 @@
 <!-- public.stripe_events -->
 <g id="node21" class="node">
 <title>public.stripe_events</title>
-<polygon fill="#efefef" stroke="none" points="7472.79,-1393 7472.79,-1428.6 7764.59,-1428.6 7764.59,-1393 7472.79,-1393"/>
-<polygon fill="none" stroke="black" points="7472.79,-1393 7472.79,-1428.6 7764.59,-1428.6 7764.59,-1393 7472.79,-1393"/>
-<text text-anchor="start" x="7484.21" y="-1406.4" font-family="Arial Bold" font-size="18.00">public.stripe_events</text>
-<text text-anchor="start" x="7628.68" y="-1406.4" font-family="Arial" font-size="14.00">    </text>
-<text text-anchor="start" x="7659.79" y="-1406.4" font-family="Arial" font-size="14.00" fill="#666666">[BASE TABLE]</text>
+<polygon fill="#efefef" stroke="none" points="7472.79,-1423.8 7472.79,-1459.4 7764.59,-1459.4 7764.59,-1423.8 7472.79,-1423.8"/>
+<polygon fill="none" stroke="black" points="7472.79,-1423.8 7472.79,-1459.4 7764.59,-1459.4 7764.59,-1423.8 7472.79,-1423.8"/>
+<text text-anchor="start" x="7484.21" y="-1437.2" font-family="Arial Bold" font-size="18.00">public.stripe_events</text>
+<text text-anchor="start" x="7628.68" y="-1437.2" font-family="Arial" font-size="14.00">    </text>
+<text text-anchor="start" x="7659.79" y="-1437.2" font-family="Arial" font-size="14.00" fill="#666666">[BASE TABLE]</text>
+<polygon fill="none" stroke="black" points="7472.79,-1393 7472.79,-1423.8 7764.59,-1423.8 7764.59,-1393 7472.79,-1393"/>
+<text text-anchor="start" x="7479.79" y="-1405.2" font-family="Arial" font-size="14.00">id </text>
+<text text-anchor="start" x="7494.58" y="-1405.2" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1362.2 7472.79,-1393 7764.59,-1393 7764.59,-1362.2 7472.79,-1362.2"/>
-<text text-anchor="start" x="7479.79" y="-1374.4" font-family="Arial" font-size="14.00">id </text>
-<text text-anchor="start" x="7494.58" y="-1374.4" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<text text-anchor="start" x="7479.79" y="-1374.4" font-family="Arial" font-size="14.00">type </text>
+<text text-anchor="start" x="7510.14" y="-1374.4" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1331.4 7472.79,-1362.2 7764.59,-1362.2 7764.59,-1331.4 7472.79,-1331.4"/>
-<text text-anchor="start" x="7479.79" y="-1343.6" font-family="Arial" font-size="14.00">type </text>
-<text text-anchor="start" x="7510.14" y="-1343.6" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<text text-anchor="start" x="7479.79" y="-1343.6" font-family="Arial" font-size="14.00">account </text>
+<text text-anchor="start" x="7532.72" y="-1343.6" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1300.6 7472.79,-1331.4 7764.59,-1331.4 7764.59,-1300.6 7472.79,-1300.6"/>
-<text text-anchor="start" x="7479.79" y="-1312.8" font-family="Arial" font-size="14.00">account </text>
-<text text-anchor="start" x="7532.72" y="-1312.8" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<text text-anchor="start" x="7479.79" y="-1312.8" font-family="Arial" font-size="14.00">livemode </text>
+<text text-anchor="start" x="7539.71" y="-1312.8" font-family="Arial" font-size="14.00" fill="#666666">[boolean]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1269.8 7472.79,-1300.6 7764.59,-1300.6 7764.59,-1269.8 7472.79,-1269.8"/>
-<text text-anchor="start" x="7479.79" y="-1282" font-family="Arial" font-size="14.00">livemode </text>
-<text text-anchor="start" x="7539.71" y="-1282" font-family="Arial" font-size="14.00" fill="#666666">[boolean]</text>
+<text text-anchor="start" x="7479.79" y="-1282" font-family="Arial" font-size="14.00">stripe_created_at </text>
+<text text-anchor="start" x="7591.86" y="-1282" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1239 7472.79,-1269.8 7764.59,-1269.8 7764.59,-1239 7472.79,-1239"/>
-<text text-anchor="start" x="7479.79" y="-1251.2" font-family="Arial" font-size="14.00">stripe_created_at </text>
-<text text-anchor="start" x="7591.86" y="-1251.2" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
+<text text-anchor="start" x="7479.79" y="-1251.2" font-family="Arial" font-size="14.00">payload </text>
+<text text-anchor="start" x="7532.72" y="-1251.2" font-family="Arial" font-size="14.00" fill="#666666">[jsonb]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1208.2 7472.79,-1239 7764.59,-1239 7764.59,-1208.2 7472.79,-1208.2"/>
-<text text-anchor="start" x="7479.79" y="-1220.4" font-family="Arial" font-size="14.00">payload </text>
-<text text-anchor="start" x="7532.72" y="-1220.4" font-family="Arial" font-size="14.00" fill="#666666">[jsonb]</text>
+<text text-anchor="start" x="7479.79" y="-1220.4" font-family="Arial" font-size="14.00">received_at </text>
+<text text-anchor="start" x="7556.06" y="-1220.4" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1177.4 7472.79,-1208.2 7764.59,-1208.2 7764.59,-1177.4 7472.79,-1177.4"/>
-<text text-anchor="start" x="7479.79" y="-1189.6" font-family="Arial" font-size="14.00">received_at </text>
-<text text-anchor="start" x="7556.06" y="-1189.6" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
+<text text-anchor="start" x="7479.79" y="-1189.6" font-family="Arial" font-size="14.00">claimed_at </text>
+<text text-anchor="start" x="7551.39" y="-1189.6" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1146.6 7472.79,-1177.4 7764.59,-1177.4 7764.59,-1146.6 7472.79,-1146.6"/>
-<text text-anchor="start" x="7479.79" y="-1158.8" font-family="Arial" font-size="14.00">claimed_at </text>
-<text text-anchor="start" x="7551.39" y="-1158.8" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
+<text text-anchor="start" x="7479.79" y="-1158.8" font-family="Arial" font-size="14.00">processed_at </text>
+<text text-anchor="start" x="7567.74" y="-1158.8" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1115.8 7472.79,-1146.6 7764.59,-1146.6 7764.59,-1115.8 7472.79,-1115.8"/>
-<text text-anchor="start" x="7479.79" y="-1128" font-family="Arial" font-size="14.00">processed_at </text>
-<text text-anchor="start" x="7567.74" y="-1128" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
+<text text-anchor="start" x="7479.79" y="-1128" font-family="Arial" font-size="14.00">outcome </text>
+<text text-anchor="start" x="7537.38" y="-1128" font-family="Arial" font-size="14.00" fill="#666666">[stripe_event_outcome]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1085 7472.79,-1115.8 7764.59,-1115.8 7764.59,-1085 7472.79,-1085"/>
-<text text-anchor="start" x="7479.79" y="-1097.2" font-family="Arial" font-size="14.00">outcome </text>
-<text text-anchor="start" x="7537.38" y="-1097.2" font-family="Arial" font-size="14.00" fill="#666666">[stripe_event_outcome]</text>
+<text text-anchor="start" x="7479.79" y="-1097.2" font-family="Arial" font-size="14.00">operator_id </text>
+<text text-anchor="start" x="7554.51" y="-1097.2" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1054.2 7472.79,-1085 7764.59,-1085 7764.59,-1054.2 7472.79,-1054.2"/>
-<text text-anchor="start" x="7479.79" y="-1066.4" font-family="Arial" font-size="14.00">operator_id </text>
-<text text-anchor="start" x="7554.51" y="-1066.4" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
+<text text-anchor="start" x="7479.79" y="-1066.4" font-family="Arial" font-size="14.00">attempts </text>
+<text text-anchor="start" x="7537.37" y="-1066.4" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
 <polygon fill="none" stroke="black" points="7472.79,-1023.4 7472.79,-1054.2 7764.59,-1054.2 7764.59,-1023.4 7472.79,-1023.4"/>
-<text text-anchor="start" x="7479.79" y="-1035.6" font-family="Arial" font-size="14.00">attempts </text>
-<text text-anchor="start" x="7537.37" y="-1035.6" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
+<text text-anchor="start" x="7479.79" y="-1035.6" font-family="Arial" font-size="14.00">last_error </text>
+<text text-anchor="start" x="7542.81" y="-1035.6" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
 <polygon fill="none" stroke="black" points="7472.79,-992.6 7472.79,-1023.4 7764.59,-1023.4 7764.59,-992.6 7472.79,-992.6"/>
-<text text-anchor="start" x="7479.79" y="-1004.8" font-family="Arial" font-size="14.00">last_error </text>
-<text text-anchor="start" x="7542.81" y="-1004.8" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<text text-anchor="start" x="7479.79" y="-1004.8" font-family="Arial" font-size="14.00">resolved_at </text>
+<text text-anchor="start" x="7556.06" y="-1004.8" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
+<polygon fill="none" stroke="black" points="7472.79,-961.8 7472.79,-992.6 7764.59,-992.6 7764.59,-961.8 7472.79,-961.8"/>
+<text text-anchor="start" x="7479.79" y="-974" font-family="Arial" font-size="14.00">resolved_by </text>
+<text text-anchor="start" x="7559.17" y="-974" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
 </g>
 <!-- public.stripe_events&#45;&gt;public.operators -->
 <g id="edge20" class="edge">
 <title>public.stripe_events:operator_id&#45;&gt;public.operators:id</title>
-<path fill="none" stroke="black" d="M7461.42,-1069.12C7350.95,-1058.16 7516.29,-863.6 7420.69,-780 7284.3,-660.74 4343.44,-646.8 4162.26,-646.8"/>
-<polygon fill="black" stroke="black" points="7461.47,-1069.12 7471.25,-1074.08 7466.8,-1069.37 7471.13,-1069.57 7471.13,-1069.57 7471.13,-1069.57 7466.8,-1069.37 7471.67,-1065.09 7461.47,-1069.12"/>
-<text text-anchor="start" x="7205.83" y="-1079.6" font-family="Arial" font-size="10.00">FOREIGN KEY (operator_id) REFERENCES operators(id)</text>
+<path fill="none" stroke="black" d="M7461.91,-1098.36C7406.97,-1073.3 7471.84,-825.47 7420.69,-780 7285.29,-659.62 4343.44,-646.8 4162.26,-646.8"/>
+<polygon fill="black" stroke="black" points="7461.67,-1098.31 7470.55,-1104.74 7466.9,-1099.39 7471.14,-1100.26 7471.14,-1100.26 7471.14,-1100.26 7466.9,-1099.39 7472.38,-1095.93 7461.67,-1098.31"/>
+<text text-anchor="start" x="7205.83" y="-1110.4" font-family="Arial" font-size="10.00">FOREIGN KEY (operator_id) REFERENCES operators(id)</text>
 </g>
 <!-- public.stripe_commands -->
 <g id="node22" class="node">
 <title>public.stripe_commands</title>
-<polygon fill="#efefef" stroke="none" points="7869.21,-1454.6 7869.21,-1490.2 8184.17,-1490.2 8184.17,-1454.6 7869.21,-1454.6"/>
-<polygon fill="none" stroke="black" points="7869.21,-1454.6 7869.21,-1490.2 8184.17,-1490.2 8184.17,-1454.6 7869.21,-1454.6"/>
-<text text-anchor="start" x="7876.21" y="-1468" font-family="Arial Bold" font-size="18.00">public.stripe_commands</text>
-<text text-anchor="start" x="8052.68" y="-1468" font-family="Arial" font-size="14.00">    </text>
-<text text-anchor="start" x="8083.8" y="-1468" font-family="Arial" font-size="14.00" fill="#666666">[BASE TABLE]</text>
+<polygon fill="#efefef" stroke="none" points="7869.21,-1485.4 7869.21,-1521 8184.17,-1521 8184.17,-1485.4 7869.21,-1485.4"/>
+<polygon fill="none" stroke="black" points="7869.21,-1485.4 7869.21,-1521 8184.17,-1521 8184.17,-1485.4 7869.21,-1485.4"/>
+<text text-anchor="start" x="7876.21" y="-1498.8" font-family="Arial Bold" font-size="18.00">public.stripe_commands</text>
+<text text-anchor="start" x="8052.68" y="-1498.8" font-family="Arial" font-size="14.00">    </text>
+<text text-anchor="start" x="8083.8" y="-1498.8" font-family="Arial" font-size="14.00" fill="#666666">[BASE TABLE]</text>
+<polygon fill="none" stroke="black" points="7869.21,-1454.6 7869.21,-1485.4 8184.17,-1485.4 8184.17,-1454.6 7869.21,-1454.6"/>
+<text text-anchor="start" x="7876.21" y="-1466.8" font-family="Arial" font-size="14.00">id </text>
+<text text-anchor="start" x="7891" y="-1466.8" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1423.8 7869.21,-1454.6 8184.17,-1454.6 8184.17,-1423.8 7869.21,-1423.8"/>
-<text text-anchor="start" x="7876.21" y="-1436" font-family="Arial" font-size="14.00">id </text>
-<text text-anchor="start" x="7891" y="-1436" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
+<text text-anchor="start" x="7876.21" y="-1436" font-family="Arial" font-size="14.00">operator_id </text>
+<text text-anchor="start" x="7950.93" y="-1436" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1393 7869.21,-1423.8 8184.17,-1423.8 8184.17,-1393 7869.21,-1393"/>
-<text text-anchor="start" x="7876.21" y="-1405.2" font-family="Arial" font-size="14.00">operator_id </text>
-<text text-anchor="start" x="7950.93" y="-1405.2" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
+<text text-anchor="start" x="7876.21" y="-1405.2" font-family="Arial" font-size="14.00">kind </text>
+<text text-anchor="start" x="7905.78" y="-1405.2" font-family="Arial" font-size="14.00" fill="#666666">[stripe_command_kind]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1362.2 7869.21,-1393 8184.17,-1393 8184.17,-1362.2 7869.21,-1362.2"/>
-<text text-anchor="start" x="7876.21" y="-1374.4" font-family="Arial" font-size="14.00">kind </text>
-<text text-anchor="start" x="7905.78" y="-1374.4" font-family="Arial" font-size="14.00" fill="#666666">[stripe_command_kind]</text>
+<text text-anchor="start" x="7876.21" y="-1374.4" font-family="Arial" font-size="14.00">booking_id </text>
+<text text-anchor="start" x="7947.82" y="-1374.4" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1331.4 7869.21,-1362.2 8184.17,-1362.2 8184.17,-1331.4 7869.21,-1331.4"/>
-<text text-anchor="start" x="7876.21" y="-1343.6" font-family="Arial" font-size="14.00">booking_id </text>
-<text text-anchor="start" x="7947.82" y="-1343.6" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
+<text text-anchor="start" x="7876.21" y="-1343.6" font-family="Arial" font-size="14.00">reason </text>
+<text text-anchor="start" x="7922.91" y="-1343.6" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1300.6 7869.21,-1331.4 8184.17,-1331.4 8184.17,-1300.6 7869.21,-1300.6"/>
-<text text-anchor="start" x="7876.21" y="-1312.8" font-family="Arial" font-size="14.00">reason </text>
-<text text-anchor="start" x="7922.91" y="-1312.8" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<text text-anchor="start" x="7876.21" y="-1312.8" font-family="Arial" font-size="14.00">target_id </text>
+<text text-anchor="start" x="7934.58" y="-1312.8" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1269.8 7869.21,-1300.6 8184.17,-1300.6 8184.17,-1269.8 7869.21,-1269.8"/>
-<text text-anchor="start" x="7876.21" y="-1282" font-family="Arial" font-size="14.00">target_id </text>
-<text text-anchor="start" x="7934.58" y="-1282" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<text text-anchor="start" x="7876.21" y="-1282" font-family="Arial" font-size="14.00">amount_cents </text>
+<text text-anchor="start" x="7968.05" y="-1282" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1239 7869.21,-1269.8 8184.17,-1269.8 8184.17,-1239 7869.21,-1239"/>
-<text text-anchor="start" x="7876.21" y="-1251.2" font-family="Arial" font-size="14.00">amount_cents </text>
-<text text-anchor="start" x="7968.05" y="-1251.2" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
+<text text-anchor="start" x="7876.21" y="-1251.2" font-family="Arial" font-size="14.00">params </text>
+<text text-anchor="start" x="7926.78" y="-1251.2" font-family="Arial" font-size="14.00" fill="#666666">[jsonb]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1208.2 7869.21,-1239 8184.17,-1239 8184.17,-1208.2 7869.21,-1208.2"/>
-<text text-anchor="start" x="7876.21" y="-1220.4" font-family="Arial" font-size="14.00">params </text>
-<text text-anchor="start" x="7926.78" y="-1220.4" font-family="Arial" font-size="14.00" fill="#666666">[jsonb]</text>
+<text text-anchor="start" x="7876.21" y="-1220.4" font-family="Arial" font-size="14.00">dedupe_key </text>
+<text text-anchor="start" x="7956.39" y="-1220.4" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1177.4 7869.21,-1208.2 8184.17,-1208.2 8184.17,-1177.4 7869.21,-1177.4"/>
-<text text-anchor="start" x="7876.21" y="-1189.6" font-family="Arial" font-size="14.00">dedupe_key </text>
-<text text-anchor="start" x="7956.39" y="-1189.6" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<text text-anchor="start" x="7876.21" y="-1189.6" font-family="Arial" font-size="14.00">status </text>
+<text text-anchor="start" x="7917.45" y="-1189.6" font-family="Arial" font-size="14.00" fill="#666666">[stripe_command_status]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1146.6 7869.21,-1177.4 8184.17,-1177.4 8184.17,-1146.6 7869.21,-1146.6"/>
-<text text-anchor="start" x="7876.21" y="-1158.8" font-family="Arial" font-size="14.00">status </text>
-<text text-anchor="start" x="7917.45" y="-1158.8" font-family="Arial" font-size="14.00" fill="#666666">[stripe_command_status]</text>
+<text text-anchor="start" x="7876.21" y="-1158.8" font-family="Arial" font-size="14.00">stripe_object_id </text>
+<text text-anchor="start" x="7978.16" y="-1158.8" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1115.8 7869.21,-1146.6 8184.17,-1146.6 8184.17,-1115.8 7869.21,-1115.8"/>
-<text text-anchor="start" x="7876.21" y="-1128" font-family="Arial" font-size="14.00">stripe_object_id </text>
-<text text-anchor="start" x="7978.16" y="-1128" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<text text-anchor="start" x="7876.21" y="-1128" font-family="Arial" font-size="14.00">attempts </text>
+<text text-anchor="start" x="7933.79" y="-1128" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1085 7869.21,-1115.8 8184.17,-1115.8 8184.17,-1085 7869.21,-1085"/>
-<text text-anchor="start" x="7876.21" y="-1097.2" font-family="Arial" font-size="14.00">attempts </text>
-<text text-anchor="start" x="7933.79" y="-1097.2" font-family="Arial" font-size="14.00" fill="#666666">[integer]</text>
+<text text-anchor="start" x="7876.21" y="-1097.2" font-family="Arial" font-size="14.00">last_error </text>
+<text text-anchor="start" x="7939.23" y="-1097.2" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1054.2 7869.21,-1085 8184.17,-1085 8184.17,-1054.2 7869.21,-1054.2"/>
-<text text-anchor="start" x="7876.21" y="-1066.4" font-family="Arial" font-size="14.00">last_error </text>
-<text text-anchor="start" x="7939.23" y="-1066.4" font-family="Arial" font-size="14.00" fill="#666666">[text]</text>
+<text text-anchor="start" x="7876.21" y="-1066.4" font-family="Arial" font-size="14.00">claimed_at </text>
+<text text-anchor="start" x="7947.8" y="-1066.4" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
 <polygon fill="none" stroke="black" points="7869.21,-1023.4 7869.21,-1054.2 8184.17,-1054.2 8184.17,-1023.4 7869.21,-1023.4"/>
-<text text-anchor="start" x="7876.21" y="-1035.6" font-family="Arial" font-size="14.00">claimed_at </text>
-<text text-anchor="start" x="7947.8" y="-1035.6" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
+<text text-anchor="start" x="7876.21" y="-1035.6" font-family="Arial" font-size="14.00">created_at </text>
+<text text-anchor="start" x="7946.26" y="-1035.6" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
 <polygon fill="none" stroke="black" points="7869.21,-992.6 7869.21,-1023.4 8184.17,-1023.4 8184.17,-992.6 7869.21,-992.6"/>
-<text text-anchor="start" x="7876.21" y="-1004.8" font-family="Arial" font-size="14.00">created_at </text>
-<text text-anchor="start" x="7946.26" y="-1004.8" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
+<text text-anchor="start" x="7876.21" y="-1004.8" font-family="Arial" font-size="14.00">sent_at </text>
+<text text-anchor="start" x="7926.02" y="-1004.8" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
 <polygon fill="none" stroke="black" points="7869.21,-961.8 7869.21,-992.6 8184.17,-992.6 8184.17,-961.8 7869.21,-961.8"/>
-<text text-anchor="start" x="7876.21" y="-974" font-family="Arial" font-size="14.00">sent_at </text>
-<text text-anchor="start" x="7926.02" y="-974" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
+<text text-anchor="start" x="7876.21" y="-974" font-family="Arial" font-size="14.00">confirmed_at </text>
+<text text-anchor="start" x="7961.03" y="-974" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
 <polygon fill="none" stroke="black" points="7869.21,-931 7869.21,-961.8 8184.17,-961.8 8184.17,-931 7869.21,-931"/>
-<text text-anchor="start" x="7876.21" y="-943.2" font-family="Arial" font-size="14.00">confirmed_at </text>
-<text text-anchor="start" x="7961.03" y="-943.2" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
+<text text-anchor="start" x="7876.21" y="-943.2" font-family="Arial" font-size="14.00">resolved_at </text>
+<text text-anchor="start" x="7952.48" y="-943.2" font-family="Arial" font-size="14.00" fill="#666666">[timestamp with time zone]</text>
+<polygon fill="none" stroke="black" points="7869.21,-900.2 7869.21,-931 8184.17,-931 8184.17,-900.2 7869.21,-900.2"/>
+<text text-anchor="start" x="7876.21" y="-912.4" font-family="Arial" font-size="14.00">resolved_by </text>
+<text text-anchor="start" x="7955.59" y="-912.4" font-family="Arial" font-size="14.00" fill="#666666">[uuid]</text>
 </g>
 <!-- public.stripe_commands&#45;&gt;public.operators -->
 <g id="edge21" class="edge">
 <title>public.stripe_commands:operator_id&#45;&gt;public.operators:id</title>
-<path fill="none" stroke="black" d="M7858.91,-1404.38C7804.63,-1353.03 7864.86,-826.04 7816.69,-780 7743.25,-709.82 4263.84,-646.8 4162.26,-646.8"/>
-<polygon fill="black" stroke="black" points="7858.73,-1404.3 7866.12,-1412.4 7863.62,-1406.42 7867.6,-1408.13 7867.6,-1408.13 7867.6,-1408.13 7863.62,-1406.42 7869.69,-1404.14 7858.73,-1404.3"/>
-<text text-anchor="start" x="7602.25" y="-1418.4" font-family="Arial" font-size="10.00">FOREIGN KEY (operator_id) REFERENCES operators(id)</text>
+<path fill="none" stroke="black" d="M7858.83,-1435.31C7801.49,-1383.39 7867.22,-828.47 7816.69,-780 7743.38,-709.68 4263.84,-646.8 4162.26,-646.8"/>
+<polygon fill="black" stroke="black" points="7858.66,-1435.24 7866.18,-1443.23 7863.59,-1437.28 7867.59,-1438.94 7867.59,-1438.94 7867.59,-1438.94 7863.59,-1437.28 7869.63,-1434.92 7858.66,-1435.24"/>
+<text text-anchor="start" x="7602.25" y="-1449.2" font-family="Arial" font-size="10.00">FOREIGN KEY (operator_id) REFERENCES operators(id)</text>
 </g>
 </g>
 </svg>

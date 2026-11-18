@@ -21,13 +21,16 @@ Inbox of Stripe webhook events, saved before they are acted on (row 10). A redel
 | operator_id       | uuid                     |         | true     |          | [public.operators](public.operators.md) | Operator the event belongs to, once a handler resolved it. Null for events that aren't ours.                  |
 | attempts          | integer                  | 0       | false    |          |                                         |                                                                                                               |
 | last_error        | text                     |         | true     |          |                                         | Last failure while unfinished; once finished, why it was ignored or needs review.                             |
+| resolved_at       | timestamp with time zone |         | true     |          |                                         | When a person marked a needs_review event dealt with on the Money page.                                       |
+| resolved_by       | uuid                     |         | true     |          | [public.staff](public.staff.md)         | Staff member who marked it dealt with.                                                                        |
 
 ## Constraints
 
-| Name                                      | Type        | Definition                                         |
-| ----------------------------------------- | ----------- | -------------------------------------------------- |
-| stripe_events_operator_id_operators_id_fk | FOREIGN KEY | FOREIGN KEY (operator_id) REFERENCES operators(id) |
-| stripe_events_pkey                        | PRIMARY KEY | PRIMARY KEY (id)                                   |
+| Name                                      | Type        | Definition                                                        |
+| ----------------------------------------- | ----------- | ----------------------------------------------------------------- |
+| stripe_events_operator_id_operators_id_fk | FOREIGN KEY | FOREIGN KEY (operator_id) REFERENCES operators(id)                |
+| stripe_events_resolved_by_staff_id_fk     | FOREIGN KEY | FOREIGN KEY (resolved_by) REFERENCES staff(id) ON DELETE SET NULL |
+| stripe_events_pkey                        | PRIMARY KEY | PRIMARY KEY (id)                                                  |
 
 ## Indexes
 
