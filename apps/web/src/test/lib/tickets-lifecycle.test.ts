@@ -9,6 +9,7 @@ describe("moveTickets", () => {
   it.each([
     ["voided", "live"],
     ["refunded", "live"],
+    ["disputed", "held"],
     ["live", "held"],
     ["held", "refunded"],
   ] as const)("refuses %s -> %s before touching the database", async (from, to) => {

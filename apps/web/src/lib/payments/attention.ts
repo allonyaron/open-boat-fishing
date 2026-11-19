@@ -31,8 +31,29 @@ export type AttentionItem = {
 
 const EVENT_HEADLINES: Record<string, string> = {
   "charge.dispute.created": "A customer opened a chargeback",
+  "charge.dispute.funds_withdrawn": "A bank inquiry became a chargeback",
+  "charge.dispute.closed": "A chargeback closed and needs checking",
   "charge.refunded": "A refund was made outside the app",
   "payment_intent.succeeded": "A payment needs checking",
+};
+
+const COMMAND_HEADLINES: Record<
+  (typeof stripeCommands.$inferSelect)["kind"],
+  { failed: string; stuck: string }
+> = {
+  refund: { failed: "Stripe refused a refund", stuck: "A refund hasn't reached Stripe yet" },
+  fee_refund: {
+    failed: "Stripe refused a platform-fee refund",
+    stuck: "A platform-fee refund hasn't reached Stripe yet",
+  },
+  transfer_reversal: {
+    failed: "Stripe refused to take a chargeback back from the boat's balance",
+    stuck: "Taking a chargeback back from the boat's balance hasn't reached Stripe yet",
+  },
+  transfer: {
+    failed: "Stripe refused to return a won chargeback to the boat",
+    stuck: "Returning a won chargeback to the boat hasn't reached Stripe yet",
+  },
 };
 
 /** Drops Stripe's error class and code from the front of a stored error. */
@@ -88,14 +109,7 @@ export async function listAttention(operatorId: string, now: Date = new Date()):
 
   const items: AttentionItem[] = [
     ...commands.map((c): AttentionItem => {
-      const what =
-        c.kind === "fee_refund"
-          ? c.status === "failed"
-            ? "Stripe refused a platform-fee refund"
-            : "A platform-fee refund hasn't reached Stripe yet"
-          : c.status === "failed"
-            ? "Stripe refused a refund"
-            : "A refund hasn't reached Stripe yet";
+      const what = COMMAND_HEADLINES[c.kind][c.status === "failed" ? "failed" : "stuck"];
       return {
         kind: "command",
         id: c.id,

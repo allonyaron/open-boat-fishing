@@ -20,6 +20,7 @@ vi.mock("@/lib/stripe", () => ({
       cancel: vi.fn(),
     },
     charges: { retrieve: vi.fn() },
+    applicationFees: { createRefund: vi.fn().mockResolvedValue({ id: "fr_test_mock" }) },
   },
 }));
 
@@ -398,6 +399,39 @@ describe("trip cancel settles every booking on the trip (row 9)", () => {
     const { POST } = await import("@/app/api/admin/trips/[tripId]/cancel/route");
     await POST(postReq(tripId), { params: { tripId } });
     expect(stripe.refunds.create).toHaveBeenCalledWith(expect.objectContaining({ amount: 6800 }), expect.anything());
+  });
+
+  it("refunds exactly the tickets' platform fees, so a chargeback fee the payment carried stays collected (row 11)", async () => {
+    const tripId = await seedFreshTrip("scheduled", 18);
+    const otherTripId = await seedFreshTrip("scheduled", 19);
+    const { bookingId, piId } = await seedBookingOn("confirmed", [
+      { tripId, tickets: [{ priceCents: 6800 }, { priceCents: 6800 }] },
+      { tripId: otherTripId, tickets: [{ priceCents: 6800 }] },
+    ]);
+    await testDb.insert(payments).values({
+      bookingId,
+      operatorId: ctx.operatorId,
+      stripePaymentIntentId: piId,
+      applicationFeeId: "fee_trip_cancel_exact",
+      amountCents: 20400,
+      applicationFeeCents: 1950,
+      status: "succeeded",
+    });
+    vi.mocked(stripe.applicationFees.createRefund).mockClear();
+
+    const { POST } = await import("@/app/api/admin/trips/[tripId]/cancel/route");
+    const res = await POST(postReq(tripId), { params: { tripId } });
+    expect((await res.json()).refunds).toEqual({ sent: 1, queued: 0, failed: 0 });
+
+    expect(stripe.refunds.create).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_intent: piId, amount: 13600, refund_application_fee: false }),
+      expect.anything(),
+    );
+    expect(stripe.applicationFees.createRefund).toHaveBeenCalledWith(
+      "fee_trip_cancel_exact",
+      expect.objectContaining({ amount: 300 }),
+      expect.anything(),
+    );
   });
 
   it("refunds everything left and cancels the booking when the trip held its last live tickets (P4-8)", async () => {

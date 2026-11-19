@@ -1,41 +1,36 @@
-import { db } from "@/lib/db";
-import { stripe } from "@/lib/stripe";
-import { payments } from "@openboat/db";
-import { eq } from "drizzle-orm";
-import { moveTickets } from "@/lib/tickets/lifecycle";
 import type Stripe from "stripe";
-import { OutOfOrderEventError, type EventResult } from "@/lib/stripe-events/inbox";
-import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
+import { db } from "@/lib/db";
+import type { EventResult } from "@/lib/stripe-events/inbox";
 import { bookingLabel, usd } from "@/lib/stripe-events/notes";
+import {
+  findDisputedPayment,
+  isInquiry,
+  openChargeback,
+  paymentIntentOf,
+  recordDispute,
+  type TakeBack,
+} from "@/lib/disputes/chargebacks";
 
-// A customer opened a dispute (chargeback). The booking's live tickets move to
-// disputed so they can't board; the booking stays confirmed and the seats stay
-// taken. A new dispute always needs someone to respond to it in Stripe, so the
-// event is finished as needs_review and shows on the Money page.
+/** What the Money page says about the money taken back from the operator. */
+export function takeBackNote(takeBack: TakeBack): string {
+  if (takeBack.kind === "nothing") return `Nothing was taken back from the boat's Stripe balance (${takeBack.why}).`;
+  const what = `${usd(takeBack.amountCents)} taken back from the boat's Stripe balance`;
+  if (takeBack.send === "failed") return `Taking ${usd(takeBack.amountCents)} back from the boat's Stripe balance failed; see below.`;
+  if (takeBack.send === "pending") return `${what} (queued; Stripe will be asked again).`;
+  return `${what}; it is returned if the chargeback is won.`;
+}
+
+// A customer opened a dispute. A chargeback (Stripe has taken the money from
+// the platform) moves the booking's live tickets to disputed and takes the
+// amount back from the operator; an inquiry takes no money and moves nothing.
+// Either way someone has to respond in Stripe, so the event is finished as
+// needs_review and shows on the Money page.
 export async function handleChargeDisputeCreated(dispute: Stripe.Dispute): Promise<EventResult> {
-  const piId = typeof dispute.payment_intent === "string" ? dispute.payment_intent : null;
+  const piId = paymentIntentOf(dispute);
   if (!piId) return { outcome: "ignored", note: `dispute ${dispute.id} has no payment intent` };
 
-  const [payment] = await db
-    .select({ bookingId: payments.bookingId, operatorId: payments.operatorId })
-    .from(payments)
-    .where(eq(payments.stripePaymentIntentId, piId));
-
-  if (!payment) {
-    const booking = await bookingForPaymentIntent(piId);
-    if (booking?.status === "pending") {
-      throw new OutOfOrderEventError(`dispute ${dispute.id} for PI ${piId} before its payment was recorded`);
-    }
-    if (booking) {
-      return {
-        outcome: "needs_review",
-        operatorId: booking.operatorId,
-        note: `${await bookingLabel(booking.id)} (cancelled): the customer disputed ${usd(dispute.amount)} (${dispute.reason}). Respond in the Stripe Dashboard.`,
-      };
-    }
-    // Not a booking here: whose payment is it? The dispute names only the PI.
-    const pi = await stripe.paymentIntents.retrieve(piId);
-    const owner = await orphanPaymentOwner(destinationOf(pi), pi.metadata);
+  const owner = await findDisputedPayment(piId);
+  if (owner.kind === "orphan") {
     if (!owner.ours) return { outcome: "ignored", note: owner.why };
     return {
       outcome: "needs_review",
@@ -43,15 +38,35 @@ export async function handleChargeDisputeCreated(dispute: Stripe.Dispute): Promi
       note: `A customer disputed ${usd(dispute.amount)} (${dispute.reason}) on a payment no booking has (${piId}). Respond in the Stripe Dashboard.`,
     };
   }
+  if (owner.kind === "cancelled") {
+    await recordDispute(db, dispute, { operatorId: owner.operatorId, bookingId: owner.bookingId });
+    return {
+      outcome: "needs_review",
+      operatorId: owner.operatorId,
+      note: `${await bookingLabel(owner.bookingId)} (cancelled): the customer disputed ${usd(dispute.amount)} (${dispute.reason}). Respond in the Stripe Dashboard.`,
+    };
+  }
 
-  // Only live tickets move, so a redelivery changes nothing.
-  const disputed = await db.transaction((tx) =>
-    moveTickets(tx, { operatorId: payment.operatorId, bookingId: payment.bookingId }, "live", "disputed"),
-  );
+  const { payment } = owner;
+  const label = await bookingLabel(payment.bookingId);
 
+  if (isInquiry(dispute)) {
+    await recordDispute(db, dispute, payment);
+    return {
+      outcome: "needs_review",
+      operatorId: payment.operatorId,
+      note: `${label}: the customer's bank asked about ${usd(dispute.amount)} (${dispute.reason}). No money has been taken yet. Respond in the Stripe Dashboard so it doesn't become a chargeback.`,
+    };
+  }
+
+  const opened = await openChargeback(dispute, payment);
+  if (opened.closed) {
+    return { outcome: "handled", operatorId: payment.operatorId, note: `dispute ${dispute.id} had already closed` };
+  }
+  const n = opened.ticketsDisputed;
   return {
     outcome: "needs_review",
     operatorId: payment.operatorId,
-    note: `${await bookingLabel(payment.bookingId)}: the customer disputed ${usd(dispute.amount)} (${dispute.reason}). ${disputed.length} ticket${disputed.length === 1 ? "" : "s"} can't board until it's resolved. Respond in the Stripe Dashboard.`,
+    note: `${label}: the customer disputed ${usd(dispute.amount)} (${dispute.reason}). ${n} ticket${n === 1 ? "" : "s"} can't board until it's resolved. ${takeBackNote(opened.takeBack)} Respond in the Stripe Dashboard.`,
   };
 }
