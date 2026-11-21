@@ -15,7 +15,7 @@ order. The next thing to do is the first row without a ✅; the "Before a second
 **Each row is one branch and one PR** (see Git Workflow). When a row lands, mark it ✅ in its row with the PR number
 and what was verified, and note anything left open in that row.
 
-**Done so far (2026-11-18):** rows 1, 2b, 3, 4, 4b, 5, 6, 7, 8 (except its CHECK, open item 1), 10, 18, 19. **Next:** row 9 (`cancelTrip`, sends its refunds through `lib/payments/commands`), then row 11 (reads the Stripe event inbox). Small rows (8's CHECK, 21–25) can go in between.
+**Done so far (2026-11-18):** rows 1, 2b, 3, 4, 4b, 5, 6, 7, 8 (except its CHECK, open item 1), 9, 10, 18, 19. **Next:** row 11 (disputes and Dashboard refunds recover funds from the operator; reads the Stripe event inbox, transfer reversals are outbox commands). Small rows (8's CHECK, 21–25) can go in between.
 
 **Deployment facts that are not in the tracker:** `DEMO_MODE=true` enables the demo banner, the nightly reset cron
 (`/api/cron/reset-demo-data`, not registered in `vercel.json` on Hobby) and the "Clear demo customers" button;
