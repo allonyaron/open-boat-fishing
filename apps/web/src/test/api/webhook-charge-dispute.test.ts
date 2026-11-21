@@ -343,3 +343,18 @@ describe("charge.dispute.closed — lost", () => {
     expect(result.note).toMatch(/never taken back/);
   });
 });
+
+describe("listChargebacks (Money page)", () => {
+  it("lists each dispute with its state and the fee the operator owes", async () => {
+    const { listChargebacks } = await import("@/lib/disputes/list");
+    const items = await listChargebacks(ctx.operatorId);
+    const byId = new Map(items.map((i) => [i.id, i]));
+
+    expect(byId.get("du_open")).toMatchObject({ state: "open", amountCents: 10000, fee: null });
+    expect(byId.get("du_inquiry")).toMatchObject({ state: "inquiry" });
+    expect(byId.get("du_updated")).toMatchObject({ state: "under_review" });
+    expect(byId.get("du_won")).toMatchObject({ state: "won", fee: { cents: 1500, status: "owed", collectedOn: null } });
+    expect(byId.get("du_lost")).toMatchObject({ state: "lost", fee: { cents: 3000, status: "owed" } });
+    expect(byId.get("du_open")!.respondBy).toBe(new Date(1796025467 * 1000).toISOString());
+  });
+});

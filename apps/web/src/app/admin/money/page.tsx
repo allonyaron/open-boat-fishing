@@ -21,6 +21,7 @@ import {
   type LightKind,
 } from "@/components/admin/merchant";
 import { NeedsAttention } from "./NeedsAttention";
+import { Chargebacks } from "./Chargebacks";
 
 type OperatorInfo = { stripeAccountId: string | null; stripeOnboardingComplete: boolean };
 
@@ -312,6 +313,8 @@ export default function MoneyPage() {
               </>
             )}
           </Panel>
+
+          <Chargebacks />
         </>
       )}
     </div>
