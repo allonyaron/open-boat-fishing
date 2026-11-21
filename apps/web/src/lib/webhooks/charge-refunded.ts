@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { payments } from "@openboat/db";
-import { eq } from "drizzle-orm";
+import { payments, stripeCommands } from "@openboat/db";
+import { eq, inArray } from "drizzle-orm";
 import { cancelConfirmedBooking } from "@/lib/bookings/cancel";
 import type Stripe from "stripe";
 import { OutOfOrderEventError, type EventResult } from "@/lib/stripe-events/inbox";
@@ -33,10 +33,24 @@ async function queueReversalsFor(
   const transferId = typeof charge.transfer === "string" ? charge.transfer : charge.transfer?.id ?? null;
   if (unreversed.length === 0 || !transferId) return [];
 
+  // Refunds already queued (a redelivery) keep their command; one still
+  // pending hasn't reached the transfer yet, so it counts against what's left.
+  const keyOf = (r: Stripe.Refund) => `refund-reversal:${r.id}`;
+  const queued = await db
+    .select({ id: stripeCommands.id, key: stripeCommands.dedupeKey, status: stripeCommands.status, amountCents: stripeCommands.amountCents })
+    .from(stripeCommands)
+    .where(inArray(stripeCommands.dedupeKey, unreversed.map(keyOf)));
+  const queuedKeys = new Set(queued.map((q) => q.key));
+  const fresh = unreversed.filter((r) => !queuedKeys.has(keyOf(r)));
+  const ids = queued.map((q) => q.id);
+  if (fresh.length === 0) return ids;
+
   const transfer = await stripe.transfers.retrieve(transferId);
-  let left = transfer.amount - transfer.amount_reversed;
-  const ids: string[] = [];
-  for (const r of unreversed) {
+  let left =
+    transfer.amount -
+    transfer.amount_reversed -
+    queued.filter((q) => q.status === "pending").reduce((sum, q) => sum + (q.amountCents ?? 0), 0);
+  for (const r of fresh) {
     const amountCents = Math.min(r.amount, left);
     if (amountCents <= 0) break;
     ids.push(
@@ -47,7 +61,7 @@ async function queueReversalsFor(
         amountCents,
         reason: "dashboard_refund",
         metadata: { refundId: r.id },
-        dedupeKey: `refund-reversal:${r.id}`,
+        dedupeKey: keyOf(r),
       }),
     );
     left -= amountCents;

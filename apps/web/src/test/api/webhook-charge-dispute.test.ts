@@ -336,7 +336,8 @@ describe("charge.dispute.closed — lost", () => {
 
   it("needs review when the money was never taken back from the operator", async () => {
     await seedPaid("pi_lost_kept");
-    vi.mocked(stripe.transfers.retrieve).mockResolvedValueOnce({ amount: 10000, amount_reversed: 10000 } as any);
+    // An earlier refund with reverse_transfer had already taken all of it.
+    vi.mocked(stripe.transfers.retrieve).mockResolvedValue({ amount: 10000, amount_reversed: 10000 } as any);
     await handleChargeDisputeCreated(dispute("du_lost_kept", "pi_lost_kept"));
     const result = await handleChargeDisputeClosed(dispute("du_lost_kept", "pi_lost_kept", { status: "lost" }));
     expect(result.outcome).toBe("needs_review");

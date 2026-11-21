@@ -105,22 +105,19 @@ export function disputeFeeCents(dispute: Stripe.Dispute): number {
 /**
  * Saves the dispute's latest state. Once it has closed, a late event can't
  * reopen it: only the close sets closed_at, and status then stays put.
- * Returns whether it had already closed before this call.
+ * Returns whether it has closed, read from the upsert itself: a concurrent
+ * close holds the row until it commits, so the answer is current.
  */
 export async function recordDispute(
   executor: Executor,
   dispute: Stripe.Dispute,
   owner: { operatorId: string; bookingId: string | null },
   opts: { closed?: boolean } = {},
-): Promise<{ wasClosed: boolean }> {
+): Promise<{ closed: boolean }> {
   const piId = paymentIntentOf(dispute)!;
   const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id ?? null;
   const dueBy = dispute.evidence_details?.due_by;
-  const [before] = await executor
-    .select({ closedAt: disputes.closedAt })
-    .from(disputes)
-    .where(eq(disputes.id, dispute.id));
-  await executor
+  const [row] = await executor
     .insert(disputes)
     .values({
       id: dispute.id,
@@ -145,8 +142,9 @@ export async function recordDispute(
         stripeFeeCents: sql`coalesce(${disputes.stripeFeeCents}, excluded.stripe_fee_cents)`,
         updatedAt: new Date(),
       },
-    });
-  return { wasClosed: Boolean(before?.closedAt) };
+    })
+    .returning({ closedAt: disputes.closedAt });
+  return { closed: Boolean(row?.closedAt) };
 }
 
 const reversalKey = (disputeId: string) => `dispute-reversal:${disputeId}`;
@@ -156,58 +154,68 @@ export type TakeBack =
   | { kind: "nothing"; why: string };
 
 /**
- * Takes the disputed amount back from the operator's transfer, capped at what
- * is left of it (an earlier refund with reverse_transfer took some back).
- * Once per dispute.
+ * How much to take back from the operator's transfer: the disputed amount,
+ * capped at what is left of it (an earlier refund with reverse_transfer took
+ * some back). Asks Stripe, so it runs outside the transaction.
  */
-async function takeBackFromOperator(dispute: Stripe.Dispute, payment: DisputedPayment): Promise<TakeBack> {
+async function planTakeBack(
+  dispute: Stripe.Dispute,
+  payment: DisputedPayment,
+): Promise<{ existing: { id: string; amountCents: number } } | { amountCents: number } | { why: string }> {
   const [existing] = await db
     .select({ id: stripeCommands.id, amountCents: stripeCommands.amountCents })
     .from(stripeCommands)
     .where(eq(stripeCommands.dedupeKey, reversalKey(dispute.id)));
-  if (existing) {
-    return { kind: "queued", amountCents: existing.amountCents ?? 0, send: await sendCommand(existing.id) };
-  }
-  if (!payment.stripeTransferId) return { kind: "nothing", why: "the payment has no transfer recorded" };
-
+  if (existing) return { existing: { id: existing.id, amountCents: existing.amountCents ?? 0 } };
+  if (!payment.stripeTransferId) return { why: "the payment has no transfer recorded" };
   const transfer = await stripe.transfers.retrieve(payment.stripeTransferId);
   const amountCents = Math.min(dispute.amount, transfer.amount - transfer.amount_reversed);
-  if (amountCents <= 0) return { kind: "nothing", why: "nothing is left of the transfer to take back" };
-
-  const commandId = await queueTransferReversal(db, {
-    operatorId: payment.operatorId,
-    bookingId: payment.bookingId,
-    transferId: payment.stripeTransferId,
-    amountCents,
-    reason: "chargeback",
-    metadata: { disputeId: dispute.id },
-    dedupeKey: reversalKey(dispute.id),
-  });
-  return { kind: "queued", amountCents, send: await sendCommand(commandId) };
+  return amountCents > 0 ? { amountCents } : { why: "nothing is left of the transfer to take back" };
 }
 
 /**
  * A chargeback opened (or an inquiry became one): the tickets can't board and
- * the money is taken back from the operator. Does nothing once the dispute
- * has closed, so a late event can't undo a won dispute.
+ * the money is taken back from the operator. The reversal is queued in the
+ * transaction that checks the dispute hasn't closed, so a won dispute
+ * processed at the same time either sees the reversal (and returns it) or
+ * stops this from queueing one.
  */
 export async function openChargeback(
   dispute: Stripe.Dispute,
   payment: DisputedPayment,
 ): Promise<{ closed: true } | { closed: false; ticketsDisputed: number; takeBack: TakeBack }> {
-  const { wasClosed, moved } = await db.transaction(async (tx) => {
-    const { wasClosed } = await recordDispute(tx, dispute, payment);
-    if (wasClosed) return { wasClosed, moved: [] };
+  const plan = await planTakeBack(dispute, payment);
+  const result = await db.transaction(async (tx) => {
+    const { closed } = await recordDispute(tx, dispute, payment);
+    if (closed) return { closed: true as const };
     const moved = await moveTickets(
       tx,
       { operatorId: payment.operatorId, bookingId: payment.bookingId },
       "live",
       "disputed",
     );
-    return { wasClosed, moved };
+    let reversal: { id: string; amountCents: number } | null = null;
+    if ("existing" in plan) reversal = plan.existing;
+    else if ("amountCents" in plan) {
+      const id = await queueTransferReversal(tx, {
+        operatorId: payment.operatorId,
+        bookingId: payment.bookingId,
+        transferId: payment.stripeTransferId!,
+        amountCents: plan.amountCents,
+        reason: "chargeback",
+        metadata: { disputeId: dispute.id },
+        dedupeKey: reversalKey(dispute.id),
+      });
+      reversal = { id, amountCents: plan.amountCents };
+    }
+    return { closed: false as const, ticketsDisputed: moved.length, reversal };
   });
-  if (wasClosed) return { closed: true };
-  return { closed: false, ticketsDisputed: moved.length, takeBack: await takeBackFromOperator(dispute, payment) };
+  if (result.closed) return { closed: true };
+
+  const takeBack: TakeBack = result.reversal
+    ? { kind: "queued", amountCents: result.reversal.amountCents, send: await sendCommand(result.reversal.id) }
+    : { kind: "nothing", why: "why" in plan ? plan.why : "nothing to take back" };
+  return { closed: false, ticketsDisputed: result.ticketsDisputed, takeBack };
 }
 
 export type WonOutcome = {
@@ -279,16 +287,35 @@ export type LostOutcome = {
 };
 
 /**
- * The dispute was lost: the customer keeps the money. The disputed tickets
- * are refunded and their seats come back, the booking is cancelled once
- * nothing on it holds a seat, and the platform fee on those tickets is
- * refunded to the operator.
+ * The dispute was lost: the customer keeps the money. The booking's disputed
+ * tickets (and any still live, if the opening event never got processed) are
+ * refunded and their seats come back, the booking is cancelled once nothing
+ * on it holds a seat, and the platform fee on those tickets is refunded to
+ * the operator. If nothing was taken back from the operator yet, it is now.
  */
 export async function closeChargebackLost(dispute: Stripe.Dispute, payment: DisputedPayment): Promise<LostOutcome> {
   const scope = { operatorId: payment.operatorId, bookingId: payment.bookingId };
-  const { moved, bookingCancelled, feeCommandId } = await db.transaction(async (tx) => {
+  const plan = await planTakeBack(dispute, payment);
+  const { moved, bookingCancelled, feeCommandId, reversalId } = await db.transaction(async (tx) => {
     await recordDispute(tx, dispute, payment, { closed: true });
-    const moved = await moveTickets(tx, scope, "disputed", "refunded");
+    const moved = [
+      ...(await moveTickets(tx, scope, "disputed", "refunded")),
+      ...(await moveTickets(tx, scope, "live", "refunded")),
+    ];
+    const reversalId =
+      "existing" in plan
+        ? plan.existing.id
+        : "amountCents" in plan
+          ? await queueTransferReversal(tx, {
+              operatorId: payment.operatorId,
+              bookingId: payment.bookingId,
+              transferId: payment.stripeTransferId!,
+              amountCents: plan.amountCents,
+              reason: "chargeback",
+              metadata: { disputeId: dispute.id },
+              dedupeKey: reversalKey(dispute.id),
+            })
+          : null;
     await giveBackSeatsForTickets(tx, payment.operatorId, moved, "refund");
 
     const [left] = await tx
@@ -319,14 +346,15 @@ export async function closeChargebackLost(dispute: Stripe.Dispute, payment: Disp
         });
       }
     }
-    return { moved, bookingCancelled, feeCommandId };
+    return { moved, bookingCancelled, feeCommandId, reversalId };
   });
   await recordDisputeFee(db, { operatorId: payment.operatorId, disputeId: dispute.id, amountCents: disputeFeeCents(dispute) });
+  // The operator's money comes back before the fee goes out.
+  if (reversalId) await sendCommand(reversalId);
   if (feeCommandId) await sendCommand(feeCommandId);
 
-  const [reversal] = await db
-    .select({ status: stripeCommands.status })
-    .from(stripeCommands)
-    .where(eq(stripeCommands.dedupeKey, reversalKey(dispute.id)));
+  const [reversal] = reversalId
+    ? await db.select({ status: stripeCommands.status }).from(stripeCommands).where(eq(stripeCommands.id, reversalId))
+    : [];
   return { ticketsRefunded: moved.length, bookingCancelled, takenBack: Boolean(reversal) && reversal.status !== "failed" };
 }

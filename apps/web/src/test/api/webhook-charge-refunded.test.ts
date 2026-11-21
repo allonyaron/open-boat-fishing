@@ -235,6 +235,29 @@ describe("handleChargeRefunded — taking outside refunds back from the operator
     expect(stripe.transfers.createReversal).toHaveBeenCalledTimes(1);
   });
 
+  it("takes back a second Dashboard refund without counting the first one twice", async () => {
+    const bookingId = await seedPaidBooking("pi_dash_two");
+    const first = { id: "re_dash_two_a", amount: 5000, status: "succeeded", transfer_reversal: null, metadata: {} };
+    const second = { id: "re_dash_two_b", amount: 3000, status: "succeeded", transfer_reversal: null, metadata: {} };
+    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [first] } as any);
+    await handleChargeRefunded(
+      charge({ id: "ch_dash_two", amount_refunded: 5000, payment_intent: "pi_dash_two", transfer: "tr_dash_two" }),
+    );
+    // Stripe lists the newest refund first; the first one has been taken back.
+    vi.mocked(stripe.transfers.retrieve).mockResolvedValueOnce({ amount: 10000, amount_reversed: 5000 } as any);
+    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [second, first] } as any);
+    await handleChargeRefunded(
+      charge({ id: "ch_dash_two", amount_refunded: 8000, payment_intent: "pi_dash_two", transfer: "tr_dash_two" }),
+    );
+
+    const cmds = await testDb.select().from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
+    expect(cmds.map((c) => `${c.dedupeKey}:${c.amountCents}`).sort()).toEqual([
+      "refund-reversal:re_dash_two_a:5000",
+      "refund-reversal:re_dash_two_b:3000",
+    ]);
+    expect(stripe.transfers.createReversal).toHaveBeenCalledTimes(2);
+  });
+
   it("leaves a Dashboard refund that reversed the transfer itself alone", async () => {
     const bookingId = await seedPaidBooking("pi_dash_reversed");
     vi.mocked(stripe.refunds.list).mockResolvedValueOnce({
