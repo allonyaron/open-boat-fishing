@@ -1,4 +1,5 @@
 import type { TicketStatus } from "@/lib/tickets/status";
+import type { ChargebackState } from "@/lib/disputes/list";
 
 export type TicketData = {
   id: string;
@@ -22,6 +23,8 @@ export type BookingData = {
   totalCents: number;
   /** What this booking has paid for this trip's live tickets (the server works it out). */
   paidCents: number;
+  /** The booking's latest chargeback, if any (row 11). */
+  chargeback: ChargebackState | null;
   tickets: TicketData[];
 };
 
@@ -73,7 +76,7 @@ export function isStruckTicket(t: TicketData): boolean {
 }
 
 /** What replaces the buttons on a ticket that isn't live. */
-export function notLiveNote(t: TicketData): string {
+export function notLiveNote(t: TicketData, chargeback: ChargebackState | null = null): string {
   switch (t.status) {
     case "held":
       return "Can board once paid";
@@ -82,7 +85,7 @@ export function notLiveNote(t: TicketData): string {
     case "voided":
       return "Never paid";
     default:
-      return "Seat is back on sale";
+      return chargeback === "lost" ? "Chargeback lost · seat is back on sale" : "Seat is back on sale";
   }
 }
 

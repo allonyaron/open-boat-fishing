@@ -28,6 +28,8 @@
 | [public.rate_limits](public.rate_limits.md)           | 3       | Fixed-window rate-limit buckets for auth and booking endpoints. Rows older than a day are deleted by the expire-pending-bookings cron.                                                                                                                 | BASE TABLE |
 | [public.stripe_events](public.stripe_events.md)       | 15      | Inbox of Stripe webhook events, saved before they are acted on (row 10). A redelivery of a saved event is a no-op on the primary key. Unfinished rows (processed_at null) are retried by Stripe redeliveries and the expiry cron.                      | BASE TABLE |
 | [public.stripe_commands](public.stripe_commands.md)   | 19      | Outbox of refunds the app asks Stripe for (row 10). Written in the same transaction as the ticket and seat changes, then sent; the id is the Stripe idempotency key and the refund's metadata.command_id. Pending rows are retried by the expiry cron. | BASE TABLE |
+| [public.disputes](public.disputes.md)                 | 14      | Chargebacks on bookings (row 11), kept up to date by the charge.dispute.* webhook handlers. Read by the Money page and the passenger list.                                                                                                             | BASE TABLE |
+| [public.operator_debts](public.operator_debts.md)     | 9       | Money an operator owes the platform: the Stripe fee on a chargeback (row 11). Collected by adding it to the platform fee on the operator's next booking, because Standard connected accounts can't be debited.                                         | BASE TABLE |
 
 ## Enums
 
@@ -39,9 +41,11 @@
 | public.fee_bearer            | operator, passenger                                        |
 | public.fee_display           | folded, itemized                                           |
 | public.fee_status            | earned, held, reversed                                     |
+| public.operator_debt_kind    | dispute_fee                                                |
+| public.operator_debt_status  | collected, owed, reserved                                  |
 | public.seat_change_reason    | capacity_edit, hold, recount, refund, release, trip_cancel |
 | public.staff_role            | admin, mate                                                |
-| public.stripe_command_kind   | fee_refund, refund                                         |
+| public.stripe_command_kind   | fee_refund, refund, transfer, transfer_reversal            |
 | public.stripe_command_status | confirmed, failed, pending, sent                           |
 | public.stripe_event_outcome  | handled, ignored, needs_review                             |
 | public.ticket_status         | disputed, held, live, refunded, voided                     |

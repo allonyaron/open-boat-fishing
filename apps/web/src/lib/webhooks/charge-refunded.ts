@@ -1,12 +1,13 @@
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { payments } from "@openboat/db";
-import { eq } from "drizzle-orm";
+import { payments, stripeCommands } from "@openboat/db";
+import { eq, inArray } from "drizzle-orm";
 import { cancelConfirmedBooking } from "@/lib/bookings/cancel";
 import type Stripe from "stripe";
 import { OutOfOrderEventError, type EventResult } from "@/lib/stripe-events/inbox";
 import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
-import { confirmRefundCommands, queueFeeRefund, sendCommand } from "@/lib/payments/commands";
+import { confirmRefundCommands, queueFeeRefund, queueTransferReversal, sendCommands } from "@/lib/payments/commands";
+import { collectedOnBooking } from "@/lib/payments/operator-debts";
 import { bookingLabel, usd } from "@/lib/stripe-events/notes";
 
 /** The `reason` metadata the app puts on the refunds it issues itself. */
@@ -17,7 +18,60 @@ function isAppRefund(refund: Stripe.Refund): boolean {
   return Boolean(meta.command_id) || APP_REFUND_REASONS.has(meta.reason ?? "") || Boolean(meta.tripId);
 }
 
+/**
+ * Takes refunds made outside the app back from the operator, for each one
+ * that didn't reverse the transfer itself (P3-3): otherwise the platform pays
+ * the customer and the operator keeps the money. Capped at what is left of
+ * the transfer. Returns the queued command ids, once per refund.
+ */
+async function queueReversalsFor(
+  foreign: Stripe.Refund[],
+  charge: Stripe.Charge,
+  payment: { operatorId: string; bookingId: string },
+): Promise<string[]> {
+  const unreversed = foreign.filter((r) => !r.transfer_reversal && r.status !== "failed" && r.status !== "canceled");
+  const transferId = typeof charge.transfer === "string" ? charge.transfer : charge.transfer?.id ?? null;
+  if (unreversed.length === 0 || !transferId) return [];
+
+  // Refunds already queued (a redelivery) keep their command; one still
+  // pending hasn't reached the transfer yet, so it counts against what's left.
+  const keyOf = (r: Stripe.Refund) => `refund-reversal:${r.id}`;
+  const queued = await db
+    .select({ id: stripeCommands.id, key: stripeCommands.dedupeKey, status: stripeCommands.status, amountCents: stripeCommands.amountCents })
+    .from(stripeCommands)
+    .where(inArray(stripeCommands.dedupeKey, unreversed.map(keyOf)));
+  const queuedKeys = new Set(queued.map((q) => q.key));
+  const fresh = unreversed.filter((r) => !queuedKeys.has(keyOf(r)));
+  const ids = queued.map((q) => q.id);
+  if (fresh.length === 0) return ids;
+
+  const transfer = await stripe.transfers.retrieve(transferId);
+  let left =
+    transfer.amount -
+    transfer.amount_reversed -
+    queued.filter((q) => q.status === "pending").reduce((sum, q) => sum + (q.amountCents ?? 0), 0);
+  for (const r of fresh) {
+    const amountCents = Math.min(r.amount, left);
+    if (amountCents <= 0) break;
+    ids.push(
+      await queueTransferReversal(db, {
+        operatorId: payment.operatorId,
+        bookingId: payment.bookingId,
+        transferId,
+        amountCents,
+        reason: "dashboard_refund",
+        metadata: { refundId: r.id },
+        dedupeKey: keyOf(r),
+      }),
+    );
+    left -= amountCents;
+  }
+  return ids;
+}
+
 // A charge was refunded, by the app or from the Stripe Dashboard.
+// - A refund from outside the app that didn't reverse the operator's transfer
+//   is taken back from the operator (queueReversalsFor), partial or full.
 // - Fully refunded: reverse the platform fee and cancel the booking (its live
 //   and disputed tickets move to refunded, their seats come back).
 // - Partly refunded by the app (office ticket refunds, trip cancellations):
@@ -65,13 +119,16 @@ export async function handleChargeRefunded(charge: Stripe.Charge): Promise<Event
   const refunds = await stripe.refunds.list({ charge: charge.id, limit: 100 });
   await confirmRefundCommands(refunds.data);
   const foreign = refunds.data.filter((r) => !isAppRefund(r));
+  // A redelivery finds the commands by their dedupe keys and sends nothing new.
+  const reversalIds = await queueReversalsFor(foreign, charge, payment);
 
   if (charge.amount_refunded < charge.amount) {
+    await sendCommands(reversalIds);
     if (foreign.length === 0) return { outcome: "handled", operatorId: payment.operatorId };
     return {
       outcome: "needs_review",
       operatorId: payment.operatorId,
-      note: `${await bookingLabel(payment.bookingId)}: ${usd(charge.amount_refunded)} of ${usd(charge.amount)} was refunded in the Stripe Dashboard, so the app can't tell which tickets it covers. Their tickets can still board.`,
+      note: `${await bookingLabel(payment.bookingId)}: ${usd(charge.amount_refunded)} of ${usd(charge.amount)} was refunded in the Stripe Dashboard, so the app can't tell which tickets it covers. Their tickets can still board.${reversalIds.length > 0 ? " The refund was taken back from the boat's Stripe balance." : ""}`,
     };
   }
 
@@ -79,25 +136,29 @@ export async function handleChargeRefunded(charge: Stripe.Charge): Promise<Event
   // (in proportion, or exactly per ticket); a refund from outside the app
   // may not have, so reverse what is left of it, once per charge. A Dashboard
   // refund can return the fee itself: check first, so a fee with nothing left
-  // doesn't become a refused refund on the Money page.
+  // doesn't become a refused refund on the Money page. A debt the operator
+  // owed that this payment's fee carried (a chargeback fee) isn't returned.
   const feeLeft =
     foreign.length > 0 && payment.applicationFeeId
       ? await (async () => {
           const fee = await stripe.applicationFees.retrieve(payment.applicationFeeId!);
-          return fee.amount - fee.amount_refunded;
+          const debt = await collectedOnBooking(payment.operatorId, payment.bookingId);
+          return fee.amount - fee.amount_refunded - debt;
         })()
       : 0;
+  // Reversals first: the operator's money comes back before the fee goes out.
+  const commandIds = [...reversalIds];
   if (feeLeft > 0 && payment.applicationFeeId) {
-    const commandId = await queueFeeRefund(db, {
+    commandIds.push(await queueFeeRefund(db, {
       operatorId: payment.operatorId,
       bookingId: payment.bookingId,
       applicationFeeId: payment.applicationFeeId,
-      amountCents: null,
+      amountCents: feeLeft,
       reason: "dashboard_refund_fee",
       dedupeKey: `fee-refund:${charge.id}`,
-    });
-    await sendCommand(commandId);
+    }));
   }
+  await sendCommands(commandIds);
 
   await cancelConfirmedBooking(payment.bookingId);
   return { outcome: "handled", operatorId: payment.operatorId };

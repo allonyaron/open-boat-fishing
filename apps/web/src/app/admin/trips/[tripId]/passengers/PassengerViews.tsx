@@ -130,7 +130,7 @@ function TicketRowDock({
         </div>
       </div>
       {!isLiveTicket(ticket) ? (
-        <div className="text-body-sm text-ob-ink-3">{notLiveNote(ticket)}</div>
+        <div className="text-body-sm text-ob-ink-3">{notLiveNote(ticket, booking.chargeback)}</div>
       ) : (
         <div className="flex gap-2.5 max-md:flex-[1_1_100%]">
           {ticket.checkedIn ? (
@@ -234,7 +234,7 @@ function BookingRowsDesk({
             </td>
             <td className="py-1 pl-3 pr-4 text-right whitespace-nowrap">
               {!isLiveTicket(t) ? (
-                <span className="text-ob-ink-3">{notLiveNote(t)}</span>
+                <span className="text-ob-ink-3">{notLiveNote(t, booking.chargeback)}</span>
               ) : (
                 <span className="inline-flex gap-1.5">
                   {t.checkedIn ? (
