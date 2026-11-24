@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { recordAudit } from "@/lib/audit";
 import { schedules, trips, products, vessels } from "@openboat/db";
 import { and, eq, sql } from "drizzle-orm";
 import {
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
@@ -98,44 +99,53 @@ export async function POST(req: NextRequest) {
   const departureTime = toTimeString(depParsed.hours, depParsed.minutes);
   const returnTime = toTimeString(retParsed.hours, retParsed.minutes);
 
-  const [schedule] = await db
-    .insert(schedules)
-    .values({
-      operatorId: session.operatorId,
-      productId,
-      startDate,
-      endDate,
-      daysOfWeek,
-      departureTime,
-      returnTime,
-      capacity,
-    })
-    .returning();
-
-  // Materialize trips — identical logic to seed-trips-dev.ts
   const dates = datesInRange(startDate, endDate, daysOfWeek);
   const overnight = isOvernight(depParsed, retParsed);
 
-  const tripRows = dates.map((date) => {
-    const retDate = tripEndDate(date, returnTime, overnight);
-    return {
-      operatorId: session.operatorId,
-      scheduleId: schedule.id,
-      productId,
-      vesselId: product.vesselId,
-      departureDate: date,
-      startTime: etWallClockToUTC(date, departureTime),
-      endTime: etWallClockToUTC(retDate, returnTime),
-      capacity,
-      seatsRemaining: capacity,
-    };
-  });
+  // The pattern, its trips and who added them, together.
+  const { schedule, tripsCreated } = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(schedules)
+      .values({
+        operatorId: session.operatorId,
+        productId,
+        startDate,
+        endDate,
+        daysOfWeek,
+        departureTime,
+        returnTime,
+        capacity,
+      })
+      .returning();
 
-  let tripsCreated = 0;
-  if (tripRows.length > 0) {
-    await db.insert(trips).values(tripRows).onConflictDoNothing();
-    tripsCreated = tripRows.length;
-  }
+    // Materialize trips — identical logic to seed-trips-dev.ts
+    const tripRows = dates.map((date) => {
+      const retDate = tripEndDate(date, returnTime, overnight);
+      return {
+        operatorId: session.operatorId,
+        scheduleId: row.id,
+        productId,
+        vesselId: product.vesselId,
+        departureDate: date,
+        startTime: etWallClockToUTC(date, departureTime),
+        endTime: etWallClockToUTC(retDate, returnTime),
+        capacity,
+        seatsRemaining: capacity,
+      };
+    });
+    if (tripRows.length > 0) {
+      await tx.insert(trips).values(tripRows).onConflictDoNothing();
+    }
+
+    await recordAudit(tx, ctx, {
+      operatorId: session.operatorId,
+      action: "schedule.create",
+      targetTable: "schedules",
+      targetId: row.id,
+      after: { productId, startDate, endDate, daysOfWeek, departureTime, returnTime, capacity, tripsCreated: tripRows.length },
+    });
+    return { schedule: row, tripsCreated: tripRows.length };
+  });
 
   return NextResponse.json({ ...schedule, tripsCreated }, { status: 201 });
 }

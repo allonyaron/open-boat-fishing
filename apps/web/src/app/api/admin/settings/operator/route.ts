@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { recordChange } from "@/lib/audit";
 import { operators } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
@@ -70,12 +71,24 @@ export async function PATCH(req: NextRequest) {
     patch.onlineCutoffMinutes = v;
   }
 
-  const [updated] = await db
-    .update(operators)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .set(patch as any)
-    .where(eq(operators.id, session.operatorId))
-    .returning();
+  const updated = await db.transaction(async (tx) => {
+    const [before] = await tx.select().from(operators).where(eq(operators.id, session.operatorId)).for("update");
+    const [row] = await tx
+      .update(operators)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .set(patch as any)
+      .where(eq(operators.id, session.operatorId))
+      .returning();
+    await recordChange(tx, ctx, {
+      operatorId: session.operatorId,
+      action: "operator.update",
+      targetTable: "operators",
+      targetId: session.operatorId,
+      before,
+      set: patch,
+    });
+    return row;
+  });
 
   return NextResponse.json(updated);
 }

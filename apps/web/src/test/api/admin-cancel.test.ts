@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator, testDb, adminAuth } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb, adminAuth, stripeTestCtx, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { trips, bookings, bookingItems, tickets, operators, payments } from "@openboat/db";
+import { trips, bookings, bookingItems, tickets, operators, payments, stripeCommands } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
@@ -215,6 +215,19 @@ describe("POST /api/admin/trips/[tripId]/cancel", () => {
       .from(tickets)
       .where(eq(tickets.bookingId, bookingId));
     expect(ticket).toEqual({ status: "refunded", voided: true, feeStatus: "reversed" });
+
+    // Who cancelled it, and who the refund was for (row 12).
+    const [cancel] = await auditRowsFor("trips", tripId);
+    expect(cancel).toMatchObject({
+      action: "trip.cancel",
+      actorKind: "staff",
+      actorId: ctx.staffId,
+      before: { status: "scheduled" },
+      after: { status: "cancelled" },
+    });
+    const [command] = await testDb.select({ id: stripeCommands.id }).from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
+    const [queued] = await auditRowsFor("stripe_commands", command.id);
+    expect(queued).toMatchObject({ action: "refund.queue", actorKind: "staff", actorId: ctx.staffId });
   });
 
   it("still cancels the trip when a refund can't be sent, and queues it", async () => {
@@ -354,7 +367,7 @@ describe("trip cancel settles every booking on the trip (row 9)", () => {
       payment_method_types: ["card"],
       latest_charge: null,
       metadata: {},
-    } as any);
+    } as any, stripeTestCtx);
     expect(result.outcome).toBe("handled");
     expect(stripe.refunds.create).toHaveBeenCalledWith(
       expect.objectContaining({ payment_intent: piId, metadata: expect.objectContaining({ reason: "auto_refund" }) }),
@@ -459,6 +472,10 @@ describe("trip cancel settles every booking on the trip (row 9)", () => {
     expect(await finishCancelledTrips()).toBeGreaterThanOrEqual(1);
     expect(await bookingStatus(bookingId)).toBe("cancelled");
     expect(stripe.refunds.create).toHaveBeenCalledTimes(1);
+    // The cron that finished it is the refund's actor (row 12).
+    const [command] = await testDb.select({ id: stripeCommands.id }).from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
+    const [queued] = await auditRowsFor("stripe_commands", command.id);
+    expect(queued).toMatchObject({ actorKind: "system", actorId: "finish-cancelled-trips" });
 
     expect(await finishCancelledTrips()).toBe(0);
     const { POST } = await import("@/app/api/admin/trips/[tripId]/cancel/route");

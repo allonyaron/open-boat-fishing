@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { createdFields, recordAudit } from "@/lib/audit";
 import { vessels } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
@@ -60,15 +61,26 @@ export async function POST(req: NextRequest) {
     patch.groupDiscountPct = Number(body.groupDiscountPct);
   }
 
-  const [row] = await db
-    .insert(vessels)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .values(patch as any)
-    .returning()
-    .catch((err: Error) => {
-      if (err.message.includes("unique")) throw Object.assign(err, { code: "CONFLICT" });
-      throw err;
+  const row = await db.transaction(async (tx) => {
+    const [vessel] = await tx
+      .insert(vessels)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .values(patch as any)
+      .returning()
+      .catch((err: Error) => {
+        if (err.message.includes("unique")) throw Object.assign(err, { code: "CONFLICT" });
+        throw err;
+      });
+    const { operatorId: _op, ...fields } = patch;
+    await recordAudit(tx, ctx, {
+      operatorId: session.operatorId,
+      action: "vessel.create",
+      targetTable: "vessels",
+      targetId: vessel.id,
+      after: createdFields(fields),
     });
+    return vessel;
+  });
 
   return NextResponse.json(row, { status: 201 });
 }

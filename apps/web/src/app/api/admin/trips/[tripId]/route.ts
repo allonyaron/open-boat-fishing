@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { recordAudit } from "@/lib/audit";
 import { trips, vessels, products, bookingItems, bookings, tickets, checkIns, disputes } from "@openboat/db";
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { chargebackState } from "@/lib/disputes/list";
@@ -141,7 +142,7 @@ export async function GET(req: NextRequest, { params }: { params: { tripId: stri
 export async function PATCH(req: NextRequest, { params }: { params: { tripId: string } }) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const { tripId } = params;
   const body = (await req.json().catch(() => ({}))) as {
@@ -183,7 +184,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { tripId: st
   try {
     await db.transaction(async (tx) => {
       const [trip] = await tx
-        .select({ id: trips.id, status: trips.status })
+        .select({ id: trips.id, status: trips.status, onlineCutoffMinutes: trips.onlineCutoffMinutes })
         .from(trips)
         .where(and(eq(trips.id, tripId), eq(trips.operatorId, session.operatorId)))
         .for("update");
@@ -196,16 +197,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { tripId: st
       if (hasCapacity) {
         // The inventory module enforces the vessel's certificate capacity
         // when it has one, and the floor of seats already taken (P7-3).
-        ({ sold } = await setTripCapacity(tx, {
+        ({ sold } = await setTripCapacity(tx, ctx, {
           operatorId: session.operatorId,
           tripId,
           capacity: newCapacity,
-          staffId: session.staffId,
         }));
       }
 
       const set: PgUpdateSetSource<typeof trips> = { updatedAt: new Date() };
       if (hasCutoff) set.onlineCutoffMinutes = newCutoff;
+      if (hasCutoff && trip.onlineCutoffMinutes !== newCutoff) {
+        await recordAudit(tx, ctx, {
+          operatorId: session.operatorId,
+          action: "trip.update",
+          targetTable: "trips",
+          targetId: tripId,
+          before: { onlineCutoffMinutes: trip.onlineCutoffMinutes },
+          after: { onlineCutoffMinutes: newCutoff },
+        });
+      }
 
       const [updated] = await tx
         .update(trips)

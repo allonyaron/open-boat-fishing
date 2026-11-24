@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator, testDb, adminAuth } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb, adminAuth, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { vessels } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -200,5 +200,8 @@ describe("PATCH /api/admin/settings/vessels/[vesselId]", () => {
     const [row] = await testDb.select().from(vessels).where(eq(vessels.id, ctx.vesselId));
     expect(row.name).toBe("Renamed Vessel");
     expect(row.capacity).toBe(22);
+
+    const audit = (await auditRowsFor("vessels", ctx.vesselId)).at(-1);
+    expect(audit).toMatchObject({ action: "vessel.update", actorId: ctx.staffId, after: { name: "Renamed Vessel", capacity: 22 } });
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { seedOperator, cleanupOperator, seedBooking, testDb, adminAuth } from "../db-helpers";
+import { seedOperator, cleanupOperator, seedBooking, testDb, adminAuth, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { trips, customers, pushTokens, magicLinkOtps, bookings } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -61,6 +61,8 @@ describe("POST /api/admin/demo/clear-customers — DEMO_MODE enabled", () => {
     expect(body.ok).toBe(true);
     expect(body.tripsReset).toBeGreaterThanOrEqual(1);
     expect(body.customersDeleted).toBe(1);
+    const [audit] = await auditRowsFor("operators", ctx.operatorId);
+    expect(audit).toMatchObject({ action: "demo.clear_customers", actorId: ctx.staffId, after: { customersDeleted: 1 } });
 
     const [tripRow] = await testDb.select({ seatsRemaining: trips.seatsRemaining, capacity: trips.capacity }).from(trips).where(eq(trips.id, ctx.tripId));
     expect(tripRow.seatsRemaining).toBe(tripRow.capacity);

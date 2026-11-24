@@ -13,7 +13,7 @@ export async function POST(
 ) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -24,12 +24,12 @@ export async function POST(
 
   if (parsed.data.action === "retry") {
     if (kind !== "command") return NextResponse.json({ error: "Only a refund can be retried" }, { status: 400 });
-    const result = await retryCommand(session.operatorId, params.id);
+    const result = await retryCommand(ctx, session.operatorId, params.id);
     if (result === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({ ok: true, result });
   }
 
-  const resolved = await resolveAttention(session.operatorId, session.staffId, kind, params.id);
+  const resolved = await resolveAttention(ctx, session.operatorId, kind, params.id);
   if (!resolved) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator, testDb, adminAuth } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb, adminAuth, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { staff } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -262,6 +262,11 @@ describe("PATCH /api/admin/settings/staff/[staffId]", () => {
     const [after] = await testDb.select({ pinHash: staff.pinHash, name: staff.name }).from(staff).where(eq(staff.id, ctx.staffId));
     expect(after.name).toBe("Renamed Mate");
     expect(after.pinHash).not.toBe(before.pinHash);
+
+    // Who changed it; the PIN is recorded only as changed (row 12).
+    const audit = (await auditRowsFor("staff", ctx.staffId)).filter((r) => r.action === "staff.update").at(-1)!;
+    expect(audit).toMatchObject({ actorKind: "staff", after: { name: "Renamed Mate", pinHash: "[secret]" } });
+    expect(JSON.stringify(audit)).not.toContain(after.pinHash!);
   });
 
   it("clears vesselId when set to null", async () => {

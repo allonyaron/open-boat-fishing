@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { recordChange } from "@/lib/audit";
 import { staff, vessels } from "@openboat/db";
 import { and, eq, sql } from "drizzle-orm";
 import { hash } from "bcryptjs";
@@ -11,7 +12,7 @@ export async function PATCH(
 ) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const { staffId } = params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -64,13 +65,27 @@ export async function PATCH(
   // account was active or a credential is actually set.
   const updated = await db.transaction(async (tx) => {
     const [before] = await tx
-      .select({ active: staff.active })
+      .select({
+        name: staff.name,
+        active: staff.active,
+        vesselId: staff.vesselId,
+        passwordHash: staff.passwordHash,
+        pinHash: staff.pinHash,
+      })
       .from(staff)
       .where(and(eq(staff.id, staffId), eq(staff.operatorId, session.operatorId)))
       .for("update");
     if (!before) return null;
     const endsSessions =
       (patch.active === false && before.active) || "passwordHash" in patch || "pinHash" in patch;
+    await recordChange(tx, ctx, {
+      operatorId: session.operatorId,
+      action: "staff.update",
+      targetTable: "staff",
+      targetId: staffId,
+      before,
+      set: patch,
+    });
     if (endsSessions) patch.sessionVersion = sql`${staff.sessionVersion} + 1`;
 
     const [row] = await tx

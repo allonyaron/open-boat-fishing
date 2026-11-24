@@ -8,13 +8,12 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest, { params }: { params: { tripId: string } }) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const { tripId } = params;
   const { reason } = (await req.json().catch(() => ({}))) as { reason?: string };
 
-  const now = new Date();
-  const result = await cancelTrip(session.operatorId, tripId, reason ?? null, now);
+  const result = await cancelTrip(ctx, session.operatorId, tripId, reason ?? null);
 
   if (result.kind === "not_found") {
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
@@ -28,7 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: { tripId: str
     tripId,
     bookingsCancelled: result.bookingsCancelled,
     ticketsVoided: result.ticketsOut,
-    refundedAt: now.toISOString(),
+    refundedAt: ctx.now.toISOString(),
     refunds: result.refunds,
   });
 }

@@ -9,6 +9,7 @@ import {
   handleChargeDisputeUpdated,
 } from "@/lib/webhooks/charge-dispute-later";
 import type { EventResult } from "./inbox";
+import { stripeContext } from "@/lib/request-context";
 
 /**
  * Routes a saved event to its handler.
@@ -23,21 +24,23 @@ export async function dispatchStripeEvent(event: Stripe.Event): Promise<EventRes
   if (event.account) {
     return { outcome: "ignored", note: `from connected account ${event.account}` };
   }
+  // The event is the actor of whatever money it moves (row 12).
+  const ctx = stripeContext(event.id);
   switch (event.type) {
     case "payment_intent.succeeded":
-      return handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
+      return handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent, ctx);
     case "payment_intent.canceled":
       return handlePaymentIntentCanceled(event.data.object as Stripe.PaymentIntent);
     case "charge.refunded":
-      return handleChargeRefunded(event.data.object as Stripe.Charge);
+      return handleChargeRefunded(event.data.object as Stripe.Charge, ctx);
     case "charge.dispute.created":
-      return handleChargeDisputeCreated(event.data.object as Stripe.Dispute);
+      return handleChargeDisputeCreated(event.data.object as Stripe.Dispute, ctx);
     case "charge.dispute.funds_withdrawn":
-      return handleChargeDisputeFundsWithdrawn(event.data.object as Stripe.Dispute);
+      return handleChargeDisputeFundsWithdrawn(event.data.object as Stripe.Dispute, ctx);
     case "charge.dispute.updated":
       return handleChargeDisputeUpdated(event.data.object as Stripe.Dispute);
     case "charge.dispute.closed":
-      return handleChargeDisputeClosed(event.data.object as Stripe.Dispute);
+      return handleChargeDisputeClosed(event.data.object as Stripe.Dispute, ctx);
     case "charge.dispute.funds_reinstated":
       // A won dispute: charge.dispute.closed returns the money to the operator.
       return { outcome: "ignored", note: "handled by charge.dispute.closed" };

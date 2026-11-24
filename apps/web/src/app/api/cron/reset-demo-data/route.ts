@@ -4,6 +4,8 @@ import { env } from "@/lib/env";
 import { getOperatorId } from "@/lib/operator";
 import { verifyCronAuth } from "@/lib/cron-auth";
 import { resetBookingActivity } from "@/lib/demo-reset";
+import { recordAudit } from "@/lib/audit";
+import { systemContext } from "@/lib/request-context";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +34,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No operator configured" }, { status: 500 });
   }
 
-  const result = await db.transaction((tx) => resetBookingActivity(tx, operatorId));
+  const result = await db.transaction(async (tx) => {
+    const counts = await resetBookingActivity(tx, operatorId);
+    await recordAudit(tx, systemContext("reset-demo-data"), {
+      operatorId,
+      action: "demo.reset_bookings",
+      targetTable: "operators",
+      targetId: operatorId,
+      after: counts,
+    });
+    return counts;
+  });
 
   console.log(`Demo data reset — restored seat inventory on ${result.tripsReset} trips`);
   return NextResponse.json({ ok: true, tripsReset: result.tripsReset });

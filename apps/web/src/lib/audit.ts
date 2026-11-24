@@ -85,3 +85,19 @@ export function actorMetadata(ctx: RequestContext): { actor_kind: string; actor_
   const actor = actorOf(ctx.principal);
   return { actor_kind: actor.kind, actor_id: actor.id };
 }
+
+/**
+ * Records an update from the row before it and the fields it set, if any of
+ * them changed. Returns whether it wrote a row.
+ */
+export async function recordChange(
+  tx: Executor,
+  ctx: RequestContext,
+  entry: Omit<AuditEntry, "before" | "after"> & { before: Fields; set: Fields },
+): Promise<boolean> {
+  const { before, set, ...rest } = entry;
+  const diff = changedFields(before, set);
+  if (Object.keys(diff.after).length === 0) return false;
+  await recordAudit(tx, ctx, { ...rest, ...diff });
+  return true;
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator, testDb, adminAuth } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb, adminAuth, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { operators } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -125,6 +125,17 @@ describe("PATCH /api/admin/settings/operator", () => {
     const [row] = await testDb.select().from(operators).where(eq(operators.id, ctx.operatorId));
     expect(row.name).toBe("Updated Operator Name");
     expect(row.dockAddress).toBe("1 Harbor Way");
+
+    // Only what changed, with who changed it (row 12).
+    const audit = (await auditRowsFor("operators", ctx.operatorId)).filter((r) => r.action === "operator.update").at(-1)!;
+    expect(audit).toMatchObject({ actorKind: "staff", actorId: ctx.staffId });
+    expect(audit.after).toEqual({
+      name: "Updated Operator Name",
+      phone: "555-0100",
+      dockAddress: "1 Harbor Way",
+      arriveMinutesBefore: 30,
+    });
+    expect(Object.keys(audit.before as object).sort()).toEqual(["arriveMinutesBefore", "dockAddress", "name", "phone"]);
   });
 
   it("returns 200 and clears arriveMinutesBefore when set to null", async () => {

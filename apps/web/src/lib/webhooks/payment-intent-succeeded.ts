@@ -11,6 +11,7 @@ import { queueRefund, sendCommand } from "@/lib/payments/commands";
 import { bookings, bookingItems, tickets, trips, payments, operators } from "@openboat/db";
 import { and, eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
+import type { RequestContext } from "@/lib/request-context";
 import { collectDebts } from "@/lib/payments/operator-debts";
 import type { EventResult } from "@/lib/stripe-events/inbox";
 import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
@@ -41,7 +42,10 @@ export function paymentIntentMismatch(
   return null;
 }
 
-export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent): Promise<EventResult> {
+export async function handlePaymentIntentSucceeded(
+  pi: Stripe.PaymentIntent,
+  ctx: RequestContext,
+): Promise<EventResult> {
   // The booking is found by the PI id it stored when the PI was created, never
   // by metadata, which whoever owns the PI can write (P3-2).
   const found = await bookingForPaymentIntent(pi.id);
@@ -164,6 +168,7 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent): Pr
     // is recorded once per payment (dedupe key), so a retried event doesn't
     // queue a second one, and a failed send is retried by the cron.
     const commandId = await queueRefund(db, {
+      ctx,
       operatorId,
       bookingId,
       paymentIntentId: pi.id,

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator, seedBooking, testDb, adminAuth } from "../db-helpers";
+import { seedOperator, cleanupOperator, seedBooking, testDb, adminAuth, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { trips, tickets, bookingItems, capacityChanges } from "@openboat/db";
 import { eq, and, inArray, sql, desc } from "drizzle-orm";
@@ -291,6 +291,14 @@ describe("PATCH /api/admin/trips/[tripId] — capacity", () => {
     expect(change.delta).toBe(newCapacity - taken - before.seatsRemaining);
     expect(change.seatsRemainingAfter).toBe(newCapacity - taken);
     expect(change.staffId).toBe(ctx.staffId);
+
+    const audit = (await auditRowsFor("trips", ctx.tripId)).filter((r) => r.action === "trip.set_capacity").at(-1);
+    expect(audit).toMatchObject({
+      actorKind: "staff",
+      actorId: ctx.staffId,
+      before: { capacity: before.capacity, seatsRemaining: before.seatsRemaining },
+      after: { capacity: newCapacity, seatsRemaining: newCapacity - taken },
+    });
   });
 });
 
@@ -315,6 +323,24 @@ describe("PATCH /api/admin/trips/[tripId] — online sales cutoff override (P2-1
     expect((await patch({ onlineCutoffMinutes: -5 })).status).toBe(400);
     expect((await patch({ onlineCutoffMinutes: 2.5 })).status).toBe(400);
     expect((await patch({ onlineCutoffMinutes: "" })).status).toBe(400);
+  });
+
+  it("records who changed the override, and only when it changed", async () => {
+    const updates = async () =>
+      (await auditRowsFor("trips", ctx.tripId)).filter((r) => r.action === "trip.update");
+    await patch({ onlineCutoffMinutes: 45 });
+    const n = (await updates()).length;
+    await patch({ onlineCutoffMinutes: 90 });
+    const rows = await updates();
+    expect(rows).toHaveLength(n + 1);
+    expect(rows.at(-1)).toMatchObject({
+      actorId: ctx.staffId,
+      before: { onlineCutoffMinutes: 45 },
+      after: { onlineCutoffMinutes: 90 },
+    });
+    await patch({ onlineCutoffMinutes: 90 });
+    expect(await updates()).toHaveLength(n + 1);
+    await patch({ onlineCutoffMinutes: null });
   });
 
   it("sets the override alone without touching capacity", async () => {

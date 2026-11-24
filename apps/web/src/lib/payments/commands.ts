@@ -4,6 +4,8 @@ import type Stripe from "stripe";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { stripeCommands } from "@openboat/db";
+import { actorMetadata, recordAudit } from "@/lib/audit";
+import type { RequestContext } from "@/lib/request-context";
 
 // The Stripe command outbox (row 10, AR-6). A refund is written here in the
 // same transaction as the ticket and seat changes it pays for, and sent after
@@ -29,6 +31,8 @@ type CommandKind = (typeof stripeCommands.$inferSelect)["kind"];
 export const COMMAND_LEASE_MS = 5 * 60 * 1000;
 
 export type RefundCommandInput = {
+  /** Who asks for it: written to audit_log and to the Stripe metadata (row 12). */
+  ctx: RequestContext;
   operatorId: string;
   bookingId: string | null;
   paymentIntentId: string;
@@ -44,6 +48,8 @@ export type RefundCommandInput = {
 };
 
 export type FeeRefundCommandInput = {
+  /** Who asks for it: written to audit_log and to the Stripe metadata (row 12). */
+  ctx: RequestContext;
   operatorId: string;
   bookingId: string | null;
   applicationFeeId: string;
@@ -54,6 +60,8 @@ export type FeeRefundCommandInput = {
 };
 
 export type TransferReversalCommandInput = {
+  /** Who asks for it: written to audit_log and to the Stripe metadata (row 12). */
+  ctx: RequestContext;
   operatorId: string;
   bookingId: string | null;
   /** The operator's transfer for the charge (tr_…). */
@@ -65,6 +73,8 @@ export type TransferReversalCommandInput = {
 };
 
 export type TransferCommandInput = {
+  /** Who asks for it: written to audit_log and to the Stripe metadata (row 12). */
+  ctx: RequestContext;
   operatorId: string;
   bookingId: string | null;
   /** The operator's connected account (acct_…). */
@@ -91,12 +101,13 @@ export async function queueRefund(tx: Executor, input: RefundCommandInput): Prom
     refund_application_fee: input.refundApplicationFee,
     metadata: {
       ...input.metadata,
+      ...actorMetadata(input.ctx),
       reason: input.reason,
       ...(input.bookingId && { bookingId: input.bookingId }),
       command_id: id,
     },
   };
-  return insertCommand(tx, {
+  return insertCommand(tx, input.ctx, {
     id,
     operatorId: input.operatorId,
     kind: "refund",
@@ -116,12 +127,13 @@ export async function queueFeeRefund(tx: Executor, input: FeeRefundCommandInput)
     ...(input.amountCents !== null && { amount: input.amountCents }),
     metadata: {
       ...input.metadata,
+      ...actorMetadata(input.ctx),
       reason: input.reason,
       ...(input.bookingId && { bookingId: input.bookingId }),
       command_id: id,
     },
   };
-  return insertCommand(tx, {
+  return insertCommand(tx, input.ctx, {
     id,
     operatorId: input.operatorId,
     kind: "fee_refund",
@@ -141,12 +153,13 @@ export async function queueTransferReversal(tx: Executor, input: TransferReversa
     amount: input.amountCents,
     metadata: {
       ...input.metadata,
+      ...actorMetadata(input.ctx),
       reason: input.reason,
       ...(input.bookingId && { bookingId: input.bookingId }),
       command_id: id,
     },
   };
-  return insertCommand(tx, {
+  return insertCommand(tx, input.ctx, {
     id,
     operatorId: input.operatorId,
     kind: "transfer_reversal",
@@ -169,12 +182,13 @@ export async function queueTransfer(tx: Executor, input: TransferCommandInput): 
     source_transaction: input.sourceChargeId,
     metadata: {
       ...input.metadata,
+      ...actorMetadata(input.ctx),
       reason: input.reason,
       ...(input.bookingId && { bookingId: input.bookingId }),
       command_id: id,
     },
   };
-  return insertCommand(tx, {
+  return insertCommand(tx, input.ctx, {
     id,
     operatorId: input.operatorId,
     kind: "transfer",
@@ -189,23 +203,48 @@ export async function queueTransfer(tx: Executor, input: TransferCommandInput): 
 
 async function insertCommand(
   tx: Executor,
+  ctx: RequestContext,
   row: typeof stripeCommands.$inferInsert & { id: string; dedupeKey: string | null },
 ): Promise<string> {
+  // The command and its audit row commit together; a caller outside a
+  // transaction (a webhook handler) gets one here.
+  if (tx === db) return db.transaction((t) => insertCommand(t, ctx, row));
+
+  let id = row.id;
   if (!row.dedupeKey) {
     await tx.insert(stripeCommands).values(row);
-    return row.id;
+  } else {
+    const [inserted] = await tx
+      .insert(stripeCommands)
+      .values(row)
+      .onConflictDoNothing({ target: stripeCommands.dedupeKey })
+      .returning({ id: stripeCommands.id });
+    if (!inserted) {
+      // Queued before, and recorded then.
+      const [existing] = await tx
+        .select({ id: stripeCommands.id })
+        .from(stripeCommands)
+        .where(eq(stripeCommands.dedupeKey, row.dedupeKey));
+      return existing.id;
+    }
+    id = inserted.id;
   }
-  const [inserted] = await tx
-    .insert(stripeCommands)
-    .values(row)
-    .onConflictDoNothing({ target: stripeCommands.dedupeKey })
-    .returning({ id: stripeCommands.id });
-  if (inserted) return inserted.id;
-  const [existing] = await tx
-    .select({ id: stripeCommands.id })
-    .from(stripeCommands)
-    .where(eq(stripeCommands.dedupeKey, row.dedupeKey));
-  return existing.id;
+  // Every money movement has one audit row naming who asked for it; its
+  // target is the command, whose id is the Stripe object's metadata.command_id.
+  await recordAudit(tx, ctx, {
+    operatorId: row.operatorId,
+    action: `${row.kind}.queue`,
+    targetTable: "stripe_commands",
+    targetId: id,
+    after: {
+      kind: row.kind,
+      reason: row.reason,
+      target: row.targetId,
+      amountCents: row.amountCents ?? null,
+      bookingId: row.bookingId ?? null,
+    },
+  });
+  return id;
 }
 
 export type SendResult = "sent" | "confirmed" | "pending" | "failed" | "skipped";

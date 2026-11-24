@@ -34,14 +34,18 @@ import {
   domains,
   capacityChanges,
 } from "@openboat/db";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
+import { stripeContext } from "@/lib/request-context";
 
 // Separate connection pool for helpers so we don't share state with the app module
 const testDb = createDb(process.env.DATABASE_URL!);
 
 export { testDb };
+
+/** The context a Stripe event handler runs with: the event is the actor. */
+export const stripeTestCtx = stripeContext("evt_test");
 
 /**
  * What a mocked requireAdmin resolves to: the seeded admin's session and a
@@ -308,6 +312,15 @@ export async function cleanupBookings(tripId: string, originalCapacity = 20) {
     .update(trips)
     .set({ seatsRemaining: originalCapacity })
     .where(eq(trips.id, tripId));
+}
+
+/** audit_log rows for one target, oldest first. */
+export async function auditRowsFor(targetTable: string, targetId: string) {
+  return testDb
+    .select()
+    .from(auditLog)
+    .where(and(eq(auditLog.targetTable, targetTable), eq(auditLog.targetId, targetId)))
+    .orderBy(auditLog.createdAt);
 }
 
 /** Delete the entire operator subtree — call in afterAll. */

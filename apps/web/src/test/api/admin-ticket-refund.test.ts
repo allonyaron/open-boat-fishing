@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator, testDb, adminAuth } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb, adminAuth, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { bookings, bookingItems, tickets, payments, trips, stripeCommands } from "@openboat/db";
 import { eq, and, desc } from "drizzle-orm";
@@ -157,6 +157,24 @@ describe("POST /api/admin/tickets/[ticketId]/refund", () => {
       }),
       { idempotencyKey: command.id },
     );
+    // Who did it, in the database and on Stripe (row 12).
+    expect(vi.mocked(stripe.refunds.create).mock.calls.at(-1)![0]!.metadata).toMatchObject({
+      actor_kind: "staff",
+      actor_id: ctx.staffId,
+    });
+    const [audit] = await auditRowsFor("tickets", ticketId);
+    expect(audit).toMatchObject({
+      operatorId: ctx.operatorId,
+      actorKind: "staff",
+      actorId: ctx.staffId,
+      action: "ticket.refund",
+      requestId: "test-request",
+      before: { status: "live" },
+    });
+    expect(audit.after).toMatchObject({ status: "refunded", refundCents: 10000 });
+    const [queued] = await auditRowsFor("stripe_commands", command.id);
+    expect(queued).toMatchObject({ action: "refund.queue", actorKind: "staff", actorId: ctx.staffId });
+    expect(queued.after).toMatchObject({ amountCents: 10000, reason: "admin_ticket_refund" });
 
     const [updatedTicket] = await testDb
       .select({ voided: tickets.voided })

@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
-import { seedOperator, cleanupOperator, seedBooking, cleanupBookings, testDb, adminAuth } from "../db-helpers";
+import { seedOperator, cleanupOperator, seedBooking, cleanupBookings, testDb, adminAuth, stripeTestCtx } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { bookings, capacityChanges, operators, payments, tickets, trips } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
@@ -171,10 +171,10 @@ describe("payment_intent.succeeded", () => {
     });
     const event = pi({ id: piId, metadata: { bookingId } });
 
-    await handlePaymentIntentSucceeded(event);
+    await handlePaymentIntentSucceeded(event, stripeTestCtx);
     expect(await ticket(ticketId)).toEqual({ status: "live", voided: false, feeStatus: "held" });
 
-    await handlePaymentIntentSucceeded(event);
+    await handlePaymentIntentSucceeded(event, stripeTestCtx);
     expect((await ticket(ticketId)).status).toBe("live");
   });
 
@@ -186,7 +186,7 @@ describe("payment_intent.succeeded", () => {
       stripePaymentIntentId: piId,
     });
 
-    await handlePaymentIntentSucceeded(pi({ id: piId, metadata: { bookingId } }));
+    await handlePaymentIntentSucceeded(pi({ id: piId, metadata: { bookingId } }), stripeTestCtx);
 
     expect(await ticket(ticketId)).toEqual({ status: "voided", voided: true, feeStatus: "reversed" });
   });
@@ -328,7 +328,7 @@ describe("seats come back once per ticket", () => {
     await refundTicket(ticketId);
     expect(await seatsRemaining()).toBe(19);
 
-    await handleChargeRefunded({ id: "ch_test", amount: 20000, amount_refunded: 20000, payment_intent: piId } as any);
+    await handleChargeRefunded({ id: "ch_test", amount: 20000, amount_refunded: 20000, payment_intent: piId } as any, stripeTestCtx);
 
     expect(await ticket(second)).toMatchObject({ status: "refunded", voided: true });
     expect(await seatsRemaining()).toBe(20);
