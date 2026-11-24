@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb, adminAuth } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { products, productPrices } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
@@ -25,9 +25,7 @@ afterAll(async () => {
 });
 
 function adminSession() {
-  return {
-    session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-  };
+  return adminAuth(ctx);
 }
 
 function unauthorized() {

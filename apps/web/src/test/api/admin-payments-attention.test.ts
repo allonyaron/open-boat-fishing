@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
-import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, seedBooking, testDb, adminAuth } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { stripeCommands, stripeEvents } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -31,9 +31,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  vi.mocked(requireAdmin).mockResolvedValue({
-    session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-  } as never);
+  vi.mocked(requireAdmin).mockResolvedValue(adminAuth(ctx) as never);
   vi.mocked(stripe.refunds.create).mockReset();
   vi.mocked(stripe.refunds.list).mockReset();
   vi.mocked(stripe.refunds.list).mockResolvedValue({ data: [] } as never);

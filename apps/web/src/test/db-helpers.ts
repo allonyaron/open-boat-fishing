@@ -11,6 +11,7 @@ import {
   stripeCommands,
   disputes,
   operatorDebts,
+  auditLog,
 } from "@openboat/db";
 import {
   operators,
@@ -41,6 +42,33 @@ import bcrypt from "bcryptjs";
 const testDb = createDb(process.env.DATABASE_URL!);
 
 export { testDb };
+
+/**
+ * What a mocked requireAdmin resolves to: the seeded admin's session and a
+ * request context naming them as the actor.
+ */
+export function adminAuth(seed: { staffId: string; operatorId: string }) {
+  return {
+    session: {
+      staffId: seed.staffId,
+      operatorId: seed.operatorId,
+      role: "admin" as const,
+      name: "Admin",
+      sessionVersion: 0,
+      save: async () => {},
+    },
+    ctx: {
+      principal: {
+        kind: "staff" as const,
+        staffId: seed.staffId,
+        operatorId: seed.operatorId,
+        role: "admin" as const,
+      },
+      requestId: "test-request",
+      now: new Date(),
+    },
+  };
+}
 
 export type SeedResult = {
   operatorId: string;
@@ -312,5 +340,6 @@ export async function cleanupOperator(operatorId: string) {
   await testDb.delete(customers).where(eq(customers.operatorId, operatorId));
   await testDb.delete(stripeEvents).where(eq(stripeEvents.operatorId, operatorId));
   await testDb.delete(stripeCommands).where(eq(stripeCommands.operatorId, operatorId));
+  await testDb.delete(auditLog).where(eq(auditLog.operatorId, operatorId));
   await testDb.delete(operators).where(eq(operators.id, operatorId));
 }

@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
-import { seedOperator, cleanupOperator, seedBooking, cleanupBookings, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, seedBooking, cleanupBookings, testDb, adminAuth } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { bookings, capacityChanges, operators, payments, tickets, trips } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
@@ -49,9 +49,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  vi.mocked(requireAdmin).mockResolvedValue({
-    session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-  } as any);
+  vi.mocked(requireAdmin).mockResolvedValue(adminAuth(ctx) as any);
 });
 
 afterEach(async () => {

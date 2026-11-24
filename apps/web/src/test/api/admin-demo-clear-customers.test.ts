@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator } from "../db-helpers";
+import { seedOperator, cleanupOperator, adminAuth } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 
 // DEMO_MODE is not set in vitest.config.ts's test env block, so env.DEMO_MODE
@@ -22,9 +22,7 @@ afterAll(async () => {
 });
 
 function adminSession() {
-  return {
-    session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-  };
+  return adminAuth(ctx);
 }
 
 function unauthorized() {

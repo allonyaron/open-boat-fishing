@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator } from "../db-helpers";
+import { seedOperator, cleanupOperator, adminAuth } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 
 vi.mock("@vercel/blob/client", () => ({
@@ -61,9 +61,7 @@ describe("POST /api/reports/upload", () => {
   });
 
   it("delegates to handleUpload when mate auth fails but admin auth succeeds", async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({
-      session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-    } as any);
+    vi.mocked(requireAdmin).mockResolvedValue(adminAuth(ctx) as any);
     vi.mocked(handleUpload).mockResolvedValue({ type: "blob.generate-client-token" } as any);
 
     const { POST } = await import("@/app/api/reports/upload/route");

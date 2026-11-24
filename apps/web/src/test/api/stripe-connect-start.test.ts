@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator } from "../db-helpers";
+import { seedOperator, cleanupOperator, adminAuth } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 
 // STRIPE_CLIENT_ID is not set in vitest.config.mts's test env block, so this
@@ -22,9 +22,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  vi.mocked(requireAdmin).mockResolvedValue({
-    session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-  } as any);
+  vi.mocked(requireAdmin).mockResolvedValue(adminAuth(ctx) as any);
 });
 
 function req() {

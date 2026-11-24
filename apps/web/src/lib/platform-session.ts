@@ -8,7 +8,8 @@ const { getSession: getPlatformSession, requireSession: requirePlatform } =
   makeSession<PlatformSessionData>({
     cookieName: "openboat_platform",
     maxAge: 60 * 60 * 4, // 4 hours
-    isAuthorized: (s) => !!s.authenticated,
+    // Replaced by named platform accounts later in row 12.
+    authorize: async (s) => (s.authenticated ? { kind: "platform", platformUserId: "platform-secret" } : null),
   });
 
 export { getPlatformSession, requirePlatform };

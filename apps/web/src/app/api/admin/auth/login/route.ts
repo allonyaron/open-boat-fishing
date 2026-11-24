@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
   session.operatorId = member.operatorId;
   session.role = member.role;
   session.name = member.name;
+  session.sessionVersion = member.sessionVersion;
   await session.save();
 
   return NextResponse.json({ name: member.name, role: member.role });

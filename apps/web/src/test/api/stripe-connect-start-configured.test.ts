@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { seedOperator, cleanupOperator } from "../db-helpers";
+import { seedOperator, cleanupOperator, adminAuth } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 
 vi.mock("@/lib/env", () => ({
@@ -19,9 +19,7 @@ let ctx: SeedResult;
 
 beforeAll(async () => {
   ctx = await seedOperator();
-  vi.mocked(requireAdmin).mockResolvedValue({
-    session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-  } as any);
+  vi.mocked(requireAdmin).mockResolvedValue(adminAuth(ctx) as any);
 });
 
 afterAll(async () => {
