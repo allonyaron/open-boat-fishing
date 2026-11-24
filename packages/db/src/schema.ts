@@ -270,6 +270,10 @@ export const staff = pgTable("staff", {
   role: staffRoleEnum("role").notNull(),
   vesselId: uuid("vessel_id").references(() => vessels.id), // mates assigned to a boat
   active: boolean("active").notNull().default(true),
+  // Sealed into the admin session at sign-in and compared on every request
+  // (row 12, P5-1). Deactivating the account or setting a new password or
+  // PIN adds one, which ends every session issued before.
+  sessionVersion: integer("session_version").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [
@@ -764,4 +768,53 @@ export const operatorDebts = pgTable("operator_debts", {
 }, (t) => [
   index("operator_debts_operator_status_idx").on(t.operatorId, t.status, t.createdAt),
   index("operator_debts_booking_idx").on(t.bookingId),
+]);
+
+// ─── Platform users ──────────────────────────────────────────────────────────
+// Named accounts for the platform console (/platform), which creates
+// operators (row 12, AR-9). Signed in with email and password, as admins are.
+// PLATFORM_SECRET only creates the first account; after that it is the key
+// every platform session is bound to, so changing it signs everyone out.
+
+export const platformUsers = pgTable("platform_users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  active: boolean("active").notNull().default(true),
+  sessionVersion: integer("session_version").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Audit log ───────────────────────────────────────────────────────────────
+// Who changed money, seats or settings (row 12, AR-9). Each command writes its
+// row in the transaction that makes the change. target_id is text with no
+// foreign key, so the row outlives what it describes.
+
+export const auditActorKindEnum = pgEnum("audit_actor_kind", [
+  "staff",    // an operator's admin (web) or mate (app); actor_id is staff.id
+  "platform", // a platform console user; actor_id is platform_users.id
+  "customer", // a customer signed in by email code; actor_id is customers.id
+  "system",   // a scheduled job; actor_id names it
+  "stripe",   // a Stripe event; actor_id is its evt_… id
+]);
+
+export const auditLog = pgTable("audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  operatorId: uuid("operator_id").references(() => operators.id),
+  actorKind: auditActorKindEnum("actor_kind").notNull(),
+  actorId: text("actor_id"),
+  action: text("action").notNull(),
+  targetTable: text("target_table").notNull(),
+  targetId: text("target_id"),
+  before: jsonb("before"),
+  after: jsonb("after"),
+  reason: text("reason"),
+  requestId: text("request_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("audit_log_operator_created_idx").on(t.operatorId, t.createdAt),
+  index("audit_log_target_idx").on(t.targetTable, t.targetId),
+  index("audit_log_actor_idx").on(t.actorKind, t.actorId, t.createdAt),
 ]);
