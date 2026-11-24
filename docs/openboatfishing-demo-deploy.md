@@ -41,11 +41,16 @@ The demo runs in Stripe test mode so anyone can book with card `4242 4242 4242 4
 - Create a webhook endpoint (address won't exist until Step 4; that's fine, use placeholder):
   - Dashboard → Developers → Webhooks → **Add endpoint**
   - URL: `https://openboatfishing.com/api/webhooks/stripe`
-  - Events to send:
+  - Events to send (every event `lib/stripe-events/dispatch.ts` handles; without the dispute events after `created`, a
+    won chargeback never gives the boat its money back):
     - `payment_intent.succeeded`
     - `payment_intent.canceled`
     - `charge.refunded`
     - `charge.dispute.created`
+    - `charge.dispute.funds_withdrawn`
+    - `charge.dispute.updated`
+    - `charge.dispute.closed`
+    - `charge.dispute.funds_reinstated`
   - Copy the signing secret (`whsec_...`) → this becomes `STRIPE_WEBHOOK_SECRET`
 
 ---
