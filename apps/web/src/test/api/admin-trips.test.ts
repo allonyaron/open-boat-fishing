@@ -153,6 +153,9 @@ describe("POST /api/admin/trips — Add a departure", () => {
     expect(body.capacity).toBe(30);
     expect(body.seatsRemaining).toBe(30);
     expect(body.departureDate).toBe("2098-06-15");
+
+    const [audit] = await auditRowsFor("trips", body.id);
+    expect(audit).toMatchObject({ action: "trip.create", actorId: ctx.staffId, after: { capacity: 30, departureDate: "2098-06-15" } });
   });
 
   it("computes an overnight endTime when returnTime is earlier than departureTime", async () => {

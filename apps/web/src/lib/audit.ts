@@ -76,7 +76,6 @@ export async function recordAudit(tx: Executor, ctx: RequestContext, entry: Audi
     after: entry.after ?? null,
     reason: entry.reason ? entry.reason.slice(0, 500) : null,
     requestId: ctx.requestId,
-    createdAt: ctx.now,
   });
 }
 
