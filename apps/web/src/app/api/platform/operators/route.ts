@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { operators, domains, staff } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { requirePlatform } from "@/lib/platform-session";
+import { recordAudit } from "@/lib/audit";
 
 const hostnameRe = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requirePlatform(req);
   if (auth instanceof NextResponse) return auth;
+  const { ctx } = auth;
 
   const parsed = createOperatorSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
@@ -74,37 +76,60 @@ export async function POST(req: NextRequest) {
   const tempPassword = randomPassword();
   const passwordHash = await hash(tempPassword, 10);
 
-  const [operator] = await db
-    .insert(operators)
-    .values({
-      name: name.trim(),
-      slug,
-      emailFrom: emailFrom.trim(),
-      emailDomain: emailDomain.trim(),
-    })
-    .returning({ id: operators.id, slug: operators.slug });
+  const domainName = domain.toLowerCase().trim();
+  const email = adminEmail.toLowerCase().trim();
 
-  await db.insert(domains).values({
-    operatorId: operator.id,
-    domain: domain.toLowerCase().trim(),
-    primary: true,
-  });
+  // The operator, its domain and its first admin, with who created them.
+  const operator = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(operators)
+      .values({
+        name: name.trim(),
+        slug,
+        emailFrom: emailFrom.trim(),
+        emailDomain: emailDomain.trim(),
+      })
+      .returning({ id: operators.id, slug: operators.slug });
 
-  await db.insert(staff).values({
-    operatorId: operator.id,
-    name: adminName.trim(),
-    email: adminEmail.toLowerCase().trim(),
-    passwordHash,
-    role: "admin",
-    active: true,
+    await tx.insert(domains).values({
+      operatorId: row.id,
+      domain: domainName,
+      primary: true,
+    });
+
+    await tx.insert(staff).values({
+      operatorId: row.id,
+      name: adminName.trim(),
+      email,
+      passwordHash,
+      role: "admin",
+      active: true,
+    });
+
+    await recordAudit(tx, ctx, {
+      operatorId: row.id,
+      action: "operator.create",
+      targetTable: "operators",
+      targetId: row.id,
+      after: {
+        name: name.trim(),
+        slug: row.slug,
+        domain: domainName,
+        emailFrom: emailFrom.trim(),
+        emailDomain: emailDomain.trim(),
+        adminName: adminName.trim(),
+        adminEmail: email,
+      },
+    });
+    return row;
   });
 
   return NextResponse.json({
     operatorId: operator.id,
     slug: operator.slug,
-    domain: domain.toLowerCase().trim(),
-    adminEmail: adminEmail.toLowerCase().trim(),
+    domain: domainName,
+    adminEmail: email,
     tempPassword,
-    loginUrl: `https://${domain.toLowerCase().trim()}/admin`,
+    loginUrl: `https://${domainName}/admin`,
   });
 }

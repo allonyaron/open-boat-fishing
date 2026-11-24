@@ -6,7 +6,8 @@ import { rateLimits } from "@openboat/db";
 // PLATFORM_SECRET is not set in vitest.config.mts's test env block, so this
 // file exercises the "not configured" default path plus rate limiting and
 // logout, which don't depend on the secret being set.
-vi.mock("@/lib/platform-session", () => ({
+vi.mock("@/lib/platform-session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/platform-session")>()),
   getPlatformSession: vi.fn(),
 }));
 
@@ -29,17 +30,17 @@ describe("POST /api/platform/auth — PLATFORM_SECRET not configured", () => {
     await clearRateLimits();
   });
 
-  it("returns 500 regardless of the secret provided", async () => {
+  it("returns 500 whatever the credentials", async () => {
     const { POST } = await import("@/app/api/platform/auth/route");
-    const res = await POST(req({ secret: "anything" }, "10.2.0.2"));
+    const res = await POST(req({ email: "a@b.test", password: "anything" }, "10.2.0.2"));
     expect(res.status).toBe(500);
   });
 
   it("returns 429 on the 6th attempt from the same IP (5/15min)", async () => {
     const { POST } = await import("@/app/api/platform/auth/route");
     const ip = "10.2.0.3";
-    for (let i = 0; i < 5; i++) await POST(req({ secret: "wrong" }, ip));
-    const res = await POST(req({ secret: "wrong" }, ip));
+    for (let i = 0; i < 5; i++) await POST(req({ email: "a@b.test", password: "wrong" }, ip));
+    const res = await POST(req({ email: "a@b.test", password: "wrong" }, ip));
     expect(res.status).toBe(429);
   });
 });

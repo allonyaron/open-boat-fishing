@@ -44,7 +44,8 @@ export async function setup() {
       staff,
       customers,
       operators,
-      rate_limits
+      rate_limits,
+      platform_users
     RESTART IDENTITY CASCADE
   `);
   console.log("\n🧹 Test DB wiped — all tables truncated.\n");
