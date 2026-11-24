@@ -11,6 +11,7 @@ import { queueRefund, sendCommand } from "@/lib/payments/commands";
 import { bookings, bookingItems, tickets, trips, payments, operators } from "@openboat/db";
 import { and, eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
+import { collectDebts } from "@/lib/payments/operator-debts";
 import type { EventResult } from "@/lib/stripe-events/inbox";
 import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
 import { bookingLabel, usd } from "@/lib/stripe-events/notes";
@@ -126,6 +127,9 @@ export async function handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent): Pr
     // The tickets can board from now on. Only held ones move: a ticket already
     // voided (its trip was cancelled while the booking was pending) stays void.
     await moveTickets(tx, { operatorId: fresh.operatorId, bookingId }, "held", "live");
+
+    // A chargeback fee reserved to this booking rode on its platform fee (row 11).
+    await collectDebts(tx, { operatorId: fresh.operatorId, bookingId });
 
     // Record the payment
     await tx.insert(payments).values({

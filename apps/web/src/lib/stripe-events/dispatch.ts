@@ -3,6 +3,11 @@ import { handlePaymentIntentSucceeded } from "@/lib/webhooks/payment-intent-succ
 import { handlePaymentIntentCanceled } from "@/lib/webhooks/payment-intent-canceled";
 import { handleChargeRefunded } from "@/lib/webhooks/charge-refunded";
 import { handleChargeDisputeCreated } from "@/lib/webhooks/charge-dispute-created";
+import {
+  handleChargeDisputeClosed,
+  handleChargeDisputeFundsWithdrawn,
+  handleChargeDisputeUpdated,
+} from "@/lib/webhooks/charge-dispute-later";
 import type { EventResult } from "./inbox";
 
 /**
@@ -27,6 +32,15 @@ export async function dispatchStripeEvent(event: Stripe.Event): Promise<EventRes
       return handleChargeRefunded(event.data.object as Stripe.Charge);
     case "charge.dispute.created":
       return handleChargeDisputeCreated(event.data.object as Stripe.Dispute);
+    case "charge.dispute.funds_withdrawn":
+      return handleChargeDisputeFundsWithdrawn(event.data.object as Stripe.Dispute);
+    case "charge.dispute.updated":
+      return handleChargeDisputeUpdated(event.data.object as Stripe.Dispute);
+    case "charge.dispute.closed":
+      return handleChargeDisputeClosed(event.data.object as Stripe.Dispute);
+    case "charge.dispute.funds_reinstated":
+      // A won dispute: charge.dispute.closed returns the money to the operator.
+      return { outcome: "ignored", note: "handled by charge.dispute.closed" };
     default:
       return { outcome: "ignored", note: `no handler for ${event.type}` };
   }

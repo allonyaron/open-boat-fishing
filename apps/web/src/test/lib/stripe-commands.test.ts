@@ -12,6 +12,7 @@ vi.mock("@/lib/stripe", () => ({
   stripe: {
     refunds: { create: vi.fn(), list: vi.fn() },
     applicationFees: { createRefund: vi.fn(), listRefunds: vi.fn() },
+    transfers: { createReversal: vi.fn(), listReversals: vi.fn(), create: vi.fn(), list: vi.fn() },
   },
 }));
 
@@ -20,6 +21,8 @@ import {
   confirmRefundCommands,
   queueFeeRefund,
   queueRefund,
+  queueTransfer,
+  queueTransferReversal,
   sendCommand,
   sendPendingCommands,
 } from "@/lib/payments/commands";
@@ -188,5 +191,93 @@ describe("confirmRefundCommands", () => {
     ] as never);
     expect(confirmed).toEqual([id]);
     expect(await command(id)).toMatchObject({ status: "confirmed" });
+  });
+});
+
+// Row 11: transfer reversals and transfers go through the same outbox.
+describe("transfer commands", () => {
+  beforeEach(() => {
+    vi.mocked(stripe.transfers.createReversal).mockReset();
+    vi.mocked(stripe.transfers.listReversals).mockReset();
+    vi.mocked(stripe.transfers.create).mockReset();
+    vi.mocked(stripe.transfers.list).mockReset();
+  });
+
+  it("sends a transfer reversal with its id as the key and confirms it on acceptance", async () => {
+    const id = await queueTransferReversal(db, {
+      operatorId: ctx.operatorId,
+      bookingId: null,
+      transferId: "tr_cmd_1",
+      amountCents: 5000,
+      reason: "chargeback",
+    });
+    vi.mocked(stripe.transfers.createReversal).mockResolvedValueOnce({ id: "trr_cmd_1" } as any);
+    expect(await sendCommand(id)).toBe("confirmed");
+    expect(stripe.transfers.createReversal).toHaveBeenCalledWith(
+      "tr_cmd_1",
+      { amount: 5000, metadata: { reason: "chargeback", command_id: id } },
+      { idempotencyKey: id },
+    );
+    expect(stripe.refunds.create).not.toHaveBeenCalled();
+    expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
+    expect(await command(id)).toMatchObject({ status: "confirmed", stripeObjectId: "trr_cmd_1" });
+  });
+
+  it("finds a reversal an earlier attempt made instead of making a second one", async () => {
+    const id = await queueTransferReversal(db, {
+      operatorId: ctx.operatorId,
+      bookingId: null,
+      transferId: "tr_cmd_2",
+      amountCents: 5000,
+      reason: "chargeback",
+    });
+    vi.mocked(stripe.transfers.createReversal).mockRejectedValueOnce(
+      Object.assign(new Error("socket hang up"), { type: "StripeConnectionError" }),
+    );
+    expect(await sendCommand(id)).toBe("pending");
+    vi.mocked(stripe.transfers.listReversals).mockResolvedValueOnce({
+      data: [{ id: "trr_lost_answer", metadata: { command_id: id } }],
+    } as any);
+    expect(await sendCommand(id)).toBe("confirmed");
+    expect(stripe.transfers.createReversal).toHaveBeenCalledTimes(1);
+    expect((await command(id)).stripeObjectId).toBe("trr_lost_answer");
+  });
+
+  it("sends a transfer funded by the original charge", async () => {
+    const id = await queueTransfer(db, {
+      operatorId: ctx.operatorId,
+      bookingId: null,
+      destination: "acct_cmd",
+      sourceChargeId: "ch_cmd",
+      amountCents: 5000,
+      reason: "chargeback_won",
+    });
+    vi.mocked(stripe.transfers.create).mockResolvedValueOnce({ id: "tr_back" } as any);
+    expect(await sendCommand(id)).toBe("confirmed");
+    expect(stripe.transfers.create).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 5000, currency: "usd", destination: "acct_cmd", source_transaction: "ch_cmd" }),
+      { idempotencyKey: id },
+    );
+  });
+
+  it("finds a transfer an earlier attempt made", async () => {
+    const id = await queueTransfer(db, {
+      operatorId: ctx.operatorId,
+      bookingId: null,
+      destination: "acct_cmd",
+      sourceChargeId: "ch_cmd",
+      amountCents: 5000,
+      reason: "chargeback_won",
+    });
+    vi.mocked(stripe.transfers.create).mockRejectedValueOnce(
+      Object.assign(new Error("timeout"), { type: "StripeAPIError" }),
+    );
+    expect(await sendCommand(id)).toBe("pending");
+    vi.mocked(stripe.transfers.list).mockResolvedValueOnce({
+      data: [{ id: "tr_other", metadata: {} }, { id: "tr_found", metadata: { command_id: id } }],
+    } as any);
+    expect(await sendCommand(id)).toBe("confirmed");
+    expect(vi.mocked(stripe.transfers.list).mock.calls[0][0]).toMatchObject({ destination: "acct_cmd" });
+    expect((await command(id)).stripeObjectId).toBe("tr_found");
   });
 });

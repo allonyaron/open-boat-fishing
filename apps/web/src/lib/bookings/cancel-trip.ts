@@ -1,14 +1,15 @@
 import { and, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { sendPushToEmails } from "@/lib/push";
-import { bookingItems, bookings, products, tickets, trips, vessels } from "@openboat/db";
+import { bookingItems, bookings, payments, products, tickets, trips, vessels } from "@openboat/db";
 import { moveTickets } from "@/lib/tickets/lifecycle";
 import { holdsSeat } from "@/lib/tickets/queries";
 import { giveBackSeatsForTickets } from "@/lib/inventory/seats";
 import { transitionTrips } from "@/lib/trips/status";
 import { transitionBookings } from "./status";
+import { releaseDebts } from "@/lib/payments/operator-debts";
 import { cancelPaymentIntentForRelease } from "./release";
-import { queueRefund, sendCommands } from "@/lib/payments/commands";
+import { queueFeeRefund, queueRefund, sendCommands } from "@/lib/payments/commands";
 
 // Trip cancellation (row 9: P4-1, P4-8, P4-10). Two phases:
 //
@@ -63,6 +64,7 @@ type Settled =
       ticketsOut: number;
       cancelled: boolean;
       commandId: string | null;
+      feeCommandId: string | null;
     };
 
 async function settleBooking(
@@ -75,10 +77,12 @@ async function settleBooking(
       status: bookings.status,
       email: bookings.customerEmail,
       paymentIntentId: bookings.stripePaymentIntentId,
+      applicationFeeId: payments.applicationFeeId,
     })
     .from(bookings)
+    .leftJoin(payments, eq(payments.bookingId, bookings.id))
     .where(and(eq(bookings.id, bookingId), eq(bookings.operatorId, operatorId)))
-    .for("update");
+    .for("update", { of: bookings });
   if (!booking || booking.status === "cancelled") return { kind: "none" };
 
   if (booking.status === "pending") {
@@ -88,6 +92,7 @@ async function settleBooking(
     await giveBackSeatsForTickets(tx, operatorId, moved, "trip_cancel");
     const done = await transitionBookings(tx, { operatorId, bookingId }, "pending", "cancelled");
     if (done.length === 0) return { kind: "none" };
+    await releaseDebts(tx, { operatorId, bookingId });
     return {
       kind: "pending",
       bookingId,
@@ -119,7 +124,7 @@ async function settleBooking(
   // What the tickets just refunded paid, net of any discount. A ticket
   // refunded on its own earlier wasn't live, so it isn't refunded again.
   const paid = await tx
-    .select({ priceCents: tickets.priceCents })
+    .select({ priceCents: tickets.priceCents, feeCents: tickets.feeAmountCents })
     .from(tickets)
     .where(and(inArray(tickets.id, refunded.map((t) => t.id)), eq(tickets.operatorId, operatorId)));
   const left = await tx
@@ -131,6 +136,11 @@ async function settleBooking(
     paid.map((t) => t.priceCents),
     left.length,
   );
+  // With the fee's id, exactly these tickets' platform fees are refunded,
+  // as the office ticket refund does; in proportion, Stripe would also hand
+  // back a chargeback fee the payment carried for the operator (row 11).
+  const exactFee = !!booking.applicationFeeId;
+  const metadata = { tripId, ...(input.reason && { cancelReason: input.reason.slice(0, 200) }) };
   const commandId =
     plan && booking.paymentIntentId
       ? await queueRefund(tx, {
@@ -140,9 +150,22 @@ async function settleBooking(
           amountCents: plan.amountCents,
           reason: "trip_cancelled",
           reverseTransfer: true,
-          refundApplicationFee: true,
-          metadata: { tripId, ...(input.reason && { cancelReason: input.reason.slice(0, 200) }) },
+          refundApplicationFee: !exactFee,
+          metadata,
           dedupeKey: `trip-cancel:${tripId}:${bookingId}`,
+        })
+      : null;
+  const feeCents = paid.reduce((sum, t) => sum + t.feeCents, 0);
+  const feeCommandId =
+    commandId && exactFee && feeCents > 0
+      ? await queueFeeRefund(tx, {
+          operatorId,
+          bookingId,
+          applicationFeeId: booking.applicationFeeId!,
+          amountCents: feeCents,
+          reason: "trip_cancelled",
+          metadata,
+          dedupeKey: `trip-cancel-fee:${tripId}:${bookingId}`,
         })
       : null;
 
@@ -151,7 +174,15 @@ async function settleBooking(
       ? (await transitionBookings(tx, { operatorId, bookingId }, "confirmed", "cancelled")).length > 0
       : false;
 
-  return { kind: "paid", bookingId, email: booking.email, ticketsOut: refunded.length, cancelled, commandId };
+  return {
+    kind: "paid",
+    bookingId,
+    email: booking.email,
+    ticketsOut: refunded.length,
+    cancelled,
+    commandId,
+    feeCommandId,
+  };
 }
 
 export type TripCancelOutcome = {
@@ -211,6 +242,7 @@ export async function finishTripCancellation(
     if (s.email) (pi === "paid" ? paidEmails : unpaidEmails).push(s.email);
   }
   const sent = await sendCommands(paidOnes.flatMap((s) => (s.commandId ? [s.commandId] : [])));
+  await sendCommands(paidOnes.flatMap((s) => (s.feeCommandId ? [s.feeCommandId] : [])));
 
   await notifyTripCancelled(operatorId, tripId, { paid: paidEmails, unpaid: unpaidEmails });
 

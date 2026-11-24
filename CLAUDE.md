@@ -123,13 +123,14 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 - Guard against duplicate delivery: check current booking/ticket status before applying any state transition. An already-cancelled booking must not be re-cancelled.
 - Never trust `metadata.bookingId` alone: a `payment_intent.*` event acts on a booking only if the PI id equals the booking's stored PI (and, for succeeded, amount, currency and destination match). Events carrying `event.account` are ignored.
 - Every Stripe event goes through the inbox (`lib/stripe-events/inbox.ts`): saved before it is acted on, processed once, and a handler returns an outcome (handled, ignored, needs_review) or throws to be retried. Handlers find bookings by `bookings.stripe_payment_intent_id`, never by metadata.
-- Every refund goes through the outbox (`lib/payments/commands.ts`): `queueRefund` / `queueFeeRefund` in the transaction that changes the tickets, `sendCommand` after commit. Nothing calls `stripe.refunds.create` or `stripe.applicationFees.createRefund` directly.
+- Every money movement goes through the outbox (`lib/payments/commands.ts`): `queueRefund` / `queueFeeRefund` / `queueTransferReversal` / `queueTransfer` in the transaction that changes the tickets (or with a dedupe key), `sendCommand` after commit. Nothing calls `stripe.refunds.create`, `stripe.applicationFees.createRefund`, `stripe.transfers.createReversal` or `stripe.transfers.create` directly.
+- Chargebacks (`lib/disputes/chargebacks.ts`): Stripe takes a destination charge's dispute from the platform, so the app takes the amount back from the operator's transfer when a chargeback opens (`created`, or `funds_withdrawn` after an inquiry), transfers it back if won, and refunds the tickets and their platform fee if lost. A refund made outside the app without a `transfer_reversal` is taken back the same way (`charge.refunded`). Stripe's dispute fees become an `operator_debts` row, collected on the platform fee of the operator's next booking. Once a dispute has closed, a late event changes nothing.
 
 **Cron security**
 - Every `/api/cron/*` route must verify `Authorization: Bearer ${CRON_SECRET}` before any business logic. Return 401 immediately if missing or wrong.
 
 **Ticket lifecycle**
-- `tickets.status` is `held → live → refunded | disputed`, or `held → voided` when never paid. Only `moveTickets` in `lib/tickets/lifecycle.ts` changes it; it also writes `voided` and reverses the fee of a ticket leaving service.
+- `tickets.status` is `held → live → refunded | disputed`, `disputed → live` (chargeback won) `| refunded` (lost), or `held → voided` when never paid. Only `moveTickets` in `lib/tickets/lifecycle.ts` changes it; it also writes `voided` and reverses the fee of a ticket refunded or voided. A disputed ticket's fee stays held (Stripe doesn't refund it on a dispute).
 - Only `live` tickets board, count as sold or earn the fee. Readers use `isLive` / `liveTicketCount` (`lib/tickets/queries.ts`) or `isTicketLive` (`lib/tickets/status.ts`), never `voided` alone. Capacity floors count `holdsSeat` (live, held and disputed).
 - `voided` is kept in step with `status` (true unless held or live) until a later release drops it; `isLive` also requires it false for refunds made by code deployed before `status`.
 
@@ -140,7 +141,7 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 - `tickets.price_cents` is what the ticket paid (net of any group discount); `list_price_cents` is the fare. Refunds pay `price_cents`; display uses `list_price_cents ?? price_cents`.
 
 **Fee lifecycle**
-- Fees are inserted as `fee_status = 'held'`. Only the fee-earn cron (or lazy earn on revenue report render) may transition them to `'earned'`, and only on live tickets. Revenue queries must filter `WHERE fee_status = 'earned'` — never count `'held'` fees — and count reversals only on tickets that were paid (refunded, disputed).
+- Fees are inserted as `fee_status = 'held'`. Only the fee-earn cron (or lazy earn on revenue report render) may transition them to `'earned'`, and only on live tickets. Revenue queries must filter `WHERE fee_status = 'earned'` — never count `'held'` fees — and count reversals only on tickets that were paid (refunded, disputed). A ticket back from disputed after its trip sailed is earned by `earnFeesIfSailed`. A chargeback fee collected from the operator rides on `application_fee_amount` but is not a ticket fee and not revenue; refunds on that booking return only the tickets' own fees.
 
 **QR codes** *(pre-launch gap — tracking in Known Tech Debt)*
 - `tickets.qrPayload` must be an HMAC of `ticketId + per-operator secret`, not a bare UUID. Currently bare UUIDs. Must be fixed and the mate app updated to validate signatures before go-live.

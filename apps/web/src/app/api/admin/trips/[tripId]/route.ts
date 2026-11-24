@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
-import { trips, vessels, products, bookingItems, bookings, tickets, checkIns } from "@openboat/db";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { trips, vessels, products, bookingItems, bookings, tickets, checkIns, disputes } from "@openboat/db";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { chargebackState } from "@/lib/disputes/list";
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { isTicketLive, type TicketStatus } from "@/lib/tickets/status";
 import { InventoryError, setTripCapacity } from "@/lib/inventory/seats";
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest, { params }: { params: { tripId: stri
 
   const bookingIds = [...new Set(itemRows.map((i) => i.bookingId))];
 
-  const [bookingRows, ticketRows, checkInRows] = await Promise.all([
+  const [bookingRows, ticketRows, checkInRows, disputeRows] = await Promise.all([
     db
       .select()
       .from(bookings)
@@ -85,7 +86,18 @@ export async function GET(req: NextRequest, { params }: { params: { tripId: stri
       .select()
       .from(checkIns)
       .where(and(eq(checkIns.tripId, tripId), eq(checkIns.operatorId, session.operatorId))),
+    // Newest first, so the first one seen per booking is its latest.
+    db
+      .select({ bookingId: disputes.bookingId, status: disputes.status })
+      .from(disputes)
+      .where(and(inArray(disputes.bookingId, bookingIds), eq(disputes.operatorId, session.operatorId)))
+      .orderBy(desc(disputes.openedAt)),
   ]);
+
+  const chargebackOf = new Map<string, ReturnType<typeof chargebackState>>();
+  for (const d of disputeRows) {
+    if (d.bookingId && !chargebackOf.has(d.bookingId)) chargebackOf.set(d.bookingId, chargebackState(d.status));
+  }
 
   const checkInByTicket = new Map(checkInRows.map((c) => [c.ticketId, c]));
 
@@ -115,6 +127,7 @@ export async function GET(req: NextRequest, { params }: { params: { tripId: stri
         status: b.status,
         totalCents: b.totalCents,
         paidCents: paidForLiveTickets(bookingTickets),
+        chargeback: chargebackOf.get(b.id) ?? null,
         stripePaymentIntentId: b.stripePaymentIntentId,
         createdAt: b.createdAt,
         tickets: ticketList,

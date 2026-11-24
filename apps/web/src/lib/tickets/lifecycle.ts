@@ -13,16 +13,24 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * held -> live: payment_intent.succeeded.
  * held -> voided: never paid (hold expired or released, or the trip was cancelled first).
  * live -> refunded: money returned (office refund, trip cancel, Dashboard refund).
- * live -> disputed: chargeback opened. The seat stays taken.
- * disputed -> refunded: the booking is fully refunded while disputed.
+ * live -> disputed: chargeback opened. The seat stays taken and the fee stays
+ *   held: Stripe doesn't return the platform fee on a dispute.
+ * disputed -> live: the chargeback was won (or was only an inquiry).
+ * disputed -> refunded: the chargeback was lost, or the booking was fully
+ *   refunded while disputed.
  */
 const ALLOWED: Record<TicketStatus, readonly TicketStatus[]> = {
   held: ["live", "voided"],
   live: ["refunded", "disputed"],
   refunded: [],
   voided: [],
-  disputed: ["refunded"],
+  disputed: ["live", "refunded"],
 };
+
+/** Moves after which the ticket's platform fee has been (or never was) paid back. */
+function reversesFee(to: TicketStatus): boolean {
+  return to === "refunded" || to === "voided";
+}
 
 /** Which tickets to move. Always operator-scoped. */
 export type TicketScope = { operatorId: string } & (
@@ -41,8 +49,11 @@ function scopeFilter(scope: TicketScope): SQL {
 
 /**
  * Moves the scoped tickets that are in `from` to `to`, and returns the ones it
- * moved. `voided` and, for a ticket leaving service, `fee_status = 'reversed'`
- * are written in the same UPDATE. Run it in the caller's transaction, so seats
+ * moved. `voided`, and `fee_status = 'reversed'` for a ticket refunded or
+ * voided, are written in the same UPDATE. A disputed ticket's fee stays as it
+ * was; one coming back from disputed to live has its fee held again (it may
+ * have been marked reversed by code deployed before row 11), and the caller
+ * earns it if its trip has already sailed. Run it in the caller's transaction, so seats
  * and booking status change with it.
  *
  * Only tickets whose `voided` matches `from` move: a held or live ticket that
@@ -63,10 +74,10 @@ export async function moveTickets(
     return [];
   }
 
-  const leaving = isOffStatus(to);
+  const feeStatus = reversesFee(to) ? ("reversed" as const) : from === "disputed" ? ("held" as const) : undefined;
   return tx
     .update(tickets)
-    .set({ status: to, voided: leaving, ...(leaving && { feeStatus: "reversed" as const }) })
+    .set({ status: to, voided: isOffStatus(to), ...(feeStatus && { feeStatus }) })
     .where(
       and(
         eq(tickets.operatorId, scope.operatorId),

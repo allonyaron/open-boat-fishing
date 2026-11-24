@@ -9,6 +9,8 @@ import {
   createDb,
   stripeEvents,
   stripeCommands,
+  disputes,
+  operatorDebts,
 } from "@openboat/db";
 import {
   operators,
@@ -242,7 +244,7 @@ export async function seedBooking(
       status: ticketStatus,
       // Kept in step with status, as lib/tickets writes it.
       voided: !["held", "live"].includes(ticketStatus),
-      ...(["refunded", "voided", "disputed"].includes(ticketStatus) && { feeStatus: "reversed" as const }),
+      ...(["refunded", "voided"].includes(ticketStatus) && { feeStatus: "reversed" as const }),
       qrPayload: randomUUID(),
     })
     .returning({ id: tickets.id });
@@ -287,6 +289,8 @@ export async function cleanupOperator(operatorId: string) {
   await testDb.delete(checkIns).where(eq(checkIns.operatorId, operatorId));
   await testDb.delete(capacityChanges).where(eq(capacityChanges.operatorId, operatorId));
   await testDb.delete(tickets).where(eq(tickets.operatorId, operatorId));
+  await testDb.delete(operatorDebts).where(eq(operatorDebts.operatorId, operatorId));
+  await testDb.delete(disputes).where(eq(disputes.operatorId, operatorId));
   await testDb.delete(payments).where(eq(payments.operatorId, operatorId));
   await testDb.delete(bookingItems).where(eq(bookingItems.operatorId, operatorId));
   await testDb.delete(bookings).where(eq(bookings.operatorId, operatorId));

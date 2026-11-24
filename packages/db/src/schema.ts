@@ -668,8 +668,10 @@ export const stripeEvents = pgTable("stripe_events", {
 // again on Stripe. Unsent rows are retried by the expiry cron.
 
 export const stripeCommandKindEnum = pgEnum("stripe_command_kind", [
-  "refund",     // refund (part of) a PaymentIntent
-  "fee_refund", // refund (part of) the platform's application fee
+  "refund",            // refund (part of) a PaymentIntent
+  "fee_refund",        // refund (part of) the platform's application fee
+  "transfer_reversal", // take money back from the operator's transfer (chargeback, Dashboard refund)
+  "transfer",          // send money to the operator (a won chargeback returns what was taken back)
 ]);
 
 export const stripeCommandStatusEnum = pgEnum("stripe_command_status", [
@@ -684,13 +686,13 @@ export const stripeCommands = pgTable("stripe_commands", {
   operatorId: uuid("operator_id").notNull().references(() => operators.id),
   kind: stripeCommandKindEnum("kind").notNull(),
   bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
-  reason: text("reason").notNull(),                  // admin_ticket_refund, trip_cancelled, auto_refund, dashboard_refund_fee
-  targetId: text("target_id").notNull(),             // pi_… for a refund, fee_… for a fee refund
+  reason: text("reason").notNull(),                  // admin_ticket_refund, trip_cancelled, auto_refund, dashboard_refund_fee, chargeback, dashboard_refund, chargeback_won
+  targetId: text("target_id").notNull(),             // pi_… refund, fee_… fee refund, tr_… reversal, acct_… transfer
   amountCents: integer("amount_cents"),              // null = everything left
   params: jsonb("params").notNull(),                 // the exact request sent to Stripe
   dedupeKey: text("dedupe_key").unique(),            // set when the same command could be queued twice
   status: stripeCommandStatusEnum("status").notNull().default("pending"),
-  stripeObjectId: text("stripe_object_id"),          // re_… or fr_…
+  stripeObjectId: text("stripe_object_id"),          // re_…, fr_…, trr_… or tr_…
   attempts: integer("attempts").notNull().default(0),
   lastError: text("last_error"),
   claimedAt: timestamp("claimed_at", { withTimezone: true }),
@@ -703,4 +705,63 @@ export const stripeCommands = pgTable("stripe_commands", {
   index("stripe_commands_status_idx").on(t.status, t.createdAt),
   index("stripe_commands_operator_status_idx").on(t.operatorId, t.status),
   index("stripe_commands_booking_idx").on(t.bookingId),
+]);
+
+// ─── Disputes (chargebacks) ──────────────────────────────────────────────────
+// The read model of each chargeback on a booking (row 11), kept up to date by
+// the charge.dispute.* handlers. The Money page and the passenger list read
+// it. With destination charges, Stripe takes the disputed amount and its fee
+// from the platform; the app takes the amount back from the operator with a
+// transfer_reversal command and returns it if the dispute is won.
+
+export const disputes = pgTable("disputes", {
+  id: text("id").primaryKey(),                       // Stripe dispute id (du_…)
+  operatorId: uuid("operator_id").notNull().references(() => operators.id),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  paymentIntentId: text("payment_intent_id").notNull(),
+  chargeId: text("charge_id"),
+  amountCents: integer("amount_cents").notNull(),
+  reason: text("reason").notNull(),                  // Stripe's reason: fraudulent, product_not_received, …
+  status: text("status").notNull(),                  // Stripe's status: warning_*, needs_response, under_review, won, lost
+  respondBy: timestamp("respond_by", { withTimezone: true }),
+  stripeFeeCents: integer("stripe_fee_cents"),       // Stripe's dispute fees net of any returned, set when it closes
+  openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("disputes_operator_opened_idx").on(t.operatorId, t.openedAt),
+  index("disputes_booking_idx").on(t.bookingId),
+]);
+
+// ─── Operator debts ──────────────────────────────────────────────────────────
+// Money an operator owes the platform: the Stripe fee on a chargeback (row 11).
+// Standard connected accounts can't be debited, so a debt is collected by
+// adding it to the platform fee on the operator's next booking: reserved to
+// that booking at checkout, collected when its payment succeeds, and owed
+// again if the booking is cancelled unpaid.
+
+export const operatorDebtKindEnum = pgEnum("operator_debt_kind", [
+  "dispute_fee", // Stripe's fee on a chargeback
+]);
+
+export const operatorDebtStatusEnum = pgEnum("operator_debt_status", [
+  "owed",      // waiting for the operator's next booking
+  "reserved",  // added to the platform fee of booking_id, which isn't paid yet
+  "collected", // booking_id's payment carried it
+]);
+
+export const operatorDebts = pgTable("operator_debts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  operatorId: uuid("operator_id").notNull().references(() => operators.id),
+  kind: operatorDebtKindEnum("kind").notNull(),
+  disputeId: text("dispute_id").references(() => disputes.id).unique(),
+  amountCents: integer("amount_cents").notNull(),
+  status: operatorDebtStatusEnum("status").notNull().default("owed"),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  collectedAt: timestamp("collected_at", { withTimezone: true }),
+}, (t) => [
+  index("operator_debts_operator_status_idx").on(t.operatorId, t.status, t.createdAt),
+  index("operator_debts_booking_idx").on(t.bookingId),
 ]);

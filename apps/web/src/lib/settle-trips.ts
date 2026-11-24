@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { operators, bookingItems, tickets } from "@openboat/db";
+import { operators, bookingItems, tickets, trips } from "@openboat/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { isLive } from "@/lib/tickets/queries";
 import { transitionTrips } from "@/lib/trips/status";
@@ -58,4 +58,32 @@ export async function settleTrips(operatorId: string): Promise<{ settled: number
     }
     return { settled: tripIds.length };
   });
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Earns the fee on these tickets if their trip has already sailed. For a
+ * ticket that comes back into service after its trip settled (a chargeback
+ * won after the trip), which settleTrips will never visit again.
+ */
+export async function earnFeesIfSailed(tx: Tx, operatorId: string, ticketIds: string[]): Promise<void> {
+  if (ticketIds.length === 0) return;
+  const sailedItems = tx
+    .select({ id: bookingItems.id })
+    .from(bookingItems)
+    .innerJoin(trips, eq(trips.id, bookingItems.tripId))
+    .where(and(eq(bookingItems.operatorId, operatorId), eq(trips.status, "sailed")));
+  await tx
+    .update(tickets)
+    .set({ feeStatus: "earned" })
+    .where(
+      and(
+        eq(tickets.operatorId, operatorId),
+        inArray(tickets.id, ticketIds),
+        eq(tickets.feeStatus, "held"),
+        inArray(tickets.bookingItemId, sailedItems),
+        isLive,
+      ),
+    );
 }
