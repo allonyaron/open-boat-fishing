@@ -169,3 +169,49 @@ export async function sendBookingConfirmation(p: BookingEmailParams): Promise<vo
     throw new Error(`Resend error: ${error.message}`);
   }
 }
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+type BookingLinksEmailParams = {
+  to: string;
+  operatorName: string;
+  fromAddress: string;
+  links: { confirmationCode: string; tripLabel: string; url: string }[];
+};
+
+export function bookingLinksEmailHtml(p: BookingLinksEmailParams): string {
+  const rows = p.links
+    .map(
+      (l) => `
+        <tr>
+          <td style="padding:14px 0;border-bottom:1px solid #e5e7eb;">
+            <div style="font-size:15px;font-weight:600;color:#111827;">${escapeHtml(l.tripLabel)}</div>
+            <div style="font-size:13px;color:#6b7280;margin:2px 0 8px;">Confirmation #${escapeHtml(l.confirmationCode)}</div>
+            <a href="${escapeHtml(l.url)}" style="font-size:14px;font-weight:600;color:#1e3a5f;">View boarding passes</a>
+          </td>
+        </tr>`,
+    )
+    .join("");
+
+  return `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px">
+        <h2 style="margin:0 0 8px;color:#111827">${escapeHtml(p.operatorName)}</h2>
+        <p style="color:#555;margin:0 0 16px">Here ${p.links.length === 1 ? "is the link" : "are the links"} you asked for. Each one opens that booking's boarding passes.</p>
+        <table width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+        <p style="color:#888;font-size:13px;margin-top:24px">Didn't ask for this? You can ignore it. These links were sent only to this address.</p>
+      </div>
+    `;
+}
+
+/** "Email my link": each booking's boarding-pass link again, to the address on the booking. */
+export async function sendBookingLinksEmail(p: BookingLinksEmailParams): Promise<void> {
+  const { error } = await getResend().emails.send({
+    from: p.fromAddress,
+    to: p.to,
+    subject: `Your boarding passes – ${p.operatorName}`,
+    html: bookingLinksEmailHtml(p),
+  });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+}

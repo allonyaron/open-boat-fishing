@@ -7,6 +7,7 @@ import { notFound } from "next/navigation";
 import { isTicketLive } from "@/lib/tickets/status";
 import { bookingLinksOpen, verifyBookingKey } from "@/lib/bookings/booking-key";
 import { BookingNotice } from "@/components/booking/BookingNotice";
+import { ResendLinksForm } from "@/components/booking/ResendLinksForm";
 import { z } from "zod";
 import { PrintButton } from "./PrintButton";
 
@@ -25,8 +26,14 @@ export default async function BoardingPassPage({
   const operatorName = operator.name ?? "Fishing Charter";
   const shell = { operatorName, dockAddress: operator.dockAddress ?? null, phone: operator.phone ?? null };
   const locked = (
-    <BookingNotice {...shell} eyebrow="BOARDING PASSES" heading="OPEN THEM FROM YOUR EMAIL.">
-      Your boarding passes open from the link in your confirmation email.
+    <BookingNotice
+      {...shell}
+      eyebrow="BOARDING PASSES"
+      heading="OPEN THEM FROM YOUR EMAIL."
+      below={<ResendLinksForm />}
+    >
+      Your boarding passes open from the link in your confirmation email. Can&apos;t find it? We&apos;ll send it
+      again.
     </BookingNotice>
   );
 

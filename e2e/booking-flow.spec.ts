@@ -145,10 +145,18 @@ test("booking pages refuse a code or booking id without its key", async ({ page 
     expect(await page.content(), url).not.toContain(bookingId);
   }
 
+  // The locked page offers to email the link. The reply is the same whether
+  // or not the address has a booking (this one has none).
+  await page.goto(`/booking/confirmation?code=${code}`);
+  await page.getByLabel("EMAIL USED TO BOOK").fill(`nobody-${Date.now()}@example.com`);
+  await page.getByRole("button", { name: "EMAIL MY LINK" }).click();
+  await expect(page.getByRole("status")).toHaveText(/If we have a booking for that address, we've emailed its link/);
+
   for (const url of [`/boarding/${bookingId}`, `/boarding/${bookingId}?k=${key.slice(0, -2)}xx`, `/boarding/not-a-uuid?k=${key}`]) {
     const res = await page.goto(url);
     expect(res?.status(), url).toBe(200);
     await expect(page.getByRole("heading", { name: "OPEN THEM FROM YOUR EMAIL." }), url).toBeVisible();
+    await expect(page.getByRole("button", { name: "EMAIL MY LINK" }), url).toBeVisible();
     await expect(page.getByRole("img", { name: /^QR code for ticket / }), url).toHaveCount(0);
     await expect(page.getByText(code, { exact: true }), url).toHaveCount(0);
   }

@@ -4,6 +4,7 @@ import { BookingNav } from "@/components/BookingCalendar";
 import { BookingNotice } from "@/components/booking/BookingNotice";
 import { ConfirmedBookingView } from "@/components/booking/ConfirmedBookingView";
 import { ProcessingScreen } from "@/components/booking/ProcessingScreen";
+import { ResendLinksForm } from "@/components/booking/ResendLinksForm";
 import { resolveBookingPage, type BookingPageParams } from "@/lib/bookings/booking-page";
 
 // Opens only with the booking key or the checkout's PaymentIntent credentials
@@ -57,8 +58,14 @@ export default async function ConfirmationPage({ searchParams }: { searchParams:
       );
     case "locked":
       return (
-        <BookingNotice {...shell} eyebrow="YOUR BOOKING" heading="OPEN IT FROM YOUR EMAIL.">
-          Your booking and boarding passes open from the link in your confirmation email.
+        <BookingNotice
+          {...shell}
+          eyebrow="YOUR BOOKING"
+          heading="OPEN IT FROM YOUR EMAIL."
+          below={<ResendLinksForm />}
+        >
+          Your booking and boarding passes open from the link in your confirmation email. Can&apos;t find it?
+          We&apos;ll send it again.
         </BookingNotice>
       );
   }

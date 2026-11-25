@@ -12,6 +12,7 @@ export function BookingNotice({
   children,
   action,
   step,
+  below,
 }: {
   operatorName: string;
   dockAddress: string | null;
@@ -22,6 +23,8 @@ export function BookingNotice({
   action?: { href: string; label: string };
   /** Highlight a purchase step; none by default. */
   step?: 2;
+  /** Shown under the message, e.g. the "email my link" form. */
+  below?: ReactNode;
 }) {
   return (
     <div className="min-h-screen bg-deck font-archivo">
@@ -52,6 +55,7 @@ export function BookingNotice({
             {action.label}
           </a>
         )}
+        {below}
       </div>
     </div>
   );
