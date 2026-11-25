@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { BookingNav } from "@/components/BookingCalendar";
 
 // A full-page message in place of a booking: locked, expired, cancelled or
-// unpaid. Same layout as the processing screen.
+// unpaid. Same layout as the processing screen, but no "CONFIRMED" step.
 export function BookingNotice({
   operatorName,
   dockAddress,
@@ -11,6 +11,7 @@ export function BookingNotice({
   heading,
   children,
   action,
+  step,
 }: {
   operatorName: string;
   dockAddress: string | null;
@@ -19,10 +20,12 @@ export function BookingNotice({
   heading: string;
   children: ReactNode;
   action?: { href: string; label: string };
+  /** Highlight a purchase step; none by default. */
+  step?: 2;
 }) {
   return (
     <div className="min-h-screen bg-deck font-archivo">
-      <BookingNav operatorName={operatorName} dockAddress={dockAddress} phone={phone} step={3} />
+      <BookingNav operatorName={operatorName} dockAddress={dockAddress} phone={phone} step={step} />
       <div
         className="flex flex-col items-center justify-center gap-4 text-center font-archivo"
         style={{ minHeight: 620, padding: "40px 24px" }}

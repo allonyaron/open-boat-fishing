@@ -35,6 +35,7 @@ export default async function ConfirmationPage({ searchParams }: { searchParams:
       return (
         <BookingNotice
           {...shell}
+          step={2}
           eyebrow="PAYMENT NOT RECEIVED"
           heading="THE PAYMENT DIDN'T GO THROUGH."
           action={{ href: "/checkout", label: "BACK TO CHECKOUT" }}
