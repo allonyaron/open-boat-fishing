@@ -195,6 +195,8 @@ jobs:
       - name: Booking flow (Playwright)
         env:
           E2E_BASE_URL: "http://localhost:3100"
+          # The spec signs the seeded booking's key, as the server does.
+          SESSION_SECRET: "ci-placeholder-secret-minimum-32-chars-long"
         run: pnpm exec playwright test e2e/booking-flow.spec.ts e2e/booking-cart-interactions.spec.ts e2e/booking-calendar.spec.ts
 
       - name: Admin money actions (Playwright)
