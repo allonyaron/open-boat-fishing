@@ -1,34 +1,14 @@
-import { getOperatorRecord } from "@/lib/operator";
-import { notFound, redirect } from "next/navigation";
-import { ConfirmedBookingView } from "@/components/booking/ConfirmedBookingView";
-import { getConfirmedBooking } from "@/lib/bookings/get-confirmed-booking";
+import { redirect } from "next/navigation";
+import type { BookingPageParams } from "@/lib/bookings/booking-page";
 
-export default async function DeliveryPage({
-  searchParams,
-}: {
-  searchParams: { code?: string; email?: string; phone?: string; redirect_status?: string };
-}) {
-  const { code, redirect_status } = searchParams;
-
-  if (!code) notFound();
-
-  if (redirect_status !== "succeeded") {
-    redirect(`/booking/confirmation?code=${code}&redirect_status=${redirect_status ?? ""}`);
+// The checkout's Stripe return_url before row 15. The confirmation page now
+// takes the return itself; this forwards a return still in flight, keeping
+// only what that page reads.
+export default function DeliveryPage({ searchParams }: { searchParams: BookingPageParams }) {
+  const kept = new URLSearchParams();
+  for (const name of ["code", "k", "payment_intent", "payment_intent_client_secret"] as const) {
+    const value = searchParams[name];
+    if (typeof value === "string") kept.set(name, value);
   }
-
-  const operator = await getOperatorRecord();
-  if (!operator) notFound();
-
-  const booking = await getConfirmedBooking(code, operator.id, operator.arriveMinutesBefore ?? null);
-  if (!booking) notFound();
-
-  return (
-    <ConfirmedBookingView
-      operatorName={operator.name ?? "Fishing Charter"}
-      dockAddress={operator.dockAddress ?? null}
-      phone={operator.phone ?? null}
-      dockMapsUrl={operator.dockMapsUrl ?? null}
-      booking={booking}
-    />
-  );
+  redirect(`/booking/confirmation?${kept}`);
 }

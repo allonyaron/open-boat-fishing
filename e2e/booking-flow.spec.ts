@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import { FIXTURE_PATH } from "./global-setup";
 import { bookableDate } from "./book-dates";
+import { bookingKey } from "../apps/web/src/lib/bookings/booking-key";
 
 type Fixtures = { code: string | null; bookingId: string | null };
 
@@ -76,29 +77,87 @@ test("booking flow", async ({ page }, testInfo) => {
   // against a seeded confirmed booking.
 });
 
-test("post-payment screens", async ({ page }, testInfo) => {
+/**
+ * The booking's key, as the server signs it. Needs the server's SESSION_SECRET
+ * and OPERATOR_ID in this process's environment: CI sets both; locally, start
+ * the server with the same two values.
+ */
+function keyFor(bookingId: string): string | null {
+  const operatorId = process.env.OPERATOR_ID;
+  if (!process.env.SESSION_SECRET || !operatorId) return null;
+  return bookingKey(operatorId, bookingId);
+}
+
+function seededBooking(): { code: string; bookingId: string; key: string } | null {
   const { code, bookingId } = loadFixtures();
+  const key = bookingId && keyFor(bookingId);
+  if (code && bookingId && key) return { code, bookingId, key };
+  // Locally, skipping is a convenience when the seed hasn't been run. In CI
+  // the seed and the env are part of the job, so a gap is a failure.
+  if (process.env.CI) throw new Error("Seed booking, SESSION_SECRET or OPERATOR_ID missing — check the CI job");
+  test.skip(
+    true,
+    "Needs the seed booking (seed-test-customers.ts) and the server's SESSION_SECRET and OPERATOR_ID in the env.",
+  );
+  return null;
+}
 
-  if (!code || !bookingId) {
-    // Locally, skipping is a convenience when the seed hasn't been run. In CI
-    // the seed is part of the job, so a missing fixture is a failure.
-    if (process.env.CI) throw new Error("Seed booking not found — check the seed steps in CI");
-    test.skip(true, "Seed booking not found. Run seed-test-customers.ts first, then re-run.");
-    return;
-  }
-
+test("post-payment screens", async ({ page }, testInfo) => {
+  const seeded = seededBooking();
+  if (!seeded) return;
+  const { code, bookingId, key } = seeded;
   const shot = screenshotter(testInfo);
 
-  // ── 05  Delivery screen ────────────────────────────────────────────────────
-  await page.goto(`/booking/delivery?code=${code}&redirect_status=succeeded`);
+  // ── 05  Confirmation screen, opened with the booking's key ────────────────
+  await page.goto(`/booking/confirmation?code=${code}&k=${key}`);
   await expect(page.getByRole("heading", { name: /seats confirmed/i })).toBeVisible();
   await expect(page.getByRole("img", { name: "Boarding pass QR code" })).toBeVisible();
   await expect(page.getByText(code, { exact: true })).toBeVisible();
   await page.screenshot({ path: shot("05-delivery") });
 
   // ── 06  Boarding passes (printable) ───────────────────────────────────────
-  await page.goto(`/boarding/${bookingId}`);
+  await page.goto(`/boarding/${bookingId}?k=${key}`);
   await expect(page.getByRole("button", { name: "Print / Save PDF" })).toBeVisible();
   await expect(page.getByRole("img", { name: /^QR code for ticket / }).first()).toBeVisible();
   await page.screenshot({ path: shot("06-boarding-pass"), fullPage: true });
+});
+
+// P8-1: a confirmation code, a booking id or Stripe's redirect_status opens
+// nothing. Every refusal looks the same, whether or not the code exists.
+test("booking pages refuse a code or booking id without its key", async ({ page }) => {
+  const seeded = seededBooking();
+  if (!seeded) return;
+  const { code, bookingId, key } = seeded;
+
+  const refused = [
+    `/booking/confirmation?code=${code}`,
+    `/booking/confirmation?code=${code}&redirect_status=succeeded`,
+    `/booking/delivery?code=${code}&redirect_status=succeeded`,
+    `/booking/confirmation?code=${code}&k=${key.slice(0, -2)}xx`,
+    `/booking/confirmation?code=ZZZZZZ&k=${key}`,
+    `/booking/confirmation?code=${code}&payment_intent=pi_guess&payment_intent_client_secret=pi_guess_secret_x`,
+  ];
+  for (const url of refused) {
+    const res = await page.goto(url);
+    expect(res?.status(), url).toBe(200);
+    await expect(page.getByRole("heading", { name: "OPEN IT FROM YOUR EMAIL." }), url).toBeVisible();
+    await expect(page.getByText(code, { exact: true }), url).toHaveCount(0);
+    expect(await page.content(), url).not.toContain(bookingId);
+  }
+
+  // The locked page offers to email the link. The reply is the same whether
+  // or not the address has a booking (this one has none).
+  await page.goto(`/booking/confirmation?code=${code}`);
+  await page.getByLabel("EMAIL USED TO BOOK").fill(`nobody-${Date.now()}@example.com`);
+  await page.getByRole("button", { name: "EMAIL MY LINK" }).click();
+  await expect(page.getByRole("status")).toHaveText(/If we have a booking for that address, we've emailed its link/);
+
+  for (const url of [`/boarding/${bookingId}`, `/boarding/${bookingId}?k=${key.slice(0, -2)}xx`, `/boarding/not-a-uuid?k=${key}`]) {
+    const res = await page.goto(url);
+    expect(res?.status(), url).toBe(200);
+    await expect(page.getByRole("heading", { name: "OPEN THEM FROM YOUR EMAIL." }), url).toBeVisible();
+    await expect(page.getByRole("button", { name: "EMAIL MY LINK" }), url).toBeVisible();
+    await expect(page.getByRole("img", { name: /^QR code for ticket / }), url).toHaveCount(0);
+    await expect(page.getByText(code, { exact: true }), url).toHaveCount(0);
+  }
 });

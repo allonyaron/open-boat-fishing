@@ -85,7 +85,17 @@ export async function releaseHold(hold: StoredHold): Promise<"released" | "paid"
   }
 }
 
-/** Where to send a customer whose booking turns out to be paid. */
-export function confirmationUrl(hold: Pick<StoredHold, "confirmationCode">): string {
-  return `/booking/confirmation?code=${encodeURIComponent(hold.confirmationCode)}`;
+/**
+ * Where to send a customer whose booking turns out to be paid. The confirmation
+ * page opens only with a credential (P8-1): this passes the PaymentIntent's id
+ * and client secret, the same parameters Stripe appends to the return_url.
+ */
+export function confirmationUrl(hold: Pick<StoredHold, "confirmationCode" | "clientSecret">): string {
+  const params = new URLSearchParams({
+    code: hold.confirmationCode,
+    // A client secret is `<PaymentIntent id>_secret_<random>`.
+    payment_intent: hold.clientSecret.split("_secret_")[0],
+    payment_intent_client_secret: hold.clientSecret,
+  });
+  return `/booking/confirmation?${params}`;
 }

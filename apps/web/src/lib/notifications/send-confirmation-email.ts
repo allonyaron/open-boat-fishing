@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { fmtTimeET } from "@/lib/format";
 import { sendBookingConfirmation } from "@/lib/email";
+import { boardingPassPath } from "@/lib/bookings/booking-key";
 import {
   bookings,
   bookingItems,
@@ -88,10 +89,9 @@ export async function sendConfirmationEmail(
     to: booking.customerEmail,
     customerName: booking.customerName,
     confirmationCode: booking.confirmationCode,
-    bookingId,
+    boardingUrl: `${env.NEXT_PUBLIC_APP_URL ?? ""}${boardingPassPath(booking.operatorId, bookingId)}`,
     totalCents: booking.totalCents,
     ticketLines,
     fromAddress: operator.emailFrom,
-    appUrl: env.NEXT_PUBLIC_APP_URL ?? "",
   });
 }

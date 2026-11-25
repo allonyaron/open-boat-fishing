@@ -4,6 +4,7 @@ import { bookings, bookingItems, trips, products, vessels, tickets } from "@open
 import { and, eq, count, sql } from "drizzle-orm";
 import { fmtTimeET } from "@/lib/format";
 import { dollars } from "@openboat/utils";
+import { boardingPassPath } from "./booking-key";
 
 function fmtDateShort(d: string) {
   return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {
@@ -28,21 +29,29 @@ export type ConfirmedTripLine = {
 export type ConfirmedBooking = {
   bookingId: string;
   confirmationCode: string;
-  status: string;
+  /** Opens the boarding passes: the booking id with its key. */
+  boardingPath: string;
   berthTime: string | null;
   whatToBring: string[];
   items: ConfirmedTripLine[];
 };
 
+/**
+ * The confirmation page's view of a paid booking, or null unless the booking is
+ * confirmed. Callers check access first (`resolveBookingPage`): this takes the
+ * booking id, never a confirmation code.
+ */
 export async function getConfirmedBooking(
-  code: string,
+  bookingId: string,
   operatorId: string,
   arriveMinutesBefore: number | null,
 ): Promise<ConfirmedBooking | null> {
   const [booking] = await db
     .select()
     .from(bookings)
-    .where(and(eq(bookings.confirmationCode, code), eq(bookings.operatorId, operatorId)));
+    .where(
+      and(eq(bookings.id, bookingId), eq(bookings.operatorId, operatorId), eq(bookings.status, "confirmed")),
+    );
 
   if (!booking) return null;
 
@@ -110,7 +119,7 @@ export async function getConfirmedBooking(
   return {
     bookingId: booking.id,
     confirmationCode: booking.confirmationCode,
-    status: booking.status,
+    boardingPath: boardingPassPath(operatorId, booking.id),
     berthTime,
     whatToBring: Array.from(whatToBringSet),
     items,

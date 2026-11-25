@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const POLL_INTERVAL_MS = 3000;
+// Stripe has the money and the webhook issues the passes in a second or two.
+const PAID_POLL_INTERVAL_MS = 1500;
 
-export function ProcessingScreen() {
+/** `paid`: the payment succeeded and the booking is waiting for its webhook. */
+export function ProcessingScreen({ paid = false }: { paid?: boolean }) {
   const router = useRouter();
   const [tick, setTick] = useState(0);
 
@@ -13,9 +16,9 @@ export function ProcessingScreen() {
     const id = setInterval(() => {
       setTick((t) => t + 1);
       router.refresh();
-    }, POLL_INTERVAL_MS);
+    }, paid ? PAID_POLL_INTERVAL_MS : POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [router]);
+  }, [router, paid]);
 
   const progressPct = 30 + (tick % 3) * 30;
 
@@ -34,7 +37,9 @@ export function ProcessingScreen() {
         ALMOST THERE.
       </h1>
       <div className="font-archivo" style={{ fontSize: 17, lineHeight: 1.5, color: "#41565f", maxWidth: "30ch" }}>
-        Your bank is confirming the charge. This screen moves on by itself — no need to touch anything.
+        {paid
+          ? "Payment received. We're issuing your boarding passes — this screen moves on by itself."
+          : "Your bank is confirming the charge. This screen moves on by itself — no need to touch anything."}
       </div>
       <div style={{ width: 220, height: 6, background: "#dde4e6", overflow: "hidden" }}>
         <div

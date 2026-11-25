@@ -33,7 +33,8 @@ sequenceDiagram
 
     C->>W: Navigate to /checkout
     C->>S: stripe.confirmPayment() (PaymentElement)
-    S-->>C: Redirect to /booking/delivery?redirect_status=succeeded
+    S-->>C: Redirect to /booking/confirmation?code&payment_intent&payment_intent_client_secret
+    C->>W: GET that URL: client secret checked with Stripe, redirect to ?code&k (booking key)
 
     S->>W: POST /api/webhooks/stripe  (payment_intent.succeeded)
     Note over W: Centralized mode: event.account (if present) is validated against a known operator's stripeAccountId before dispatch — unknown accounts get 400

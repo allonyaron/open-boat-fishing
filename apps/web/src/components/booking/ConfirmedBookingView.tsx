@@ -1,6 +1,7 @@
 import { env } from "@/lib/env";
 import { BookingNav } from "@/components/BookingCalendar";
 import { ClearPendingPayment } from "@/components/ClearPendingPayment";
+import { QrSvg } from "./QrSvg";
 import type { ConfirmedBooking } from "@/lib/bookings/get-confirmed-booking";
 
 const DEFAULT_WHAT_TO_BRING =
@@ -20,8 +21,7 @@ export function ConfirmedBookingView({
   booking: ConfirmedBooking;
 }) {
   const icsUrl = `/api/bookings/confirmation/${booking.confirmationCode}/calendar`;
-  const boardingUrl = `${env.NEXT_PUBLIC_APP_URL ?? ""}/boarding/${booking.bookingId}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=156x156&margin=0&data=${encodeURIComponent(boardingUrl)}`;
+  const boardingUrl = `${env.NEXT_PUBLIC_APP_URL ?? ""}${booking.boardingPath}`;
 
   return (
     <div className="min-h-screen bg-deck font-archivo">
@@ -61,9 +61,9 @@ export function ConfirmedBookingView({
             style={{ gap: 18, marginTop: 22, paddingTop: 20, borderTop: "1px solid #3c5867" }}
           >
             <div className="bg-white flex-none" style={{ padding: 8 }}>
-              <img
-                src={qrUrl}
-                alt="Boarding pass QR code"
+              <QrSvg
+                value={boardingUrl}
+                label="Boarding pass QR code"
                 className="w-[132px] h-[132px] lg:w-[156px] lg:h-[156px]"
               />
             </div>

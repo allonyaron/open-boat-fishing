@@ -4,6 +4,8 @@ const STEP_MOBILE: Record<1 | 2 | 3, { leftHref: string; leftLabel: string; righ
   2: { leftHref: "/book", leftLabel: "TRIPS", rightLabel: "STEP 2 OF 3 · CART" },
   3: { leftHref: "/cart", leftLabel: "CART", rightLabel: "STEP 3 OF 3 · PAY" },
 };
+// Pages outside the purchase flow (a locked or cancelled booking) mark no step.
+const NO_STEP_MOBILE = { leftHref: "/book", leftLabel: "TRIPS", rightLabel: "" };
 
 export function BookingNav({
   operatorName,
@@ -16,7 +18,8 @@ export function BookingNav({
   operatorName: string;
   dockAddress: string | null;
   phone: string | null;
-  step: 1 | 2 | 3;
+  /** The step to highlight; leave it out on a page outside the purchase flow. */
+  step?: 1 | 2 | 3;
   rightLabelOverride?: string;
   rightLabelColor?: string;
 }) {
@@ -25,7 +28,7 @@ export function BookingNav({
     [2, "PAY"],
     [3, "CONFIRMED"],
   ];
-  const mobile = STEP_MOBILE[step];
+  const mobile = step ? STEP_MOBILE[step] : NO_STEP_MOBILE;
   const rightLabel = rightLabelOverride ?? mobile.rightLabel;
   const rightColor = rightLabelColor ?? "#c9d6dd";
   return (
