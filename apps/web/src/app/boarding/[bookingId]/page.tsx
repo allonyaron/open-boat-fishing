@@ -5,13 +5,34 @@ import { and, eq } from "drizzle-orm";
 import { getOperatorRecord } from "@/lib/operator";
 import { notFound } from "next/navigation";
 import { isTicketLive } from "@/lib/tickets/status";
+import { bookingLinksOpen, verifyBookingKey } from "@/lib/bookings/booking-key";
+import { BookingNotice } from "@/components/booking/BookingNotice";
+import { z } from "zod";
 import { PrintButton } from "./PrintButton";
 
-export default async function BoardingPassPage({ params }: { params: { bookingId: string } }) {
+// Opens only with the booking's key (`?k=`), which the confirmation email and
+// the confirmation page carry. The booking id alone isn't enough (P8-1).
+export default async function BoardingPassPage({
+  params,
+  searchParams,
+}: {
+  params: { bookingId: string };
+  searchParams: { k?: string };
+}) {
   const operator = await getOperatorRecord();
   if (!operator) notFound();
 
   const operatorName = operator.name ?? "Fishing Charter";
+  const shell = { operatorName, dockAddress: operator.dockAddress ?? null, phone: operator.phone ?? null };
+  const locked = (
+    <BookingNotice {...shell} eyebrow="BOARDING PASSES" heading="OPEN THEM FROM YOUR EMAIL.">
+      Your boarding passes open from the link in your confirmation email.
+    </BookingNotice>
+  );
+
+  // Checked before any query: a wrong key reads nothing.
+  if (!z.string().uuid().safeParse(params.bookingId).success) return locked;
+  if (!verifyBookingKey(searchParams.k, operator.id, params.bookingId)) return locked;
 
   const [booking] = await db
     .select()
@@ -48,6 +69,15 @@ export default async function BoardingPassPage({ params }: { params: { bookingId
     .orderBy(trips.departureDate, trips.startTime);
 
   if (ticketRows.length === 0) notFound();
+
+  const lastTripEndsAt = new Date(Math.max(...ticketRows.map((t) => new Date(t.endTime).getTime())));
+  if (!bookingLinksOpen(lastTripEndsAt)) {
+    return (
+      <BookingNotice {...shell} eyebrow="LINK EXPIRED" heading="THIS TRIP IS OVER.">
+        This booking&apos;s links stop working two weeks after its last trip.
+      </BookingNotice>
+    );
+  }
 
   // No boarding pass, and no QR code, until the payment goes through.
   if (ticketRows.every((t) => t.status === "held")) {

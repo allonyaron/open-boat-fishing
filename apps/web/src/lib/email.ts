@@ -21,11 +21,11 @@ type BookingEmailParams = {
   to: string;
   customerName: string | null;
   confirmationCode: string;
-  bookingId: string;
+  /** The boarding passes' full URL, booking key included. */
+  boardingUrl: string;
   totalCents: number;
   ticketLines: TicketLine[];
   fromAddress: string;
-  appUrl: string;
 };
 
 function fmt(cents: number) {
@@ -37,8 +37,6 @@ function capitalize(s: string) {
 }
 
 function buildHtml(p: BookingEmailParams): string {
-  const boardingUrl = `${p.appUrl}/boarding/${p.bookingId}`;
-
   const ticketRows = p.ticketLines
     .map(
       (t) => `
@@ -101,7 +99,7 @@ function buildHtml(p: BookingEmailParams): string {
             <table cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
               <tr>
                 <td style="background:#1e3a5f;border-radius:6px;">
-                  <a href="${boardingUrl}" style="display:inline-block;padding:14px 28px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">
+                  <a href="${p.boardingUrl}" style="display:inline-block;padding:14px 28px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">
                     View &amp; Print Boarding Passes →
                   </a>
                 </td>

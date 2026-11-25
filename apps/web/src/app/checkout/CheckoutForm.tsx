@@ -516,7 +516,9 @@ export function CheckoutForm({
       elements,
       clientSecret: current.clientSecret,
       confirmParams: {
-        return_url: `${window.location.origin}/booking/delivery?code=${current.confirmationCode}&email=${encodeURIComponent(email.trim())}&phone=${encodeURIComponent(mobile.trim())}`,
+        // Stripe appends payment_intent and payment_intent_client_secret, which
+        // open the confirmation page for this visit (P8-1).
+        return_url: `${window.location.origin}/booking/confirmation?code=${encodeURIComponent(current.confirmationCode)}`,
       },
     });
 
