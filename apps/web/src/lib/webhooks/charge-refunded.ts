@@ -4,6 +4,7 @@ import { payments, stripeCommands } from "@openboat/db";
 import { eq, inArray } from "drizzle-orm";
 import { cancelConfirmedBooking } from "@/lib/bookings/cancel";
 import type Stripe from "stripe";
+import type { RequestContext } from "@/lib/request-context";
 import { OutOfOrderEventError, type EventResult } from "@/lib/stripe-events/inbox";
 import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
 import { confirmRefundCommands, queueFeeRefund, queueTransferReversal, sendCommands } from "@/lib/payments/commands";
@@ -28,6 +29,7 @@ async function queueReversalsFor(
   foreign: Stripe.Refund[],
   charge: Stripe.Charge,
   payment: { operatorId: string; bookingId: string },
+  ctx: RequestContext,
 ): Promise<string[]> {
   const unreversed = foreign.filter((r) => !r.transfer_reversal && r.status !== "failed" && r.status !== "canceled");
   const transferId = typeof charge.transfer === "string" ? charge.transfer : charge.transfer?.id ?? null;
@@ -55,6 +57,7 @@ async function queueReversalsFor(
     if (amountCents <= 0) break;
     ids.push(
       await queueTransferReversal(db, {
+        ctx,
         operatorId: payment.operatorId,
         bookingId: payment.bookingId,
         transferId,
@@ -78,7 +81,7 @@ async function queueReversalsFor(
 //   those paths already updated the tickets; nothing more to do.
 // - Partly refunded from the Dashboard: the app can't tell which tickets were
 //   refunded, so the event needs review.
-export async function handleChargeRefunded(charge: Stripe.Charge): Promise<EventResult> {
+export async function handleChargeRefunded(charge: Stripe.Charge, ctx: RequestContext): Promise<EventResult> {
   const piId = typeof charge.payment_intent === "string" ? charge.payment_intent : null;
   if (!piId) return { outcome: "ignored", note: `charge ${charge.id} has no payment intent` };
 
@@ -120,7 +123,7 @@ export async function handleChargeRefunded(charge: Stripe.Charge): Promise<Event
   await confirmRefundCommands(refunds.data);
   const foreign = refunds.data.filter((r) => !isAppRefund(r));
   // A redelivery finds the commands by their dedupe keys and sends nothing new.
-  const reversalIds = await queueReversalsFor(foreign, charge, payment);
+  const reversalIds = await queueReversalsFor(foreign, charge, payment, ctx);
 
   if (charge.amount_refunded < charge.amount) {
     await sendCommands(reversalIds);
@@ -150,6 +153,7 @@ export async function handleChargeRefunded(charge: Stripe.Charge): Promise<Event
   const commandIds = [...reversalIds];
   if (feeLeft > 0 && payment.applicationFeeId) {
     commandIds.push(await queueFeeRefund(db, {
+      ctx,
       operatorId: payment.operatorId,
       bookingId: payment.bookingId,
       applicationFeeId: payment.applicationFeeId,

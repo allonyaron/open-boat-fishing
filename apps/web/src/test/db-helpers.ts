@@ -11,6 +11,7 @@ import {
   stripeCommands,
   disputes,
   operatorDebts,
+  auditLog,
 } from "@openboat/db";
 import {
   operators,
@@ -33,14 +34,45 @@ import {
   domains,
   capacityChanges,
 } from "@openboat/db";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
+import { stripeContext } from "@/lib/request-context";
 
 // Separate connection pool for helpers so we don't share state with the app module
 const testDb = createDb(process.env.DATABASE_URL!);
 
 export { testDb };
+
+/** The context a Stripe event handler runs with: the event is the actor. */
+export const stripeTestCtx = stripeContext("evt_test");
+
+/**
+ * What a mocked requireAdmin resolves to: the seeded admin's session and a
+ * request context naming them as the actor.
+ */
+export function adminAuth(seed: { staffId: string; operatorId: string }) {
+  return {
+    session: {
+      staffId: seed.staffId,
+      operatorId: seed.operatorId,
+      role: "admin" as const,
+      name: "Admin",
+      sessionVersion: 0,
+      save: async () => {},
+    },
+    ctx: {
+      principal: {
+        kind: "staff" as const,
+        staffId: seed.staffId,
+        operatorId: seed.operatorId,
+        role: "admin" as const,
+      },
+      requestId: "test-request",
+      now: new Date(),
+    },
+  };
+}
 
 export type SeedResult = {
   operatorId: string;
@@ -282,6 +314,15 @@ export async function cleanupBookings(tripId: string, originalCapacity = 20) {
     .where(eq(trips.id, tripId));
 }
 
+/** audit_log rows for one target, oldest first. */
+export async function auditRowsFor(targetTable: string, targetId: string) {
+  return testDb
+    .select()
+    .from(auditLog)
+    .where(and(eq(auditLog.targetTable, targetTable), eq(auditLog.targetId, targetId)))
+    .orderBy(auditLog.createdAt);
+}
+
 /** Delete the entire operator subtree — call in afterAll. */
 export async function cleanupOperator(operatorId: string) {
   // Cascade down the FK chain — order matters (children before parents)
@@ -312,5 +353,6 @@ export async function cleanupOperator(operatorId: string) {
   await testDb.delete(customers).where(eq(customers.operatorId, operatorId));
   await testDb.delete(stripeEvents).where(eq(stripeEvents.operatorId, operatorId));
   await testDb.delete(stripeCommands).where(eq(stripeCommands.operatorId, operatorId));
+  await testDb.delete(auditLog).where(eq(auditLog.operatorId, operatorId));
   await testDb.delete(operators).where(eq(operators.id, operatorId));
 }

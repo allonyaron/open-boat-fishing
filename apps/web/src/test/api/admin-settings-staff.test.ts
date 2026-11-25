@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb, adminAuth, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { staff } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -14,10 +14,16 @@ import { requireAdmin } from "@/lib/session";
 
 let ctx: SeedResult;
 let otherCtx: SeedResult;
+let otherMate: string;
 
 beforeAll(async () => {
   ctx = await seedOperator();
   otherCtx = await seedOperator();
+  const [mate] = await testDb
+    .insert(staff)
+    .values({ operatorId: ctx.operatorId, name: "Deck Mate", email: `deck-${randomUUID().slice(0, 8)}@test.com`, role: "mate", pinHash: "x" })
+    .returning({ id: staff.id });
+  otherMate = mate.id;
 });
 
 afterAll(async () => {
@@ -26,9 +32,7 @@ afterAll(async () => {
 });
 
 function adminSession() {
-  return {
-    session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-  };
+  return adminAuth(ctx);
 }
 
 function unauthorized() {
@@ -258,6 +262,11 @@ describe("PATCH /api/admin/settings/staff/[staffId]", () => {
     const [after] = await testDb.select({ pinHash: staff.pinHash, name: staff.name }).from(staff).where(eq(staff.id, ctx.staffId));
     expect(after.name).toBe("Renamed Mate");
     expect(after.pinHash).not.toBe(before.pinHash);
+
+    // Who changed it; the PIN is recorded only as changed (row 12).
+    const audit = (await auditRowsFor("staff", ctx.staffId)).filter((r) => r.action === "staff.update").at(-1)!;
+    expect(audit).toMatchObject({ actorKind: "staff", after: { name: "Renamed Mate", pinHash: "[secret]" } });
+    expect(JSON.stringify(audit)).not.toContain(after.pinHash!);
   });
 
   it("clears vesselId when set to null", async () => {
@@ -273,5 +282,70 @@ describe("PATCH /api/admin/settings/staff/[staffId]", () => {
     expect(res2.status).toBe(200);
     const body2 = await res2.json();
     expect(body2.vesselId).toBeNull();
+  });
+
+  // Row 12 (P5-1): a deactivation or a new credential ends the account's sessions.
+  async function insertAdmin() {
+    const [row] = await testDb
+      .insert(staff)
+      .values({
+        operatorId: ctx.operatorId,
+        name: "Second Admin",
+        email: `second-${randomUUID().slice(0, 8)}@test.com`,
+        role: "admin",
+        passwordHash: "x",
+      })
+      .returning({ id: staff.id });
+    return row.id;
+  }
+  async function versionOf(staffId: string) {
+    const [row] = await testDb.select({ v: staff.sessionVersion }).from(staff).where(eq(staff.id, staffId));
+    return row.v;
+  }
+
+  it("ends another admin's sessions when they are deactivated, and only then", async () => {
+    const id = await insertAdmin();
+    const { PATCH } = await import("@/app/api/admin/settings/staff/[staffId]/route");
+    const patch = (body: Record<string, unknown>) =>
+      PATCH(patchReq(`/api/admin/settings/staff/${id}`, body), { params: { staffId: id } });
+
+    expect((await patch({ name: "Renamed" })).status).toBe(200);
+    expect(await versionOf(id)).toBe(0);
+
+    const res = await patch({ active: false });
+    expect(res.status).toBe(200);
+    expect(await res.json()).not.toHaveProperty("sessionVersion");
+    expect(await versionOf(id)).toBe(1);
+
+    // Already inactive: nothing more to end.
+    await patch({ active: false });
+    expect(await versionOf(id)).toBe(1);
+  });
+
+  it("ends an admin's sessions when their password is reset, and a mate's when their PIN is", async () => {
+    const id = await insertAdmin();
+    const { PATCH } = await import("@/app/api/admin/settings/staff/[staffId]/route");
+    await PATCH(patchReq(`/api/admin/settings/staff/${id}`, { password: "new-password-1" }), { params: { staffId: id } });
+    expect(await versionOf(id)).toBe(1);
+
+    const mateVersion = await versionOf(ctx.staffId);
+    // A PIN reset ends only that mate's sessions.
+    await PATCH(patchReq(`/api/admin/settings/staff/${otherMate}`, { pin: "246813" }), { params: { staffId: otherMate } });
+    expect(await versionOf(otherMate)).toBe(1);
+    expect(await versionOf(ctx.staffId)).toBe(mateVersion);
+  });
+
+  it("keeps an admin signed in on this browser when they set their own password", async () => {
+    const id = await insertAdmin();
+    const auth = adminAuth({ staffId: id, operatorId: ctx.operatorId });
+    const save = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(requireAdmin).mockResolvedValueOnce({ ...auth, session: { ...auth.session, save } } as any);
+    const { PATCH } = await import("@/app/api/admin/settings/staff/[staffId]/route");
+    const res = await PATCH(patchReq(`/api/admin/settings/staff/${id}`, { password: "my-new-password" }), {
+      params: { staffId: id },
+    });
+    expect(res.status).toBe(200);
+    expect(await versionOf(id)).toBe(1);
+    expect(save).toHaveBeenCalledTimes(1);
   });
 });

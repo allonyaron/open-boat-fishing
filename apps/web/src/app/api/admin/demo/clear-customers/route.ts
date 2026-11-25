@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { requireAdmin } from "@/lib/session";
+import { recordAudit } from "@/lib/audit";
 import { resetBookingActivity, resetCustomerAccounts } from "@/lib/demo-reset";
 
 export const dynamic = "force-dynamic";
@@ -22,10 +23,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const operatorId = auth.session.operatorId;
   const result = await db.transaction(async (tx) => {
-    const bookingsResult = await resetBookingActivity(tx, auth.session.operatorId);
-    const customersResult = await resetCustomerAccounts(tx, auth.session.operatorId);
-    return { ...bookingsResult, ...customersResult };
+    const bookingsResult = await resetBookingActivity(tx, operatorId);
+    const customersResult = await resetCustomerAccounts(tx, operatorId);
+    const counts = { ...bookingsResult, ...customersResult };
+    // It deletes paid bookings, so it says who did it (row 12, P7-10).
+    await recordAudit(tx, auth.ctx, {
+      operatorId,
+      action: "demo.clear_customers",
+      targetTable: "operators",
+      targetId: operatorId,
+      after: counts,
+    });
+    return counts;
   });
 
   return NextResponse.json({ ok: true, ...result });

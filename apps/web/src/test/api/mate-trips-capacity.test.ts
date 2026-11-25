@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { NextRequest } from "next/server";
-import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, seedBooking, testDb, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { trips, vessels, capacityChanges, tickets, bookingItems } from "@openboat/db";
 import { eq, and, inArray, sql } from "drizzle-orm";
@@ -145,6 +145,10 @@ describe("PATCH /api/mate/trips/[tripId]/capacity", () => {
       expect(change.delta).toBe(newCapacity - taken - before.seatsRemaining);
       expect(change.seatsRemainingAfter).toBe(newCapacity - taken);
       expect(change.staffId).toBe(ctx.staffId);
+
+      // The mate on the boat is the actor (row 12).
+      const audit = (await auditRowsFor("trips", ctx.tripId)).filter((r) => r.action === "trip.set_capacity").at(-1);
+      expect(audit).toMatchObject({ actorKind: "staff", actorId: ctx.staffId, after: { capacity: newCapacity } });
     });
   });
 });

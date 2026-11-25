@@ -2,11 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireMate } from "@/lib/mate-auth";
 import { InventoryError, setTripCapacity } from "@/lib/inventory/seats";
+import { requestContext } from "@/lib/request-context";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ tripId: string }> }) {
   const auth = await requireMate(req);
   if (auth instanceof NextResponse) return auth;
   const { staff } = auth;
+  // The mate on the boat is the actor (row 12).
+  const ctx = requestContext(req, {
+    kind: "staff",
+    staffId: staff.staffId,
+    operatorId: staff.operatorId,
+    role: staff.role === "admin" ? "admin" : "mate",
+  });
 
   const { tripId } = await params;
   const body = (await req.json().catch(() => ({}))) as { capacity?: unknown };
@@ -27,11 +35,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ tr
     await db.transaction(async (tx) => {
       // The inventory module enforces the certificate capacity (required from
       // the boat), the floor of seats already taken, and writes the ledger row.
-      const result = await setTripCapacity(tx, {
+      const result = await setTripCapacity(tx, ctx, {
         operatorId: staff.operatorId,
         tripId,
         capacity: newCapacity,
-        staffId: staff.staffId,
         requireCertificate: true,
       });
       responseData = {

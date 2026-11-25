@@ -3,6 +3,8 @@ import { bookingItems, capacityChanges, trips, vessels } from "@openboat/db";
 import type { db } from "@/lib/db";
 import { liveTicketCount, seatHoldingTicketCount } from "@/lib/tickets/queries";
 import type { MovedTicket } from "@/lib/tickets/lifecycle";
+import { recordAudit } from "@/lib/audit";
+import type { RequestContext } from "@/lib/request-context";
 
 // The only code that changes trips.seats_remaining or trips.capacity (AR-7).
 // Every change writes a capacity_changes row, so sum(delta) over a trip
@@ -276,11 +278,11 @@ export type CapacityResult = {
  */
 export async function setTripCapacity(
   tx: Tx,
+  ctx: RequestContext,
   input: {
     operatorId: string;
     tripId: string;
     capacity: number;
-    staffId?: string | null;
     /** The mate path: a vessel with no certificate capacity can't be edited from the boat. */
     requireCertificate?: boolean;
   },
@@ -339,9 +341,17 @@ export async function setTripCapacity(
     delta: seatsRemaining - trip.seatsRemaining,
     reason: "capacity_edit",
     seatsRemainingAfter: seatsRemaining,
-    staffId: input.staffId,
+    staffId: ctx.principal.kind === "staff" ? ctx.principal.staffId : null,
     previousCapacity: trip.capacity,
     newCapacity: input.capacity,
+  });
+  await recordAudit(tx, ctx, {
+    operatorId: input.operatorId,
+    action: "trip.set_capacity",
+    targetTable: "trips",
+    targetId: trip.id,
+    before: { capacity: trip.capacity, seatsRemaining: trip.seatsRemaining },
+    after: { capacity: input.capacity, seatsRemaining },
   });
 
   return {

@@ -3,7 +3,7 @@
 // after Stripe's 24-hour window; Stripe refusing a request marks it failed;
 // network errors leave it pending for the cron.
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb, stripeTestCtx } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { stripeCommands } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -47,6 +47,7 @@ beforeEach(() => {
 
 function refund(paymentIntentId: string, extra: Partial<Parameters<typeof queueRefund>[1]> = {}) {
   return queueRefund(db, {
+    ctx: stripeTestCtx,
     operatorId: ctx.operatorId,
     bookingId: null,
     paymentIntentId,
@@ -102,6 +103,7 @@ describe("sendCommand", () => {
   it("confirms a fee refund as soon as Stripe accepts it", async () => {
     vi.mocked(stripe.applicationFees.createRefund).mockResolvedValueOnce({ id: "fr_ok" } as never);
     const id = await queueFeeRefund(db, {
+      ctx: stripeTestCtx,
       operatorId: ctx.operatorId,
       bookingId: null,
       applicationFeeId: "fee_s2",
@@ -205,6 +207,7 @@ describe("transfer commands", () => {
 
   it("sends a transfer reversal with its id as the key and confirms it on acceptance", async () => {
     const id = await queueTransferReversal(db, {
+      ctx: stripeTestCtx,
       operatorId: ctx.operatorId,
       bookingId: null,
       transferId: "tr_cmd_1",
@@ -215,7 +218,10 @@ describe("transfer commands", () => {
     expect(await sendCommand(id)).toBe("confirmed");
     expect(stripe.transfers.createReversal).toHaveBeenCalledWith(
       "tr_cmd_1",
-      { amount: 5000, metadata: { reason: "chargeback", command_id: id } },
+      {
+        amount: 5000,
+        metadata: { actor_kind: "stripe", actor_id: "evt_test", reason: "chargeback", command_id: id },
+      },
       { idempotencyKey: id },
     );
     expect(stripe.refunds.create).not.toHaveBeenCalled();
@@ -225,6 +231,7 @@ describe("transfer commands", () => {
 
   it("finds a reversal an earlier attempt made instead of making a second one", async () => {
     const id = await queueTransferReversal(db, {
+      ctx: stripeTestCtx,
       operatorId: ctx.operatorId,
       bookingId: null,
       transferId: "tr_cmd_2",
@@ -245,6 +252,7 @@ describe("transfer commands", () => {
 
   it("sends a transfer funded by the original charge", async () => {
     const id = await queueTransfer(db, {
+      ctx: stripeTestCtx,
       operatorId: ctx.operatorId,
       bookingId: null,
       destination: "acct_cmd",
@@ -262,6 +270,7 @@ describe("transfer commands", () => {
 
   it("finds a transfer an earlier attempt made", async () => {
     const id = await queueTransfer(db, {
+      ctx: stripeTestCtx,
       operatorId: ctx.operatorId,
       bookingId: null,
       destination: "acct_cmd",

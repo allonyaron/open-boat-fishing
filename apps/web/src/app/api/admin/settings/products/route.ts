@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { createdFields, recordAudit } from "@/lib/audit";
 import { products, productPrices, vessels } from "@openboat/db";
 import { and, eq, inArray } from "drizzle-orm";
 
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
@@ -70,37 +71,52 @@ export async function POST(req: NextRequest) {
     ? (rawWhatToBring as string[]).map((s) => String(s).trim()).filter(Boolean)
     : [];
 
-  const [product] = await db
-    .insert(products)
-    .values({
-      operatorId: session.operatorId,
-      vesselId,
-      category,
-      displayName,
-      description: body.description ? String(body.description) : null,
-      whatToBring,
-      showRemaining: Boolean(body.showRemaining),
-    })
-    .returning();
-
-  // Insert prices if provided
   const priceInput = body.prices as Array<{ ticketType: string; priceCents: number }> | undefined;
-  if (Array.isArray(priceInput) && priceInput.length > 0) {
-    const validTypes = ["adult", "child", "senior"] as const;
-    const rows = priceInput
-      .filter((p) => validTypes.includes(p.ticketType as (typeof validTypes)[number]) && Number.isInteger(p.priceCents) && p.priceCents >= 0)
-      .map((p) => ({
-        productId: product.id,
-        ticketType: p.ticketType as (typeof validTypes)[number],
-        priceCents: p.priceCents,
-      }));
-    if (rows.length > 0) await db.insert(productPrices).values(rows);
-  }
+  const { product, insertedPrices } = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(products)
+      .values({
+        operatorId: session.operatorId,
+        vesselId,
+        category,
+        displayName,
+        description: body.description ? String(body.description) : null,
+        whatToBring,
+        showRemaining: Boolean(body.showRemaining),
+      })
+      .returning();
 
-  const insertedPrices = await db
-    .select()
-    .from(productPrices)
-    .where(eq(productPrices.productId, product.id));
+    // Insert prices if provided
+    if (Array.isArray(priceInput) && priceInput.length > 0) {
+      const validTypes = ["adult", "child", "senior"] as const;
+      const rows = priceInput
+        .filter((p) => validTypes.includes(p.ticketType as (typeof validTypes)[number]) && Number.isInteger(p.priceCents) && p.priceCents >= 0)
+        .map((p) => ({
+          productId: row.id,
+          ticketType: p.ticketType as (typeof validTypes)[number],
+          priceCents: p.priceCents,
+        }));
+      if (rows.length > 0) await tx.insert(productPrices).values(rows);
+    }
+
+    const prices = await tx.select().from(productPrices).where(eq(productPrices.productId, row.id));
+    await recordAudit(tx, ctx, {
+      operatorId: session.operatorId,
+      action: "product.create",
+      targetTable: "products",
+      targetId: row.id,
+      after: createdFields({
+        vesselId,
+        category,
+        displayName,
+        description: row.description,
+        whatToBring,
+        showRemaining: row.showRemaining,
+        prices: Object.fromEntries(prices.map((p) => [p.ticketType, p.priceCents])),
+      }),
+    });
+    return { product: row, insertedPrices: prices };
+  });
 
   return NextResponse.json({ ...product, prices: insertedPrices }, { status: 201 });
 }

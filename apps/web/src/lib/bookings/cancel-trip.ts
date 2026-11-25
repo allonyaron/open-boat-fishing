@@ -10,6 +10,8 @@ import { transitionBookings } from "./status";
 import { releaseDebts } from "@/lib/payments/operator-debts";
 import { cancelPaymentIntentForRelease } from "./release";
 import { queueFeeRefund, queueRefund, sendCommands } from "@/lib/payments/commands";
+import { recordAudit } from "@/lib/audit";
+import { systemContext, type RequestContext } from "@/lib/request-context";
 
 // Trip cancellation (row 9: P4-1, P4-8, P4-10). Two phases:
 //
@@ -69,6 +71,7 @@ type Settled =
 
 async function settleBooking(
   tx: Tx,
+  ctx: RequestContext,
   input: { operatorId: string; tripId: string; bookingId: string; reason: string | null },
 ): Promise<Settled> {
   const { operatorId, tripId, bookingId } = input;
@@ -144,6 +147,7 @@ async function settleBooking(
   const commandId =
     plan && booking.paymentIntentId
       ? await queueRefund(tx, {
+          ctx,
           operatorId,
           bookingId,
           paymentIntentId: booking.paymentIntentId,
@@ -159,6 +163,7 @@ async function settleBooking(
   const feeCommandId =
     commandId && exactFee && feeCents > 0
       ? await queueFeeRefund(tx, {
+          ctx,
           operatorId,
           bookingId,
           applicationFeeId: booking.applicationFeeId!,
@@ -199,6 +204,7 @@ export type TripCancelOutcome = {
  * Returns null when there was nothing left to settle.
  */
 export async function finishTripCancellation(
+  ctx: RequestContext,
   operatorId: string,
   tripId: string,
   reason: string | null,
@@ -219,7 +225,7 @@ export async function finishTripCancellation(
 
   const settled: Settled[] = [];
   for (const { bookingId } of rows.sort((a, b) => a.bookingId.localeCompare(b.bookingId))) {
-    settled.push(await db.transaction((tx) => settleBooking(tx, { operatorId, tripId, bookingId, reason })));
+    settled.push(await db.transaction((tx) => settleBooking(tx, ctx, { operatorId, tripId, bookingId, reason })));
   }
   const acted = settled.filter((s): s is Exclude<Settled, { kind: "none" }> => s.kind !== "none");
   if (acted.length === 0) return null;
@@ -262,14 +268,16 @@ export type CancelTripResult =
 /**
  * Cancels a trip: phase 1 closes sales, phase 2 settles its bookings. On a
  * trip that is already cancelled it finishes whatever phase 2 left undone,
- * and reports already_cancelled when nothing was.
+ * and reports already_cancelled when nothing was. Phase 1 records who
+ * cancelled it; each refund phase 2 queues is recorded by the outbox.
  */
 export async function cancelTrip(
+  ctx: RequestContext,
   operatorId: string,
   tripId: string,
   reason: string | null,
-  now: Date = new Date(),
 ): Promise<CancelTripResult> {
+  const now = ctx.now;
   const phase1 = await db.transaction(async (tx) => {
     const [trip] = await tx
       .select({ status: trips.status })
@@ -290,11 +298,20 @@ export async function cancelTrip(
       { cancelledAt: now, cancellationReason: reason },
       now,
     );
+    await recordAudit(tx, ctx, {
+      operatorId,
+      action: "trip.cancel",
+      targetTable: "trips",
+      targetId: tripId,
+      before: { status: trip.status },
+      after: { status: "cancelled" },
+      reason,
+    });
     return "cancelled_now" as const;
   });
   if (phase1 === "not_found") return { kind: "not_found" };
 
-  const outcome = await finishTripCancellation(operatorId, tripId, reason);
+  const outcome = await finishTripCancellation(ctx, operatorId, tripId, reason);
   if (!outcome) {
     if (phase1 === "was_cancelled") return { kind: "already_cancelled" };
     return {
@@ -314,6 +331,7 @@ export async function cancelTrip(
  * trips it finished.
  */
 export async function finishCancelledTrips(now: Date = new Date()): Promise<number> {
+  const ctx = systemContext("finish-cancelled-trips", now);
   const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const unsettled = await db
     .selectDistinct({ tripId: trips.id, operatorId: trips.operatorId, reason: trips.cancellationReason })
@@ -334,7 +352,7 @@ export async function finishCancelledTrips(now: Date = new Date()): Promise<numb
   let finished = 0;
   for (const t of unsettled) {
     try {
-      if (await finishTripCancellation(t.operatorId, t.tripId, t.reason)) finished++;
+      if (await finishTripCancellation(ctx, t.operatorId, t.tripId, t.reason)) finished++;
     } catch (err) {
       console.error(`Couldn't finish cancelling trip ${t.tripId}:`, err);
     }

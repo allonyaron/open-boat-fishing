@@ -34,7 +34,7 @@ in Vercel; EAS store submission is not done; SMS (Twilio) is not wired.
 A platform for party fishing boat operators. Two deployment models coexist:
 
 - **Single-deploy (enterprise/white-label):** Each operator gets their own Vercel + Neon Postgres deployment. One `operators` row per database. Set `OPERATOR_ID` env var — middleware short-circuits the DB lookup. Onboarding = fork repo + configure env vars + deploy (~2–3 hours).
-- **Centralized (platform mode):** One shared Vercel + Neon deployment. Multiple operators in the same database, all queries scoped by `operator_id`. Hostname → operator resolved via `domains` table in Edge middleware. New operators created via `/platform` (gated by `PLATFORM_SECRET`). Stripe Connect Destination Charges — each operator has their own connected account.
+- **Centralized (platform mode):** One shared Vercel + Neon deployment. Multiple operators in the same database, all queries scoped by `operator_id`. Hostname → operator resolved via `domains` table in Edge middleware. New operators created via `/platform` (named `platform_users` accounts; `PLATFORM_SECRET` creates the first one and turns the console on). Stripe Connect Destination Charges — each operator has their own connected account.
 
 See `docs/centralized-architecture.md` for architecture details and `docs/competitive-position.md` for market context.
 
@@ -116,7 +116,14 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 **Auth and token audiences**
 - Customer tokens (`aud:"customer"`) and mate tokens (`aud:"mate"`) are verified by separate functions (`verifyCustomerToken` / `verifyMateToken`). Never use one to verify the other.
 - `customers` and `staff` are separate tables with separate auth paths. Never query one as a fallback for the other.
-- Every auth endpoint (`/api/auth/*`, `/api/mate/auth`) must call `checkRateLimit()` as the first operation, before any DB access.
+- Every auth endpoint (`/api/auth/*`, `/api/mate/auth`, `/api/admin/auth/login`, `/api/platform/auth*`) must call `checkRateLimit()` as the first operation, before any DB access.
+- Admin and platform sessions are sealed with `ttl` = their cookie's `maxAge` and re-checked on every request by `requireAdmin` / `requirePlatform` (`makeSession`'s async `authorize`). Admin: `x-operator-id` present and equal to the session's operator, the `staff` row active, still an admin, with the sealed `session_version`. Platform: `PLATFORM_SECRET` set and its HMAC equal to the sealed one, the `platform_users` row active with the sealed `session_version`. Deactivating an account or setting its password or PIN bumps `session_version` in the same UPDATE. Mate tokens don't check `session_version` yet (the mate app must keep its offline manifest on a 401 first), so a PIN reset doesn't end a mate's session.
+- The platform console signs in with named `platform_users` accounts. `PLATFORM_SECRET` creates only the first one (`/api/platform/auth/setup`, while none exists); changing it signs every platform user out.
+
+**Actor and audit**
+- Routes get the acting principal from `requireAdmin` / `requirePlatform` as `ctx` (`lib/request-context.ts`: `{ principal, requestId, now }`); crons use `systemContext(job)`, Stripe event handlers `stripeContext(event.id)`.
+- Every command that changes money, seats or settings takes `ctx` and writes an `audit_log` row with `recordAudit` / `recordChange` (`lib/audit.ts`) in the transaction that makes the change, reading the row it changes inside that transaction. Passwords and PIN hashes are recorded only as changed.
+- The outbox records every money movement: each `queue*` takes `ctx`, writes a `<kind>.queue` audit row and puts `actor_kind` / `actor_id` in the Stripe metadata next to `command_id`.
 
 **Webhook integrity**
 - The Stripe webhook handler must call `stripe.webhooks.constructEvent()` with the raw (un-parsed) request body before reading any event data.

@@ -114,7 +114,12 @@ describe("POST /api/webhooks/stripe", () => {
       const evt = event(type, object);
       const res = await deliver(evt);
       expect(res.status).toBe(200);
-      expect(handler).toHaveBeenCalledWith(object);
+      // A handler that moves money also gets the event as its actor (row 12).
+      const args = vi.mocked(handler as (...a: unknown[]) => unknown).mock.calls.at(-1)!;
+      expect(args[0]).toEqual(object);
+      if (type !== "payment_intent.canceled") {
+        expect(args[1]).toMatchObject({ principal: { kind: "stripe", eventId: evt.id } });
+      }
       const row = await stored(evt.id);
       expect(row).toMatchObject({ type, outcome: "handled", operatorId: ctx.operatorId, attempts: 1 });
       expect(row.processedAt).not.toBeNull();

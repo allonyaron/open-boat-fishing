@@ -93,6 +93,7 @@ All in the **Production** environment. Anything marked "generate" should be crea
 | `CRON_SECRET`                        | generate — used by all three cron endpoints                                         |
 | `RESEND_API_KEY`                     | From your Resend account (production key)                                           |
 | `DEMO_MODE`                          | `true` — enables the banner + gates the nightly reset cron                          |
+| `PLATFORM_SECRET`                    | optional; generate. Turns on the platform console (`/platform`). It creates the first platform account once (Step 4); changing it signs every platform user out. Unset = console off. |
 
 > **Config vs Secret in Vercel:** `NEXT_PUBLIC_*` variables must be added as **Config** type (not Secret). Secrets are write-only and not exposed during build, so `NEXT_PUBLIC_` substitution silently produces `undefined`. If you accidentally add one as Secret, you must delete it and re-add it as Config.
 
@@ -174,6 +175,10 @@ DATABASE_URL="<neon connection string>" \
 | Trips           | ~4,200 | Materialized from schedules                                                            |
 | Domains         | 2     | `openboatfishing.com` + `www.openboatfishing.com`                                      |
 | Staff           | 1     | Demo admin — password printed once on first seed run                                   |
+
+**Platform console (only if `PLATFORM_SECRET` is set):** open `/platform`. While no platform account exists, it asks for
+the secret once, with your name, email and password, and creates your account. After that everyone signs in with their
+own email and password, and signed-in platform users add or deactivate the others.
 
 ---
 

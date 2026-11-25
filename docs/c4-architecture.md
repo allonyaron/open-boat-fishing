@@ -41,7 +41,7 @@ graph TD
 Two deployment models, same codebase (see `centralized-architecture.md` for the full breakdown):
 
 - **Single-deploy (enterprise/white-label):** one Vercel + Neon instance per operator. `OPERATOR_ID` env var short-circuits operator resolution.
-- **Centralized (platform mode):** one shared Vercel + Neon instance, many operators, hostname → `operator_id` resolved per-request via the `domains` table. New operators onboard through `/platform` (Platform Owner persona above), gated by `PLATFORM_SECRET`.
+- **Centralized (platform mode):** one shared Vercel + Neon instance, many operators, hostname → `operator_id` resolved per-request via the `domains` table. New operators onboard through `/platform` (Platform Owner persona above), signed in with named `platform_users` accounts; `PLATFORM_SECRET` creates the first one.
 
 ---
 

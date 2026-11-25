@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { changedFields, recordAudit } from "@/lib/audit";
 import { schedules, trips, products } from "@openboat/db";
 import { and, eq, gte, inArray } from "drizzle-orm";
 import { seatHoldingTicketCount } from "@/lib/tickets/queries";
@@ -35,7 +36,7 @@ export async function PATCH(
 ) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const { scheduleId } = params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -90,21 +91,7 @@ export async function PATCH(
     active ? datesInRange(startDate, endDate, daysOfWeek).filter((d) => d >= today) : [],
   );
 
-  const [updated] = await db
-    .update(schedules)
-    .set({
-      productId,
-      startDate,
-      endDate,
-      daysOfWeek,
-      departureTime,
-      returnTime,
-      capacity,
-      active,
-      updatedAt: new Date(),
-    })
-    .where(eq(schedules.id, scheduleId))
-    .returning();
+  const scheduleSet = { productId, startDate, endDate, daysOfWeek, departureTime, returnTime, capacity, active };
 
   // Every not-yet-departed trip currently on the calendar for this pattern,
   // with how many seats its tickets take (unpaid holds included: a customer
@@ -150,12 +137,33 @@ export async function PATCH(
     };
   });
 
-  if (toDeleteIds.length > 0) {
-    await db.delete(trips).where(inArray(trips.id, toDeleteIds));
-  }
-  if (newTripRows.length > 0) {
-    await db.insert(trips).values(newTripRows).onConflictDoNothing();
-  }
+  // The pattern, the trips it adds and removes, and who changed it, together.
+  // (Row 14 rebuilds the reconciliation itself under the schedule's lock.)
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(schedules)
+      .set({ ...scheduleSet, updatedAt: new Date() })
+      .where(and(eq(schedules.id, scheduleId), eq(schedules.operatorId, session.operatorId)))
+      .returning();
+    if (toDeleteIds.length > 0) {
+      await tx.delete(trips).where(and(inArray(trips.id, toDeleteIds), eq(trips.operatorId, session.operatorId)));
+    }
+    if (newTripRows.length > 0) {
+      await tx.insert(trips).values(newTripRows).onConflictDoNothing();
+    }
+    const changed = changedFields(existing, scheduleSet);
+    if (Object.keys(changed.after).length > 0 || toDeleteIds.length > 0 || newTripRows.length > 0) {
+      await recordAudit(tx, ctx, {
+        operatorId: session.operatorId,
+        action: "schedule.update",
+        targetTable: "schedules",
+        targetId: scheduleId,
+        before: changed.before,
+        after: { ...changed.after, tripsAdded: newTripRows.length, tripsRemoved: toDeleteIds.length },
+      });
+    }
+    return row;
+  });
 
   return NextResponse.json({
     ...updated,

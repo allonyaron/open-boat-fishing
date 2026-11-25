@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { requireAdmin } from "@/lib/session";
+import { recordChange } from "@/lib/audit";
 import { env } from "@/lib/env";
 import { db } from "@/lib/db";
 import { operators } from "@openboat/db";
@@ -9,7 +10,7 @@ import { eq } from "drizzle-orm";
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   // Verify the CSRF state before processing anything else.
   const state = req.nextUrl.searchParams.get("state");
@@ -79,14 +80,30 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(dest);
   }
 
-  await db
-    .update(operators)
-    .set({
-      stripeAccountId: accountId,
-      stripeOnboardingComplete: true,
-      updatedAt: new Date(),
-    })
-    .where(eq(operators.id, session.operatorId));
+  // Where the operator's sales are paid out, and who changed it (row 12).
+  await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select({
+        stripeAccountId: operators.stripeAccountId,
+        stripeOnboardingComplete: operators.stripeOnboardingComplete,
+      })
+      .from(operators)
+      .where(eq(operators.id, session.operatorId))
+      .for("update");
+    const set = { stripeAccountId: accountId, stripeOnboardingComplete: true };
+    await tx
+      .update(operators)
+      .set({ ...set, updatedAt: new Date() })
+      .where(eq(operators.id, session.operatorId));
+    await recordChange(tx, ctx, {
+      operatorId: session.operatorId,
+      action: "operator.connect_stripe",
+      targetTable: "operators",
+      targetId: session.operatorId,
+      before: before ?? {},
+      set,
+    });
+  });
 
   console.log(`Stripe connected for operator ${session.operatorId}: ${accountId}`);
 

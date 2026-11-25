@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { recordAudit } from "@/lib/audit";
 import { trips, vessels, products } from "@openboat/db";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { liveTicketCount } from "@/lib/tickets/queries";
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
@@ -98,20 +99,31 @@ export async function POST(req: NextRequest) {
   const overnight = isOvernight(depParsed, retParsed);
   const retDate = tripEndDate(departureDate, returnTime, overnight);
 
-  const [trip] = await db
-    .insert(trips)
-    .values({
+  // The trip and who added it, together (row 12).
+  const trip = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(trips)
+      .values({
+        operatorId: session.operatorId,
+        scheduleId: null,
+        productId,
+        vesselId: product.vesselId,
+        departureDate,
+        startTime: etWallClockToUTC(departureDate, departureTime),
+        endTime: etWallClockToUTC(retDate, returnTime),
+        capacity,
+        seatsRemaining: capacity,
+      })
+      .returning();
+    await recordAudit(tx, ctx, {
       operatorId: session.operatorId,
-      scheduleId: null,
-      productId,
-      vesselId: product.vesselId,
-      departureDate,
-      startTime: etWallClockToUTC(departureDate, departureTime),
-      endTime: etWallClockToUTC(retDate, returnTime),
-      capacity,
-      seatsRemaining: capacity,
-    })
-    .returning();
+      action: "trip.create",
+      targetTable: "trips",
+      targetId: row.id,
+      after: { productId, departureDate, departureTime, returnTime, capacity },
+    });
+    return row;
+  });
 
   return NextResponse.json(trip, { status: 201 });
 }

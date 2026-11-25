@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb, adminAuth, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { schedules, trips } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -25,9 +25,7 @@ afterAll(async () => {
 });
 
 function adminSession() {
-  return {
-    session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-  };
+  return adminAuth(ctx);
 }
 
 function unauthorized() {
@@ -129,5 +127,8 @@ describe("POST /api/admin/settings/schedules", () => {
     const materialized = await testDb.select().from(trips).where(eq(trips.scheduleId, body.id));
     expect(materialized).toHaveLength(7);
     expect(materialized.every((t) => t.capacity === 20 && t.seatsRemaining === 20)).toBe(true);
+
+    const [audit] = await auditRowsFor("schedules", body.id);
+    expect(audit).toMatchObject({ action: "schedule.create", actorId: ctx.staffId, after: { capacity: 20, tripsCreated: 7 } });
   });
 });

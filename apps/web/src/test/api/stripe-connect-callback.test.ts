@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "crypto";
-import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb, adminAuth, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { operators } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -26,9 +26,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  vi.mocked(requireAdmin).mockResolvedValue({
-    session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-  } as any);
+  vi.mocked(requireAdmin).mockResolvedValue(adminAuth(ctx) as any);
 });
 
 afterEach(() => {
@@ -113,6 +111,11 @@ describe("GET /api/stripe/connect/callback", () => {
     const [operator] = await testDb.select().from(operators).where(eq(operators.id, ctx.operatorId));
     expect(operator.stripeAccountId).toBe("acct_connected_123");
     expect(operator.stripeOnboardingComplete).toBe(true);
+
+    // Who changed where sales are paid out (row 12).
+    const audit = (await auditRowsFor("operators", ctx.operatorId)).filter((r) => r.action === "operator.connect_stripe").at(-1);
+    expect(audit).toMatchObject({ actorKind: "staff", actorId: ctx.staffId });
+    expect(audit!.after).toMatchObject({ stripeAccountId: "acct_connected_123" });
   });
 
   it("redirects to error when Stripe's token response is ok but missing stripe_user_id", async () => {

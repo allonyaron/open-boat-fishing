@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import type { RequestContext } from "@/lib/request-context";
 import { db } from "@/lib/db";
 import type { EventResult } from "@/lib/stripe-events/inbox";
 import { bookingLabel, usd } from "@/lib/stripe-events/notes";
@@ -25,7 +26,7 @@ export function takeBackNote(takeBack: TakeBack): string {
 // amount back from the operator; an inquiry takes no money and moves nothing.
 // Either way someone has to respond in Stripe, so the event is finished as
 // needs_review and shows on the Money page.
-export async function handleChargeDisputeCreated(dispute: Stripe.Dispute): Promise<EventResult> {
+export async function handleChargeDisputeCreated(dispute: Stripe.Dispute, ctx: RequestContext): Promise<EventResult> {
   const piId = paymentIntentOf(dispute);
   if (!piId) return { outcome: "ignored", note: `dispute ${dispute.id} has no payment intent` };
 
@@ -59,7 +60,7 @@ export async function handleChargeDisputeCreated(dispute: Stripe.Dispute): Promi
     };
   }
 
-  const opened = await openChargeback(dispute, payment);
+  const opened = await openChargeback(dispute, payment, ctx);
   if (opened.closed) {
     return { outcome: "handled", operatorId: payment.operatorId, note: `dispute ${dispute.id} had already closed` };
   }

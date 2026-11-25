@@ -6,7 +6,7 @@
 // payment_intent.succeeded; a lost dispute sends charge.dispute.closed and no
 // charge.refunded; a won one returns the amount but not the fee.
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, seedBooking, testDb, stripeTestCtx } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { disputes, operatorDebts, operators, payments, stripeCommands, tickets, trips, bookings } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -104,7 +104,7 @@ async function debtFor(disputeId: string) {
 
 describe("charge.dispute.created", () => {
   it("ignores a dispute with no payment_intent", async () => {
-    expect((await handleChargeDisputeCreated(dispute("du_none", null as any))).outcome).toBe("ignored");
+    expect((await handleChargeDisputeCreated(dispute("du_none", null as any), stripeTestCtx)).outcome).toBe("ignored");
   });
 
   it("ignores a dispute on another deployment's payment", async () => {
@@ -112,7 +112,7 @@ describe("charge.dispute.created", () => {
       id: "pi_unknown_dispute",
       transfer_data: { destination: "acct_elsewhere" },
     } as any);
-    expect((await handleChargeDisputeCreated(dispute("du_other", "pi_unknown_dispute"))).outcome).toBe("ignored");
+    expect((await handleChargeDisputeCreated(dispute("du_other", "pi_unknown_dispute"), stripeTestCtx)).outcome).toBe("ignored");
   });
 
   it("ignores a dispute whose booking reference is from another deployment on the same Stripe account", async () => {
@@ -121,19 +121,19 @@ describe("charge.dispute.created", () => {
       transfer_data: { destination: ACCOUNT },
       metadata: { bookingId: "0b9f2c4e-8a1d-4c3b-9e7f-5a6d2c1b0e9f" },
     } as any);
-    expect((await handleChargeDisputeCreated(dispute("du_preview", "pi_preview_dispute"))).outcome).toBe("ignored");
+    expect((await handleChargeDisputeCreated(dispute("du_preview", "pi_preview_dispute"), stripeTestCtx)).outcome).toBe("ignored");
   });
 
   it("throws to be retried when it arrives before the payment was recorded (P3-8)", async () => {
     await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_dispute_early" });
-    await expect(handleChargeDisputeCreated(dispute("du_early", "pi_dispute_early"))).rejects.toThrow(
+    await expect(handleChargeDisputeCreated(dispute("du_early", "pi_dispute_early"), stripeTestCtx)).rejects.toThrow(
       /before its payment was recorded/,
     );
   });
 
   it("disputes the tickets, keeps their fee held, and takes the amount back from the operator", async () => {
     const { bookingId, ticketId } = await seedPaid("pi_cb_open");
-    const result = await handleChargeDisputeCreated(dispute("du_open", "pi_cb_open"));
+    const result = await handleChargeDisputeCreated(dispute("du_open", "pi_cb_open"), stripeTestCtx);
 
     expect(result).toMatchObject({ outcome: "needs_review", operatorId: ctx.operatorId });
     expect(result.note).toMatch(/^Booking \w+: the customer disputed \$100\.00 \(fraudulent\)\. 1 ticket can't board/);
@@ -162,15 +162,15 @@ describe("charge.dispute.created", () => {
   it("takes back no more than is left of the transfer", async () => {
     const { bookingId } = await seedPaid("pi_cb_capped");
     vi.mocked(stripe.transfers.retrieve).mockResolvedValueOnce({ amount: 10000, amount_reversed: 4000 } as any);
-    await handleChargeDisputeCreated(dispute("du_capped", "pi_cb_capped"));
+    await handleChargeDisputeCreated(dispute("du_capped", "pi_cb_capped"), stripeTestCtx);
     const [cmd] = await commandsFor(bookingId);
     expect(cmd.amountCents).toBe(6000);
   });
 
   it("does nothing more on a redelivery", async () => {
     const { bookingId } = await seedPaid("pi_cb_again");
-    await handleChargeDisputeCreated(dispute("du_again", "pi_cb_again"));
-    const again = await handleChargeDisputeCreated(dispute("du_again", "pi_cb_again"));
+    await handleChargeDisputeCreated(dispute("du_again", "pi_cb_again"), stripeTestCtx);
+    const again = await handleChargeDisputeCreated(dispute("du_again", "pi_cb_again"), stripeTestCtx);
     expect(again.note).toMatch(/0 tickets can't board/);
     expect(await commandsFor(bookingId)).toHaveLength(1);
     expect(stripe.transfers.createReversal).toHaveBeenCalledTimes(1);
@@ -180,6 +180,7 @@ describe("charge.dispute.created", () => {
     const { bookingId, ticketId } = await seedPaid("pi_inquiry");
     const result = await handleChargeDisputeCreated(
       dispute("du_inquiry", "pi_inquiry", { status: "warning_needs_response" }),
+      stripeTestCtx,
     );
     expect(result.outcome).toBe("needs_review");
     expect(result.note).toMatch(/bank asked about \$100\.00.*No money has been taken yet/);
@@ -191,8 +192,8 @@ describe("charge.dispute.created", () => {
 describe("charge.dispute.funds_withdrawn", () => {
   it("opens the chargeback when an inquiry escalates", async () => {
     const { bookingId, ticketId } = await seedPaid("pi_escalate");
-    await handleChargeDisputeCreated(dispute("du_escalate", "pi_escalate", { status: "warning_needs_response" }));
-    const result = await handleChargeDisputeFundsWithdrawn(dispute("du_escalate", "pi_escalate"));
+    await handleChargeDisputeCreated(dispute("du_escalate", "pi_escalate", { status: "warning_needs_response" }), stripeTestCtx);
+    const result = await handleChargeDisputeFundsWithdrawn(dispute("du_escalate", "pi_escalate"), stripeTestCtx);
     expect(result.outcome).toBe("needs_review");
     expect(result.note).toMatch(/inquiry became a chargeback/);
     expect((await ticket(ticketId)).status).toBe("disputed");
@@ -201,8 +202,8 @@ describe("charge.dispute.funds_withdrawn", () => {
 
   it("adds nothing after created already opened the chargeback", async () => {
     const { bookingId } = await seedPaid("pi_withdrawn");
-    await handleChargeDisputeCreated(dispute("du_withdrawn", "pi_withdrawn"));
-    const result = await handleChargeDisputeFundsWithdrawn(dispute("du_withdrawn", "pi_withdrawn"));
+    await handleChargeDisputeCreated(dispute("du_withdrawn", "pi_withdrawn"), stripeTestCtx);
+    const result = await handleChargeDisputeFundsWithdrawn(dispute("du_withdrawn", "pi_withdrawn"), stripeTestCtx);
     expect(result.outcome).toBe("handled");
     expect(await commandsFor(bookingId)).toHaveLength(1);
   });
@@ -211,7 +212,7 @@ describe("charge.dispute.funds_withdrawn", () => {
 describe("charge.dispute.updated", () => {
   it("keeps the dispute's status current", async () => {
     await seedPaid("pi_updated");
-    await handleChargeDisputeCreated(dispute("du_updated", "pi_updated"));
+    await handleChargeDisputeCreated(dispute("du_updated", "pi_updated"), stripeTestCtx);
     await handleChargeDisputeUpdated(dispute("du_updated", "pi_updated", { status: "under_review" }));
     const [row] = await testDb.select().from(disputes).where(eq(disputes.id, "du_updated"));
     expect(row.status).toBe("under_review");
@@ -221,9 +222,10 @@ describe("charge.dispute.updated", () => {
 describe("charge.dispute.closed — won", () => {
   it("puts the tickets back and returns what was taken to the operator", async () => {
     const { bookingId, ticketId } = await seedPaid("pi_won");
-    await handleChargeDisputeCreated(dispute("du_won", "pi_won"));
+    await handleChargeDisputeCreated(dispute("du_won", "pi_won"), stripeTestCtx);
     const result = await handleChargeDisputeClosed(
       dispute("du_won", "pi_won", { status: "won", balance_transactions: [{ fee: 1500 }, { fee: 0 }] }),
+      stripeTestCtx,
     );
 
     expect(result.outcome).toBe("handled");
@@ -246,16 +248,16 @@ describe("charge.dispute.closed — won", () => {
       .update(tickets)
       .set({ status: "disputed", voided: true, feeStatus: "reversed" })
       .where(eq(tickets.id, ticketId));
-    await handleChargeDisputeClosed(dispute("du_won_legacy", "pi_won_legacy", { status: "won" }));
+    await handleChargeDisputeClosed(dispute("du_won_legacy", "pi_won_legacy", { status: "won" }), stripeTestCtx);
     expect(await ticket(ticketId)).toMatchObject({ status: "live", voided: false, feeStatus: "held" });
   });
 
   it("earns the fee if the trip sailed while the ticket was disputed", async () => {
     const { ticketId } = await seedPaid("pi_won_sailed");
-    await handleChargeDisputeCreated(dispute("du_won_sailed", "pi_won_sailed"));
+    await handleChargeDisputeCreated(dispute("du_won_sailed", "pi_won_sailed"), stripeTestCtx);
     await testDb.update(trips).set({ status: "sailed" }).where(eq(trips.id, ctx.tripId));
     try {
-      await handleChargeDisputeClosed(dispute("du_won_sailed", "pi_won_sailed", { status: "won" }));
+      await handleChargeDisputeClosed(dispute("du_won_sailed", "pi_won_sailed", { status: "won" }), stripeTestCtx);
       expect(await ticket(ticketId)).toMatchObject({ status: "live", feeStatus: "earned" });
     } finally {
       await testDb.update(trips).set({ status: "scheduled" }).where(eq(trips.id, ctx.tripId));
@@ -267,9 +269,9 @@ describe("charge.dispute.closed — won", () => {
     vi.mocked(stripe.transfers.createReversal).mockRejectedValueOnce(
       Object.assign(new Error("timeout"), { type: "StripeConnectionError" }),
     );
-    await handleChargeDisputeCreated(dispute("du_won_wait", "pi_won_wait"));
+    await handleChargeDisputeCreated(dispute("du_won_wait", "pi_won_wait"), stripeTestCtx);
     await expect(
-      handleChargeDisputeClosed(dispute("du_won_wait", "pi_won_wait", { status: "won" })),
+      handleChargeDisputeClosed(dispute("du_won_wait", "pi_won_wait", { status: "won" }), stripeTestCtx),
     ).rejects.toThrow(/hasn't reached Stripe/);
     expect(stripe.transfers.create).not.toHaveBeenCalled();
 
@@ -278,7 +280,7 @@ describe("charge.dispute.closed — won", () => {
     vi.mocked(stripe.transfers.listReversals).mockResolvedValueOnce({ data: [] } as any);
     const { sendCommand } = await import("@/lib/payments/commands");
     expect(await sendCommand(rev.id)).toBe("confirmed");
-    await handleChargeDisputeClosed(dispute("du_won_wait", "pi_won_wait", { status: "won" }));
+    await handleChargeDisputeClosed(dispute("du_won_wait", "pi_won_wait", { status: "won" }), stripeTestCtx);
     expect(stripe.transfers.create).toHaveBeenCalledTimes(1);
   });
 
@@ -287,8 +289,8 @@ describe("charge.dispute.closed — won", () => {
     vi.mocked(stripe.transfers.createReversal).mockRejectedValueOnce(
       Object.assign(new Error("insufficient funds"), { type: "StripeInvalidRequestError" }),
     );
-    await handleChargeDisputeCreated(dispute("du_won_failed", "pi_won_failed"));
-    const result = await handleChargeDisputeClosed(dispute("du_won_failed", "pi_won_failed", { status: "won" }));
+    await handleChargeDisputeCreated(dispute("du_won_failed", "pi_won_failed"), stripeTestCtx);
+    const result = await handleChargeDisputeClosed(dispute("du_won_failed", "pi_won_failed", { status: "won" }), stripeTestCtx);
     expect(result.note).toMatch(/nothing to return/);
     expect(stripe.transfers.create).not.toHaveBeenCalled();
     const [rev] = await commandsFor(bookingId);
@@ -298,8 +300,8 @@ describe("charge.dispute.closed — won", () => {
 
   it("can't be undone by a late created event", async () => {
     const { bookingId, ticketId } = await seedPaid("pi_won_late");
-    await handleChargeDisputeClosed(dispute("du_won_late", "pi_won_late", { status: "won" }));
-    await handleChargeDisputeCreated(dispute("du_won_late", "pi_won_late"));
+    await handleChargeDisputeClosed(dispute("du_won_late", "pi_won_late", { status: "won" }), stripeTestCtx);
+    await handleChargeDisputeCreated(dispute("du_won_late", "pi_won_late"), stripeTestCtx);
     expect((await ticket(ticketId)).status).toBe("live");
     expect(await commandsFor(bookingId)).toHaveLength(0);
     const [row] = await testDb.select().from(disputes).where(eq(disputes.id, "du_won_late"));
@@ -311,9 +313,10 @@ describe("charge.dispute.closed — lost", () => {
   it("refunds the tickets, cancels the booking, refunds the platform fee, and records the operator's debt", async () => {
     const { bookingId, ticketId } = await seedPaid("pi_lost");
     const [before] = await testDb.select({ seats: trips.seatsRemaining }).from(trips).where(eq(trips.id, ctx.tripId));
-    await handleChargeDisputeCreated(dispute("du_lost", "pi_lost"));
+    await handleChargeDisputeCreated(dispute("du_lost", "pi_lost"), stripeTestCtx);
     const result = await handleChargeDisputeClosed(
       dispute("du_lost", "pi_lost", { status: "lost", balance_transactions: [{ fee: 1500 }, { fee: 1500 }] }),
+      stripeTestCtx,
     );
 
     expect(result).toMatchObject({ outcome: "handled" });
@@ -329,7 +332,7 @@ describe("charge.dispute.closed — lost", () => {
     expect(await debtFor("du_lost")).toMatchObject({ amountCents: 3000, status: "owed" });
 
     // A redelivery changes nothing.
-    await handleChargeDisputeClosed(dispute("du_lost", "pi_lost", { status: "lost" }));
+    await handleChargeDisputeClosed(dispute("du_lost", "pi_lost", { status: "lost" }), stripeTestCtx);
     expect((await commandsFor(bookingId)).filter((c) => c.kind === "fee_refund")).toHaveLength(1);
     expect(stripe.applicationFees.createRefund).toHaveBeenCalledTimes(1);
   });
@@ -338,8 +341,8 @@ describe("charge.dispute.closed — lost", () => {
     await seedPaid("pi_lost_kept");
     // An earlier refund with reverse_transfer had already taken all of it.
     vi.mocked(stripe.transfers.retrieve).mockResolvedValue({ amount: 10000, amount_reversed: 10000 } as any);
-    await handleChargeDisputeCreated(dispute("du_lost_kept", "pi_lost_kept"));
-    const result = await handleChargeDisputeClosed(dispute("du_lost_kept", "pi_lost_kept", { status: "lost" }));
+    await handleChargeDisputeCreated(dispute("du_lost_kept", "pi_lost_kept"), stripeTestCtx);
+    const result = await handleChargeDisputeClosed(dispute("du_lost_kept", "pi_lost_kept", { status: "lost" }), stripeTestCtx);
     expect(result.outcome).toBe("needs_review");
     expect(result.note).toMatch(/never taken back/);
   });

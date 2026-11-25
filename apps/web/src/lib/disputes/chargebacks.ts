@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type Stripe from "stripe";
+import type { RequestContext } from "@/lib/request-context";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { disputes, operators, payments, stripeCommands, tickets } from "@openboat/db";
@@ -183,6 +184,7 @@ async function planTakeBack(
 export async function openChargeback(
   dispute: Stripe.Dispute,
   payment: DisputedPayment,
+  ctx: RequestContext,
 ): Promise<{ closed: true } | { closed: false; ticketsDisputed: number; takeBack: TakeBack }> {
   const plan = await planTakeBack(dispute, payment);
   const result = await db.transaction(async (tx) => {
@@ -198,6 +200,7 @@ export async function openChargeback(
     if ("existing" in plan) reversal = plan.existing;
     else if ("amountCents" in plan) {
       const id = await queueTransferReversal(tx, {
+        ctx,
         operatorId: payment.operatorId,
         bookingId: payment.bookingId,
         transferId: payment.stripeTransferId!,
@@ -229,7 +232,11 @@ export type WonOutcome = {
  * operator is sent back. Throws while the reversal is still waiting to reach
  * Stripe, so the event is retried once it has.
  */
-export async function closeChargebackWon(dispute: Stripe.Dispute, payment: DisputedPayment): Promise<WonOutcome> {
+export async function closeChargebackWon(
+  dispute: Stripe.Dispute,
+  payment: DisputedPayment,
+  ctx: RequestContext,
+): Promise<WonOutcome> {
   const moved = await db.transaction(async (tx) => {
     await recordDispute(tx, dispute, payment, { closed: true });
     const moved = await moveTickets(
@@ -267,6 +274,7 @@ export async function closeChargebackWon(dispute: Stripe.Dispute, payment: Dispu
 
   const amountCents = reversal.amountCents ?? 0;
   const commandId = await queueTransfer(db, {
+    ctx,
     operatorId: payment.operatorId,
     bookingId: payment.bookingId,
     destination: operator.stripeAccountId,
@@ -293,7 +301,11 @@ export type LostOutcome = {
  * on it holds a seat, and the platform fee on those tickets is refunded to
  * the operator. If nothing was taken back from the operator yet, it is now.
  */
-export async function closeChargebackLost(dispute: Stripe.Dispute, payment: DisputedPayment): Promise<LostOutcome> {
+export async function closeChargebackLost(
+  dispute: Stripe.Dispute,
+  payment: DisputedPayment,
+  ctx: RequestContext,
+): Promise<LostOutcome> {
   const scope = { operatorId: payment.operatorId, bookingId: payment.bookingId };
   const plan = await planTakeBack(dispute, payment);
   const { moved, bookingCancelled, feeCommandId, reversalId } = await db.transaction(async (tx) => {
@@ -307,6 +319,7 @@ export async function closeChargebackLost(dispute: Stripe.Dispute, payment: Disp
         ? plan.existing.id
         : "amountCents" in plan
           ? await queueTransferReversal(tx, {
+              ctx,
               operatorId: payment.operatorId,
               bookingId: payment.bookingId,
               transferId: payment.stripeTransferId!,
@@ -336,6 +349,7 @@ export async function closeChargebackLost(dispute: Stripe.Dispute, payment: Disp
       const feeCents = fees.reduce((sum, f) => sum + f.cents, 0);
       if (feeCents > 0) {
         feeCommandId = await queueFeeRefund(tx, {
+          ctx,
           operatorId: payment.operatorId,
           bookingId: payment.bookingId,
           applicationFeeId: payment.applicationFeeId,

@@ -2,6 +2,8 @@ import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bookings, stripeCommands, stripeEvents } from "@openboat/db";
 import { sendCommand, type SendResult } from "./commands";
+import { recordAudit } from "@/lib/audit";
+import type { RequestContext } from "@/lib/request-context";
 
 // What the Money page's "Needs attention" list shows (row 10, closes P3-9's
 // log-only "manual review"): refunds Stripe refused, refunds still waiting to
@@ -141,48 +143,74 @@ export async function listAttention(operatorId: string, now: Date = new Date()):
 
 export type RetryResult = SendResult | "not_found";
 
-/** Sends a failed or stuck refund again. A failed one goes back to pending first. */
-export async function retryCommand(operatorId: string, commandId: string): Promise<RetryResult> {
-  const [cmd] = await db
-    .select({ id: stripeCommands.id, status: stripeCommands.status })
-    .from(stripeCommands)
-    .where(and(eq(stripeCommands.id, commandId), eq(stripeCommands.operatorId, operatorId)));
-  if (!cmd) return "not_found";
-  if (cmd.status === "failed") {
-    await db
-      .update(stripeCommands)
-      .set({ status: "pending", claimedAt: null })
-      .where(and(eq(stripeCommands.id, commandId), eq(stripeCommands.status, "failed")));
-  }
+/**
+ * Sends a failed or stuck refund again, recording who asked. A failed one
+ * goes back to pending first.
+ */
+export async function retryCommand(ctx: RequestContext, operatorId: string, commandId: string): Promise<RetryResult> {
+  const found = await db.transaction(async (tx) => {
+    const [cmd] = await tx
+      .select({ id: stripeCommands.id, status: stripeCommands.status })
+      .from(stripeCommands)
+      .where(and(eq(stripeCommands.id, commandId), eq(stripeCommands.operatorId, operatorId)))
+      .for("update");
+    if (!cmd) return false;
+    if (cmd.status === "failed") {
+      await tx
+        .update(stripeCommands)
+        .set({ status: "pending", claimedAt: null })
+        .where(and(eq(stripeCommands.id, commandId), eq(stripeCommands.status, "failed")));
+    }
+    await recordAudit(tx, ctx, {
+      operatorId,
+      action: "stripe_command.retry",
+      targetTable: "stripe_commands",
+      targetId: commandId,
+      before: { status: cmd.status },
+      after: { status: cmd.status === "failed" ? "pending" : cmd.status },
+    });
+    return true;
+  });
+  if (!found) return "not_found";
   return sendCommand(commandId);
 }
 
 /** Marks an item dealt with, by this staff member. Returns false if it isn't this operator's. */
 export async function resolveAttention(
+  ctx: RequestContext,
   operatorId: string,
-  staffId: string,
   kind: "command" | "event",
   id: string,
 ): Promise<boolean> {
-  const now = new Date();
-  if (kind === "command") {
-    const rows = await db
-      .update(stripeCommands)
-      .set({ resolvedAt: now, resolvedBy: staffId })
-      .where(
-        and(
-          eq(stripeCommands.id, id),
-          eq(stripeCommands.operatorId, operatorId),
-          eq(stripeCommands.status, "failed"),
-        ),
-      )
-      .returning({ id: stripeCommands.id });
-    return rows.length > 0;
-  }
-  const rows = await db
-    .update(stripeEvents)
-    .set({ resolvedAt: now, resolvedBy: staffId })
-    .where(and(eq(stripeEvents.id, id), eq(stripeEvents.operatorId, operatorId)))
-    .returning({ id: stripeEvents.id });
-  return rows.length > 0;
+  const now = ctx.now;
+  const resolvedBy = ctx.principal.kind === "staff" ? ctx.principal.staffId : null;
+  return db.transaction(async (tx) => {
+    const rows =
+      kind === "command"
+        ? await tx
+            .update(stripeCommands)
+            .set({ resolvedAt: now, resolvedBy })
+            .where(
+              and(
+                eq(stripeCommands.id, id),
+                eq(stripeCommands.operatorId, operatorId),
+                eq(stripeCommands.status, "failed"),
+              ),
+            )
+            .returning({ id: stripeCommands.id })
+        : await tx
+            .update(stripeEvents)
+            .set({ resolvedAt: now, resolvedBy })
+            .where(and(eq(stripeEvents.id, id), eq(stripeEvents.operatorId, operatorId)))
+            .returning({ id: stripeEvents.id });
+    if (rows.length === 0) return false;
+    await recordAudit(tx, ctx, {
+      operatorId,
+      action: kind === "command" ? "stripe_command.resolve" : "stripe_event.resolve",
+      targetTable: kind === "command" ? "stripe_commands" : "stripe_events",
+      targetId: id,
+      after: { resolvedAt: now.toISOString() },
+    });
+    return true;
+  });
 }

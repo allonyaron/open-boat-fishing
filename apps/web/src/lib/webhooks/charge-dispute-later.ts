@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import type { RequestContext } from "@/lib/request-context";
 import { db } from "@/lib/db";
 import type { EventResult } from "@/lib/stripe-events/inbox";
 import { bookingLabel, usd } from "@/lib/stripe-events/notes";
@@ -22,14 +23,14 @@ import { takeBackNote } from "./charge-dispute-created";
  * platform. For a chargeback this follows created (which already acted); for
  * an inquiry that became a chargeback, this is where the chargeback opens.
  */
-export async function handleChargeDisputeFundsWithdrawn(dispute: Stripe.Dispute): Promise<EventResult> {
+export async function handleChargeDisputeFundsWithdrawn(dispute: Stripe.Dispute, ctx: RequestContext): Promise<EventResult> {
   const piId = paymentIntentOf(dispute);
   if (!piId) return { outcome: "ignored", note: `dispute ${dispute.id} has no payment intent` };
   const owner = await findDisputedPayment(piId);
   if (owner.kind !== "paid") return { outcome: "ignored", note: "not a paid booking here" };
 
   const { payment } = owner;
-  const opened = await openChargeback(dispute, payment);
+  const opened = await openChargeback(dispute, payment, ctx);
   if (opened.closed) return { outcome: "handled", operatorId: payment.operatorId, note: `dispute ${dispute.id} had already closed` };
   if (opened.ticketsDisputed === 0) return { outcome: "handled", operatorId: payment.operatorId };
   // Tickets moved only now: the dispute began as an inquiry.
@@ -61,7 +62,7 @@ export async function handleChargeDisputeUpdated(dispute: Stripe.Dispute): Promi
  * lost. A lost dispute never sends charge.refunded, so this is the only
  * signal that the customer kept the money.
  */
-export async function handleChargeDisputeClosed(dispute: Stripe.Dispute): Promise<EventResult> {
+export async function handleChargeDisputeClosed(dispute: Stripe.Dispute, ctx: RequestContext): Promise<EventResult> {
   const piId = paymentIntentOf(dispute);
   if (!piId) return { outcome: "ignored", note: `dispute ${dispute.id} has no payment intent` };
   const owner = await findDisputedPayment(piId);
@@ -75,7 +76,7 @@ export async function handleChargeDisputeClosed(dispute: Stripe.Dispute): Promis
   const label = await bookingLabel(payment.bookingId);
 
   if (dispute.status === "lost") {
-    const lost = await closeChargebackLost(dispute, payment);
+    const lost = await closeChargebackLost(dispute, payment, ctx);
     const n = lost.ticketsRefunded;
     const tickets = `${n} ticket${n === 1 ? " was" : "s were"} refunded${lost.bookingCancelled ? " and the booking cancelled" : ""}`;
     if (!lost.takenBack) {
@@ -89,7 +90,7 @@ export async function handleChargeDisputeClosed(dispute: Stripe.Dispute): Promis
   }
 
   if (dispute.status === "won" || isInquiry(dispute)) {
-    const won = await closeChargebackWon(dispute, payment);
+    const won = await closeChargebackWon(dispute, payment, ctx);
     const returned =
       won.returned.kind === "queued"
         ? `${usd(won.returned.amountCents)} returned to the boat (${won.returned.send})`

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, testDb, adminAuth, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { products, productPrices } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
@@ -25,9 +25,7 @@ afterAll(async () => {
 });
 
 function adminSession() {
-  return {
-    session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-  };
+  return adminAuth(ctx);
 }
 
 function unauthorized() {
@@ -189,6 +187,13 @@ describe("PATCH /api/admin/settings/products/[productId]", () => {
       .where(and(eq(productPrices.productId, ctx.productId), eq(productPrices.ticketType, "adult")));
     expect(rows).toHaveLength(1);
     expect(rows[0].priceCents).toBe(12000);
+
+    // A price change is recorded with the product (row 12).
+    const audit = (await auditRowsFor("products", ctx.productId)).filter((r) => r.action === "product.update").at(-1)!;
+    expect(audit.actorId).toBe(ctx.staffId);
+    expect(audit.after).toMatchObject({ displayName: "Renamed Trip" });
+    expect((audit.after as { prices: Record<string, number> }).prices.adult).toBe(12000);
+    expect((audit.before as { prices: Record<string, number> }).prices.adult).not.toBe(12000);
   });
 
   it("inserts a new ticketType price that did not previously exist", async () => {

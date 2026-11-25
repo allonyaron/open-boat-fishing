@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, seedBooking, testDb, stripeTestCtx } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { bookings, operators, operatorDebts, payments, tickets, trips, stripeCommands } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -77,6 +77,7 @@ describe("handleChargeRefunded", () => {
     } as any);
     const result = await handleChargeRefunded(
       charge({ id: "ch_partial", amount: 10000, amount_refunded: 5000, payment_intent: "pi_partial" }),
+      stripeTestCtx,
     );
 
     expect(result).toMatchObject({ outcome: "needs_review", operatorId: ctx.operatorId });
@@ -92,6 +93,7 @@ describe("handleChargeRefunded", () => {
     } as any);
     const result = await handleChargeRefunded(
       charge({ id: "ch_partial_ours", amount: 10000, amount_refunded: 5000, payment_intent: "pi_partial_ours" }),
+      stripeTestCtx,
     );
     expect(result).toMatchObject({ outcome: "handled" });
     const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
@@ -99,7 +101,7 @@ describe("handleChargeRefunded", () => {
   });
 
   it("ignores a charge with no payment_intent", async () => {
-    const result = await handleChargeRefunded(charge({ id: "ch_no_pi", payment_intent: null }));
+    const result = await handleChargeRefunded(charge({ id: "ch_no_pi", payment_intent: null }), stripeTestCtx);
     expect(result.outcome).toBe("ignored");
     expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
   });
@@ -107,6 +109,7 @@ describe("handleChargeRefunded", () => {
   it("ignores a refund of another deployment's payment", async () => {
     const result = await handleChargeRefunded(
       charge({ id: "ch_unknown_pi", payment_intent: "pi_unknown_xyz", transfer_data: { destination: "acct_elsewhere" } }),
+      stripeTestCtx,
     );
     expect(result.outcome).toBe("ignored");
     expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
@@ -115,6 +118,7 @@ describe("handleChargeRefunded", () => {
   it("needs review when the payment is this operator's but no booking has it", async () => {
     const result = await handleChargeRefunded(
       charge({ id: "ch_orphan", payment_intent: "pi_orphan", transfer_data: { destination: ACCT } }),
+      stripeTestCtx,
     );
     expect(result).toMatchObject({ outcome: "needs_review", operatorId: ctx.operatorId });
   });
@@ -122,7 +126,7 @@ describe("handleChargeRefunded", () => {
   it("throws to be retried when the refund arrives before the payment was recorded (P3-8)", async () => {
     await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_early_refund" });
     await expect(
-      handleChargeRefunded(charge({ id: "ch_early", payment_intent: "pi_early_refund" })),
+      handleChargeRefunded(charge({ id: "ch_early", payment_intent: "pi_early_refund" }), stripeTestCtx),
     ).rejects.toThrow(/before its payment was recorded/);
   });
 
@@ -137,7 +141,7 @@ describe("handleChargeRefunded", () => {
 
     // Refunded from the Stripe Dashboard: no refund carries the app's metadata.
     vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [{ id: "re_dash_full", metadata: {} }] } as any);
-    await handleChargeRefunded(charge({ id: "ch_full", amount: 10000, amount_refunded: 10000, payment_intent: "pi_full" }));
+    await handleChargeRefunded(charge({ id: "ch_full", amount: 10000, amount_refunded: 10000, payment_intent: "pi_full" }), stripeTestCtx);
 
     expect(stripe.applicationFees.createRefund).toHaveBeenCalledWith(
       "fee_full_1",
@@ -163,7 +167,7 @@ describe("handleChargeRefunded", () => {
     const bookingId = await seedPaidBooking("pi_dup_refund", "fee_dup_1");
     vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [{ id: "re_dash_dup", metadata: {} }] } as any);
 
-    await handleChargeRefunded(charge({ id: "ch_dup", amount: 10000, amount_refunded: 10000, payment_intent: "pi_dup_refund" }));
+    await handleChargeRefunded(charge({ id: "ch_dup", amount: 10000, amount_refunded: 10000, payment_intent: "pi_dup_refund" }), stripeTestCtx);
 
     expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
     const commands = await testDb.select().from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
@@ -192,6 +196,7 @@ describe("handleChargeRefunded", () => {
 
     const result = await handleChargeRefunded(
       charge({ id: "ch_ours_full", amount: 10000, amount_refunded: 10000, payment_intent: "pi_ours_full" }),
+      stripeTestCtx,
     );
     expect(result.outcome).toBe("handled");
     expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
@@ -201,7 +206,7 @@ describe("handleChargeRefunded", () => {
 
   it("skips the application fee reversal call when applicationFeeId is null", async () => {
     const bookingId = await seedPaidBooking("pi_no_fee", null);
-    await handleChargeRefunded(charge({ id: "ch_no_fee", amount: 10000, amount_refunded: 10000, payment_intent: "pi_no_fee" }));
+    await handleChargeRefunded(charge({ id: "ch_no_fee", amount: 10000, amount_refunded: 10000, payment_intent: "pi_no_fee" }), stripeTestCtx);
 
     expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
     const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
@@ -220,6 +225,7 @@ describe("handleChargeRefunded — taking outside refunds back from the operator
     } as any);
     const result = await handleChargeRefunded(
       charge({ id: "ch_dash_partial_rev", amount_refunded: 5000, payment_intent: "pi_dash_partial_rev", transfer: "tr_dash_partial_rev" }),
+      stripeTestCtx,
     );
 
     expect(result.outcome).toBe("needs_review");
@@ -242,12 +248,14 @@ describe("handleChargeRefunded — taking outside refunds back from the operator
     vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [first] } as any);
     await handleChargeRefunded(
       charge({ id: "ch_dash_two", amount_refunded: 5000, payment_intent: "pi_dash_two", transfer: "tr_dash_two" }),
+      stripeTestCtx,
     );
     // Stripe lists the newest refund first; the first one has been taken back.
     vi.mocked(stripe.transfers.retrieve).mockResolvedValueOnce({ amount: 10000, amount_reversed: 5000 } as any);
     vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [second, first] } as any);
     await handleChargeRefunded(
       charge({ id: "ch_dash_two", amount_refunded: 8000, payment_intent: "pi_dash_two", transfer: "tr_dash_two" }),
+      stripeTestCtx,
     );
 
     const cmds = await testDb.select().from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
@@ -265,6 +273,7 @@ describe("handleChargeRefunded — taking outside refunds back from the operator
     } as any);
     await handleChargeRefunded(
       charge({ id: "ch_dash_reversed", payment_intent: "pi_dash_reversed", transfer: "tr_dash_reversed" }),
+      stripeTestCtx,
     );
     const cmds = await testDb.select().from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
     expect(cmds.map((c) => c.kind)).toEqual(["fee_refund"]);
@@ -284,7 +293,7 @@ describe("handleChargeRefunded — taking outside refunds back from the operator
     vi.mocked(stripe.refunds.list).mockResolvedValueOnce({
       data: [{ id: "re_dash_debt", amount: 10000, status: "succeeded", transfer_reversal: null, metadata: {} }],
     } as any);
-    await handleChargeRefunded(charge({ id: "ch_dash_debt", payment_intent: "pi_dash_debt", transfer: "tr_dash_debt" }));
+    await handleChargeRefunded(charge({ id: "ch_dash_debt", payment_intent: "pi_dash_debt", transfer: "tr_dash_debt" }), stripeTestCtx);
 
     const cmds = await testDb.select().from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
     const reversal = cmds.find((c) => c.kind === "transfer_reversal")!;

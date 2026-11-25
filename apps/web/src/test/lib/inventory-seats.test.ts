@@ -4,7 +4,7 @@
 // recount sets seats_remaining to capacity minus the seats tickets hold.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "crypto";
-import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, seedBooking, testDb, adminAuth } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { bookingItems, capacityChanges, tickets, trips, vessels } from "@openboat/db";
 import { and, desc, eq } from "drizzle-orm";
@@ -208,7 +208,7 @@ describe("setTripCapacity", () => {
     const tripId = await seedTrip({ capacity: 10, seatsRemaining: 10 });
     await heldTicketOn(tripId);
     const result = await testDb.transaction((tx) =>
-      setTripCapacity(tx, { operatorId: ctx.operatorId, tripId, capacity: 14, staffId: ctx.staffId }),
+      setTripCapacity(tx, adminAuth(ctx).ctx, { operatorId: ctx.operatorId, tripId, capacity: 14 }),
     );
     expect(result).toMatchObject({ capacity: 14, seatsRemaining: 13, taken: 1, sold: 0 });
     expect(await seats(tripId)).toEqual({ capacity: 14, seatsRemaining: 13 });
@@ -228,7 +228,7 @@ describe("setTripCapacity", () => {
     await heldTicketOn(tripId);
     await heldTicketOn(tripId);
     await expect(
-      testDb.transaction((tx) => setTripCapacity(tx, { operatorId: ctx.operatorId, tripId, capacity: 1 })),
+      testDb.transaction((tx) => setTripCapacity(tx, adminAuth(ctx).ctx, { operatorId: ctx.operatorId, tripId, capacity: 1 })),
     ).rejects.toMatchObject({ code: "below_taken", httpStatus: 422 });
   });
 
@@ -237,10 +237,10 @@ describe("setTripCapacity", () => {
     await testDb.update(vessels).set({ certificateCapacity: 12 }).where(eq(vessels.id, ctx.vesselId));
     try {
       await expect(
-        testDb.transaction((tx) => setTripCapacity(tx, { operatorId: ctx.operatorId, tripId, capacity: 13 })),
+        testDb.transaction((tx) => setTripCapacity(tx, adminAuth(ctx).ctx, { operatorId: ctx.operatorId, tripId, capacity: 13 })),
       ).rejects.toMatchObject({ code: "over_certificate" });
       const ok = await testDb.transaction((tx) =>
-        setTripCapacity(tx, { operatorId: ctx.operatorId, tripId, capacity: 12 }),
+        setTripCapacity(tx, adminAuth(ctx).ctx, { operatorId: ctx.operatorId, tripId, capacity: 12 }),
       );
       expect(ok.capacity).toBe(12);
     } finally {
@@ -252,11 +252,11 @@ describe("setTripCapacity", () => {
     const tripId = await seedTrip({ capacity: 10, seatsRemaining: 10 });
     await expect(
       testDb.transaction((tx) =>
-        setTripCapacity(tx, { operatorId: ctx.operatorId, tripId, capacity: 11, requireCertificate: true }),
+        setTripCapacity(tx, adminAuth(ctx).ctx, { operatorId: ctx.operatorId, tripId, capacity: 11, requireCertificate: true }),
       ),
     ).rejects.toMatchObject({ code: "no_certificate" });
     const ok = await testDb.transaction((tx) =>
-      setTripCapacity(tx, { operatorId: ctx.operatorId, tripId, capacity: 11 }),
+      setTripCapacity(tx, adminAuth(ctx).ctx, { operatorId: ctx.operatorId, tripId, capacity: 11 }),
     );
     expect(ok.capacity).toBe(11);
   });
@@ -264,10 +264,10 @@ describe("setTripCapacity", () => {
   it("refuses on a cancelled trip and for another operator's trip", async () => {
     const tripId = await seedTrip({ capacity: 10, seatsRemaining: 10, status: "cancelled" });
     await expect(
-      testDb.transaction((tx) => setTripCapacity(tx, { operatorId: ctx.operatorId, tripId, capacity: 11 })),
+      testDb.transaction((tx) => setTripCapacity(tx, adminAuth(ctx).ctx, { operatorId: ctx.operatorId, tripId, capacity: 11 })),
     ).rejects.toMatchObject({ code: "cancelled", httpStatus: 409 });
     await expect(
-      testDb.transaction((tx) => setTripCapacity(tx, { operatorId: randomUUID(), tripId, capacity: 11 })),
+      testDb.transaction((tx) => setTripCapacity(tx, adminAuth(ctx).ctx, { operatorId: randomUUID(), tripId, capacity: 11 })),
     ).rejects.toMatchObject({ code: "not_found", httpStatus: 404 });
   });
 });
@@ -279,7 +279,7 @@ describe("ledger reconciliation", () => {
     await testDb.transaction(async (tx) => {
       await takeSeats(tx, { operatorId: ctx.operatorId, tripId, seats: 4, bookingId });
       await giveBackSeats(tx, { operatorId: ctx.operatorId, tripId, seats: 1, reason: "refund", bookingId });
-      await setTripCapacity(tx, { operatorId: ctx.operatorId, tripId, capacity: 12 });
+      await setTripCapacity(tx, adminAuth(ctx).ctx, { operatorId: ctx.operatorId, tripId, capacity: 12 });
     });
     const rows = await ledger(tripId);
     const sum = rows.reduce((s, r) => s + (r.delta ?? 0), 0);

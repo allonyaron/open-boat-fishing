@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
-import { seedOperator, cleanupOperator, seedBooking, testDb } from "../db-helpers";
+import { seedOperator, cleanupOperator, seedBooking, testDb, adminAuth, auditRowsFor } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
 import { stripeCommands, stripeEvents } from "@openboat/db";
 import { eq } from "drizzle-orm";
@@ -31,9 +31,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  vi.mocked(requireAdmin).mockResolvedValue({
-    session: { staffId: ctx.staffId, operatorId: ctx.operatorId, role: "admin" as const, name: "Admin" },
-  } as never);
+  vi.mocked(requireAdmin).mockResolvedValue(adminAuth(ctx) as never);
   vi.mocked(stripe.refunds.create).mockReset();
   vi.mocked(stripe.refunds.list).mockReset();
   vi.mocked(stripe.refunds.list).mockResolvedValue({ data: [] } as never);
@@ -122,6 +120,13 @@ describe("POST /api/admin/payments/attention/:kind/:id", () => {
     expect((await res.json()).result).toBe("sent");
     const [row] = await testDb.select().from(stripeCommands).where(eq(stripeCommands.id, id));
     expect(row).toMatchObject({ status: "sent", stripeObjectId: "re_retry_ok" });
+    const [audit] = await auditRowsFor("stripe_commands", id);
+    expect(audit).toMatchObject({
+      action: "stripe_command.retry",
+      actorId: ctx.staffId,
+      before: { status: "failed" },
+      after: { status: "pending" },
+    });
   });
 
   it("marks a refused refund and an event dealt with, recording who", async () => {
@@ -134,6 +139,8 @@ describe("POST /api/admin/payments/attention/:kind/:id", () => {
     const [e] = await testDb.select().from(stripeEvents).where(eq(stripeEvents.id, evt));
     expect(c.resolvedBy).toBe(ctx.staffId);
     expect(e.resolvedBy).toBe(ctx.staffId);
+    expect((await auditRowsFor("stripe_commands", cmd))[0]).toMatchObject({ action: "stripe_command.resolve", actorId: ctx.staffId });
+    expect((await auditRowsFor("stripe_events", evt))[0]).toMatchObject({ action: "stripe_event.resolve", actorId: ctx.staffId });
     const ids = (await list()).map((i) => i.id);
     expect(ids).not.toContain(cmd);
     expect(ids).not.toContain(evt);

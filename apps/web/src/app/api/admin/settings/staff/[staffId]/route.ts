@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { recordChange } from "@/lib/audit";
 import { staff, vessels } from "@openboat/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { hash } from "bcryptjs";
 
 export async function PATCH(
@@ -11,7 +12,7 @@ export async function PATCH(
 ) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const { staffId } = params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -59,19 +60,59 @@ export async function PATCH(
     patch.pinHash = await hash(pin, 12);
   }
 
-  const [updated] = await db
-    .update(staff)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .set(patch as any)
-    .where(and(eq(staff.id, staffId), eq(staff.operatorId, session.operatorId)))
-    .returning({
-      id: staff.id,
-      name: staff.name,
-      email: staff.email,
-      role: staff.role,
-      vesselId: staff.vesselId,
-      active: staff.active,
+  // A deactivation or a new password or PIN ends the account's sessions
+  // (row 12, P5-1): the version goes up in the same UPDATE, and only when the
+  // account was active or a credential is actually set.
+  const updated = await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select({
+        name: staff.name,
+        active: staff.active,
+        vesselId: staff.vesselId,
+        passwordHash: staff.passwordHash,
+        pinHash: staff.pinHash,
+      })
+      .from(staff)
+      .where(and(eq(staff.id, staffId), eq(staff.operatorId, session.operatorId)))
+      .for("update");
+    if (!before) return null;
+    const endsSessions =
+      (patch.active === false && before.active) || "passwordHash" in patch || "pinHash" in patch;
+    await recordChange(tx, ctx, {
+      operatorId: session.operatorId,
+      action: "staff.update",
+      targetTable: "staff",
+      targetId: staffId,
+      before,
+      set: patch,
     });
+    if (endsSessions) patch.sessionVersion = sql`${staff.sessionVersion} + 1`;
 
-  return NextResponse.json(updated);
+    const [row] = await tx
+      .update(staff)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .set(patch as any)
+      .where(and(eq(staff.id, staffId), eq(staff.operatorId, session.operatorId)))
+      .returning({
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        role: staff.role,
+        vesselId: staff.vesselId,
+        active: staff.active,
+        sessionVersion: staff.sessionVersion,
+      });
+    return row;
+  });
+  if (!updated) return NextResponse.json({ error: "Staff not found" }, { status: 404 });
+
+  // An admin who sets their own password stays signed in on this browser;
+  // their other sessions end.
+  const { sessionVersion, ...result } = updated;
+  if (staffId === session.staffId && sessionVersion !== session.sessionVersion) {
+    session.sessionVersion = sessionVersion;
+    await session.save();
+  }
+
+  return NextResponse.json(result);
 }

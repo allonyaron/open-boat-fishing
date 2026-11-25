@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import { NextRequest, NextResponse } from "next/server";
 import { seedOperator, cleanupOperator, testDb } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { operators, domains, staff } from "@openboat/db";
+import { operators, domains, staff, auditLog } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
@@ -13,6 +13,7 @@ vi.mock("@/lib/platform-session", () => ({
 import { requirePlatform } from "@/lib/platform-session";
 
 let ctx: SeedResult;
+const PLATFORM_USER = randomUUID();
 const createdOperatorIds: string[] = [];
 
 beforeAll(async () => {
@@ -31,7 +32,10 @@ function unauthorized() {
 }
 
 beforeEach(() => {
-  vi.mocked(requirePlatform).mockResolvedValue({ session: { authenticated: true } } as any);
+  vi.mocked(requirePlatform).mockResolvedValue({
+    session: { platformUserId: PLATFORM_USER, sessionVersion: 0, secretTag: "t" },
+    ctx: { principal: { kind: "platform", platformUserId: PLATFORM_USER }, requestId: "test-request", now: new Date() },
+  } as any);
 });
 
 function getReq() {
@@ -136,5 +140,16 @@ describe("POST /api/platform/operators", () => {
     expect(admin.email).toBe(body.adminEmail.toLowerCase());
     expect(admin.role).toBe("admin");
     expect(admin.passwordHash).not.toBe(respBody.tempPassword);
+
+    // Who created it (row 12).
+    const [audit] = await testDb.select().from(auditLog).where(eq(auditLog.operatorId, respBody.operatorId));
+    expect(audit).toMatchObject({
+      action: "operator.create",
+      actorKind: "platform",
+      actorId: PLATFORM_USER,
+      targetTable: "operators",
+      targetId: respBody.operatorId,
+    });
+    expect(audit.after).toMatchObject({ domain: body.domain, adminEmail: body.adminEmail.toLowerCase() });
   });
 });

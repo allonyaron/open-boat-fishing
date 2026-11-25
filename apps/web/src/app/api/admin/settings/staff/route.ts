@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { createdFields, recordAudit } from "@/lib/audit";
 import { staff, vessels } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
 import { hash } from "bcryptjs";
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return auth;
-  const { session } = auth;
+  const { session, ctx } = auth;
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
@@ -69,24 +70,35 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const [row] = await db
-    .insert(staff)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .values(values as any)
-    .returning({
-      id: staff.id,
-      name: staff.name,
-      email: staff.email,
-      role: staff.role,
-      vesselId: staff.vesselId,
-      active: staff.active,
-      createdAt: staff.createdAt,
-    })
-    .catch((err: Error) => {
-      if (err.message.includes("unique"))
-        throw Object.assign(new Error("Email already exists"), { code: "CONFLICT" });
-      throw err;
+  const row = await db.transaction(async (tx) => {
+    const [member] = await tx
+      .insert(staff)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .values(values as any)
+      .returning({
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        role: staff.role,
+        vesselId: staff.vesselId,
+        active: staff.active,
+        createdAt: staff.createdAt,
+      })
+      .catch((err: Error) => {
+        if (err.message.includes("unique"))
+          throw Object.assign(new Error("Email already exists"), { code: "CONFLICT" });
+        throw err;
+      });
+    const { operatorId: _op, ...fields } = values;
+    await recordAudit(tx, ctx, {
+      operatorId: session.operatorId,
+      action: "staff.create",
+      targetTable: "staff",
+      targetId: member.id,
+      after: createdFields(fields),
     });
+    return member;
+  });
 
   return NextResponse.json(row, { status: 201 });
 }
