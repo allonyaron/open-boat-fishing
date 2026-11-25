@@ -90,7 +90,9 @@ New test: **"pays with a test card and gets confirmed tickets"**.
   - card `4242 4242 4242 4242`, any future expiry, any CVC, ZIP if shown;
   - click **Pay**.
 - **Assert:**
-  1. The page lands on `/booking/delivery?…&redirect_status=succeeded`.
+  1. The page lands on `/booking/confirmation?code=…&k=…` (Stripe returns to `?code=…&payment_intent=…&
+     payment_intent_client_secret=…`; the page checks the secret with Stripe and redirects to the booking's
+     key URL, row 15), then shows "SEATS CONFIRMED" once the webhook has confirmed the booking.
   2. Poll the e2e DB directly (the `postgres` package, `DATABASE_URL` from env, timeout about 30s) until the
      booking is `confirmed`. Then check that ticket count equals seats bought and that the fee row is
      `held`. Don't poll `GET /api/bookings?email=&code=`: it's rate-limited, and the global-setup already
@@ -99,7 +101,8 @@ New test: **"pays with a test card and gets confirmed tickets"**.
      - `transfer_data.destination` is the connected account;
      - `application_fee_amount` is `150 × tickets` (CLAUDE.md invariants);
      - `payment_method_types` equals `[...ALLOWED_PAYMENT_METHOD_TYPES]` (`["card"]`).
-  4. `/boarding/{bookingId}` shows one `QR code for ticket …` image per ticket.
+  4. `/boarding/{bookingId}?k=…` (the key from the confirmation URL) shows one `QR code for ticket …`
+     image per ticket; without `k` it shows "OPEN THEM FROM YOUR EMAIL."
 - **Also cover a decline:** card `4000 0000 0000 0002` shows the error inline, stays on `/checkout`, and
   leaves the booking `pending`. Restoring the seats is the expiry cron's job, which is already unit-tested.
 

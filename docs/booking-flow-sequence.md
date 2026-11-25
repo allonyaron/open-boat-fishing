@@ -48,7 +48,7 @@ sequenceDiagram
 
     UI->>C: Render Stripe Payment Element
     C->>S: Enter card, confirm payment
-    S-->>C: Redirect to /booking/delivery
+    S-->>C: Redirect to /booking/confirmation (PI id + client secret → booking key URL)
 
     Note over C,N: PAYMENT CONFIRMATION - async webhook
     S->>API: POST /api/webhooks/stripe (payment_intent.succeeded)

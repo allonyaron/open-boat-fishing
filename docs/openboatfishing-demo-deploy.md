@@ -188,7 +188,7 @@ Visit the site and walk through these checks.
 - [ ] Pick a trip, add 2 tickets, go to checkout
 - [ ] Pay with test card `4242 4242 4242 4242`, any future expiry, any CVC, any ZIP
 - [ ] Land on delivery/confirmation page
-- [ ] Boarding pass at `/boarding/<bookingId>` renders with QR code
+- [ ] Boarding pass at `/boarding/<bookingId>?k=<key>` (the confirmation email's link) renders with QR code; without `k` it shows "open them from your email"
 
 **Webhook check (in Stripe dashboard → Developers → Webhooks):**
 

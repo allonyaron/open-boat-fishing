@@ -104,8 +104,9 @@ In suggested order. T1 is the cheapest win and can go first.
 
 These methods send the customer to another site and back. Before enabling any of them:
 
-- **Fix CODE_REVIEW P8-1.** The delivery and confirmation pages currently trust `?redirect_status=succeeded`
-  from the URL. Redirect methods make that path the norm.
+- ~~**Fix CODE_REVIEW P8-1.**~~ Done in row 15: the confirmation page no longer reads `redirect_status`; a
+  return opens it only with the PaymentIntent's client secret, and "paid" is the booking's webhook-set
+  status. A pending booking shows processing or "didn't go through" from the PI's status.
 - **Fix CODE_REVIEW P8-8.** A failed or abandoned redirect lands on a "processing" screen that never ends.
 - **Mobile:**
   - Pass `returnURL: "openboatfishing://stripe-redirect"` to `initPaymentSheet`. The app's scheme is

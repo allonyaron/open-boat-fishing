@@ -94,7 +94,7 @@ After the DB commit, the API calls Stripe to create a PaymentIntent.
 
 - `UI->>C: Render Stripe Payment Element` — The UI renders Stripe's hosted card form (loaded directly from Stripe's servers into the page).
 - `C->>S: Enter card, confirm payment` — The customer submits their card **directly to Stripe** — the card number never touches the app's servers.
-- `S-->>C: Redirect to /booking/delivery` — Stripe redirects the browser to the delivery page to show next steps. *(dotted — reply)*
+- `S-->>C: Redirect to /booking/confirmation` — Stripe redirects the browser to the confirmation page with the PaymentIntent's id and client secret; the page checks them with Stripe and moves to the booking's key URL. *(dotted — reply)*
 
 Note that at this point the browser thinks it's done, but the booking is **not yet confirmed**. Confirmation happens asynchronously in the next section.
 
