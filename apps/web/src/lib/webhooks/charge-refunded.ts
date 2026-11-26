@@ -105,7 +105,7 @@ export async function handleChargeRefunded(
     return {
       outcome: "needs_review",
       operatorId: payment.operatorId,
-      note: `${await bookingLabel(payment.bookingId)}: ${usd(charge.amount_refunded)} of ${usd(charge.amount)} was refunded in the Stripe Dashboard, so the app can't tell which tickets it covers. Their tickets can still board. Refund single tickets from the passenger list instead.`,
+      note: `${await bookingLabel(payment.bookingId)}: ${usd(charge.amount_refunded)} of ${usd(charge.amount)} was refunded in the Stripe Dashboard, so the app can't tell which tickets it covers. Their tickets can still board. Don't refund this payment again in the app: the customer already has that money back. Next time, refund single tickets from the passenger list.`,
     };
   }
 
