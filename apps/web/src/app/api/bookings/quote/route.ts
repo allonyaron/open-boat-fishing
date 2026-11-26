@@ -59,6 +59,9 @@ export async function POST(req: NextRequest) {
       discountCents: priced.discountCents,
       totalCents: priced.totalCents,
       ticketCount: priced.ticketCount,
+      // The cancellation terms of this purchase, so the mobile cart says the
+      // same window as the web (operators.cancel_window_hrs).
+      cancelWindowHrs: operator.cancelWindowHrs,
     });
   } catch (err: unknown) {
     const status = (err as { httpStatus?: number }).httpStatus;

@@ -16,7 +16,7 @@ import {
   saveHold,
 } from "@/lib/checkout/stored-hold";
 import posthog from "posthog-js";
-import { type Quote, dollars } from "@openboat/utils";
+import { type Quote, dollars, freeCancellationLine } from "@openboat/utils";
 import type { EnrichedCartItem } from "@/components/BookingCalendar";
 import { toCartItem } from "@/components/BookingCalendar/useCart";
 import type { WebCartLine } from "@/lib/cart/store";
@@ -246,12 +246,15 @@ export function CheckoutForm({
   quote,
   demoMode = false,
   stripeAccountId = null,
+  cancelWindowHrs = null,
 }: {
   lines: WebCartLine[];
   quote: QuoteState & { refresh: () => void };
   demoMode?: boolean;
   /** The Stripe account this page loaded Stripe.js on (row 32). */
   stripeAccountId?: string | null;
+  /** The operator's cancellation window (operators.cancel_window_hrs). */
+  cancelWindowHrs?: number | null;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -680,7 +683,7 @@ export function CheckoutForm({
       <div
         style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14, fontFamily: "var(--font-ibm-plex-mono)", fontSize: 11, letterSpacing: ".06em", color: "#41565f" }}
       >
-        <span>FREE CANCELLATION TO 24H BEFORE SAILING</span>
+        {cancelWindowHrs !== null && <span>{freeCancellationLine(cancelWindowHrs)}</span>}
         <span>WEATHER CANCELLATION = AUTOMATIC REFUND</span>
         <span>SECURED BY STRIPE</span>
       </div>

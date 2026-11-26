@@ -7,6 +7,7 @@ import { and, eq, ne, desc, gte, lte } from "drizzle-orm";
 import Image from "next/image";
 import Link from "next/link";
 import { fmtTimeET } from "@/lib/format";
+import { freeCancellationLine } from "@openboat/utils";
 import { SailingsSection } from "@/components/SailingsSection";
 import type { FormattedSailing } from "@/components/SailingsSection";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -234,8 +235,9 @@ export default async function HomePage() {
         className="bg-hull font-plex-mono"
         style={{ padding: "9px 16px", color: "#c9d6dd", fontSize: 11, letterSpacing: ".05em", lineHeight: 1.7 }}
       >
-        <span className="lg:hidden">FREE CANCELLATION TO 24H · RODS &amp; BAIT ABOARD<br />WEATHER REFUNDS AUTOMATIC</span>
-        <span className="hidden lg:inline">FREE CANCELLATION TO 24H · RODS &amp; BAIT ABOARD · WEATHER REFUNDS AUTOMATIC</span>
+        {/* The window is the operator's setting, said as every page says it. */}
+        <span className="lg:hidden">{freeCancellationLine(operator.cancelWindowHrs)}<br />RODS &amp; BAIT ABOARD · WEATHER REFUNDS AUTOMATIC</span>
+        <span className="hidden lg:inline">{freeCancellationLine(operator.cancelWindowHrs)} · RODS &amp; BAIT ABOARD · WEATHER REFUNDS AUTOMATIC</span>
       </div>
 
       {/* ── Sailings this week ─────────────────────────────────── */}

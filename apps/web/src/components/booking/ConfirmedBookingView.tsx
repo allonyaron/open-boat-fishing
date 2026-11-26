@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { freeCancellationSentence } from "@openboat/utils";
 import { BookingNav } from "@/components/BookingCalendar";
 import { ClearPendingPayment } from "@/components/ClearPendingPayment";
 import { QrSvg } from "./QrSvg";
@@ -12,12 +13,15 @@ export function ConfirmedBookingView({
   dockAddress,
   phone,
   dockMapsUrl,
+  cancelWindowHrs,
   booking,
 }: {
   operatorName: string;
   dockAddress: string | null;
   phone: string | null;
   dockMapsUrl: string | null;
+  /** The operator's cancellation window (operators.cancel_window_hrs). */
+  cancelWindowHrs: number;
   booking: ConfirmedBooking;
 }) {
   const icsUrl = `/api/bookings/confirmation/${booking.confirmationCode}/calendar`;
@@ -176,7 +180,7 @@ export function ConfirmedBookingView({
       >
         <div className="max-w-[760px] mx-auto flex flex-wrap gap-[10px_26px] justify-between">
           <span>
-            Cancel free until 24h before sailing.
+            {freeCancellationSentence(cancelWindowHrs)}
             {phone && <> Call {phone}</>}
           </span>
           {dockAddress && <span>{dockAddress}</span>}

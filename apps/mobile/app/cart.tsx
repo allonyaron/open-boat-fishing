@@ -1,7 +1,7 @@
 import React from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
-import { dollars, lineFares, seatsInLine, totalSeats as countSeats } from "@openboat/utils";
+import { dollars, freeCancellationLine, lineFares, seatsInLine, totalSeats as countSeats } from "@openboat/utils";
 import { color, font, ls, space, tracking } from "@/constants/nativeTokens";
 import { useAppCart } from "@/lib/cart-store";
 import { shownQuote, useQuote } from "@/lib/quote";
@@ -101,7 +101,11 @@ export default function CartScreen() {
         >
           <Text style={s.payBtnText}>CONTINUE TO PAYMENT</Text>
         </TouchableOpacity>
-        <Text style={s.trustLine}>FREE CANCELLATION TO 24H · WEATHER REFUNDS AUTOMATIC</Text>
+        {/* The operator's cancellation window comes with the quote, so it matches the web. */}
+        {shown?.cancelWindowHrs !== undefined && (
+          <Text style={s.trustLine}>{freeCancellationLine(shown.cancelWindowHrs)}</Text>
+        )}
+        <Text style={s.trustLine}>WEATHER REFUNDS AUTOMATIC</Text>
         <Text style={s.trustLine}>NO ACCOUNT NEEDED</Text>
       </View>
     </SafeAreaView>

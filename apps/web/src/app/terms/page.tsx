@@ -1,3 +1,4 @@
+import { cancellationTerms } from "@openboat/utils";
 import { getOperatorRecord } from "@/lib/operator";
 
 export default async function TermsPage() {
@@ -53,9 +54,10 @@ export default async function TermsPage() {
               2. Cancellations &amp; Refunds
             </h2>
             <p className="text-muted mb-2">
-              Customer cancellations must be requested at least 48 hours before the scheduled
-              departure to receive a full refund. Cancellations inside 48 hours are not eligible for
-              a refund.
+              {/* The window is the operator's setting (admin Settings), the same one every page shows. */}
+              {operator
+                ? cancellationTerms(operator.cancelWindowHrs)
+                : "Ask the operator about cancelling before the scheduled departure."}
             </p>
             <p className="text-muted">
               In the event of a trip cancellation due to weather, mechanical issues, or other

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import posthog from "posthog-js";
+import { freeCancellationLine } from "@openboat/utils";
 import { BookingNav } from "./BookingNav";
 import { CartRail } from "./CartRail";
 import { DayGroup } from "./DayGroup";
@@ -47,6 +48,7 @@ export function BookingCalendar({
   phone,
   dockAddress,
   termsUrl,
+  cancelWindowHrs,
   initialDate,
   initialTripId,
 }: {
@@ -56,6 +58,8 @@ export function BookingCalendar({
   phone: string | null;
   dockAddress: string | null;
   termsUrl: string | null;
+  /** The operator's cancellation window (operators.cancel_window_hrs). */
+  cancelWindowHrs: number;
   initialDate?: string;
   initialTripId?: string;
 }) {
@@ -350,7 +354,7 @@ export function BookingCalendar({
             )}
           </div>
 
-          <BookingFooter className="hidden lg:flex" />
+          <BookingFooter className="hidden lg:flex" cancelWindowHrs={cancelWindowHrs} />
         </div>
 
         {/* Right: cart rail */}
@@ -362,6 +366,7 @@ export function BookingCalendar({
           onRemove={handleRemove}
           onCheckout={goToCheckout}
           onOpenDay={openDayFromCart}
+          cancelWindowHrs={cancelWindowHrs}
         />
       </div>
 
@@ -373,12 +378,12 @@ export function BookingCalendar({
         onRemove={handleRemove}
       />
 
-      <BookingFooter className="flex lg:hidden" />
+      <BookingFooter className="flex lg:hidden" cancelWindowHrs={cancelWindowHrs} />
     </div>
   );
 }
 
-function BookingFooter({ className }: { className: string }) {
+function BookingFooter({ className, cancelWindowHrs }: { className: string; cancelWindowHrs: number }) {
   return (
     <div
       className={`hull bg-hull font-plex-mono text-[13px] tracking-[.04em] ${className}`}
@@ -391,7 +396,7 @@ function BookingFooter({ className }: { className: string }) {
         justifyContent: "space-between",
       }}
     >
-      <span>FREE CANCELLATION TO 24H · RODS &amp; BAIT ABOARD · WEATHER REFUNDS AUTOMATIC</span>
+      <span>{freeCancellationLine(cancelWindowHrs)} · RODS &amp; BAIT ABOARD · WEATHER REFUNDS AUTOMATIC</span>
       <a href="/" style={{ color: "#ffffff", textDecoration: "none" }}>
         ← BACK TO HOME
       </a>

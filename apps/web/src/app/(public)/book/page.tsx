@@ -47,6 +47,7 @@ export default async function BookPage({
       phone={operator.phone}
       dockAddress={operator.dockAddress}
       termsUrl={operator.termsUrl}
+      cancelWindowHrs={operator.cancelWindowHrs}
       initialDate={initialDate}
       initialTripId={trip}
     />

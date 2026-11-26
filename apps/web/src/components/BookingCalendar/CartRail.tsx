@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fmtTimeET } from "@/lib/format";
-import { dollars } from "@openboat/utils";
+import { dollars, freeCancellationLine } from "@openboat/utils";
 import { fmtDayLong, fmtDayShort, vesselShort } from "./format";
 import type { QuoteView } from "@/lib/cart/quote-view";
 import type { EnrichedCartItem } from "./types";
@@ -19,6 +19,7 @@ export function CartRail({
   onRemove,
   onCheckout,
   onOpenDay,
+  cancelWindowHrs,
 }: {
   cartItems: EnrichedCartItem[];
   /** True once the stored cart has been read, so restoring it isn't taken for adds. */
@@ -28,6 +29,8 @@ export function CartRail({
   onRemove: (tripId: string) => void;
   onCheckout: () => void;
   onOpenDay: (date: string, tripId: string) => void;
+  /** The operator's cancellation window (operators.cancel_window_hrs). */
+  cancelWindowHrs: number;
 }) {
   const hasSeats = totalSeats > 0;
   const listRef = useRef<HTMLUListElement>(null);
@@ -230,7 +233,7 @@ export function CartRail({
           <span>{hasSeats ? quote.total : dollars(0)} →</span>
         </button>
         <div className="bk-rail-trust font-plex-mono text-[11px] tracking-[.1em] mt-3 text-center" style={{ color: "#5b6f79", textWrap: "balance" }}>
-          FREE CANCELLATION · WEATHER REFUNDS · NO ACCOUNT NEEDED
+          {freeCancellationLine(cancelWindowHrs)} · WEATHER REFUNDS · NO ACCOUNT NEEDED
         </div>
       </div>
     </aside>

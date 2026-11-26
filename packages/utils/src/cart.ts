@@ -207,4 +207,10 @@ export type Quote = {
   discountCents: number;
   totalCents: number;
   ticketCount: number;
+  /**
+   * The operator's cancellation window for this purchase, in hours
+   * (operators.cancel_window_hrs), for apps that can't read the operator's
+   * settings themselves. Absent from servers older than this field.
+   */
+  cancelWindowHrs?: number;
 };

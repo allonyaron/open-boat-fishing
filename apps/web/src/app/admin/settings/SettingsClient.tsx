@@ -613,6 +613,7 @@ function BusinessCard({
           field="cancelWindowHrs"
           type="number"
           value={operator.cancelWindowHrs}
+          help="Customers see it on the home page, the booking calendar, checkout, their confirmation, the terms page and the app's cart. 48 unless you change it; 0 = free cancellation until sailing."
           onSave={onSaveField}
         />
         <AutoSaveField

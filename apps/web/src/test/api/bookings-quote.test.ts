@@ -105,7 +105,21 @@ describe("POST /api/bookings/quote", () => {
       discountCents: 0,
       totalCents: 26000,
       ticketCount: 3,
+      // The operator's setting, defaulting to 48 hours.
+      cancelWindowHrs: 48,
     });
+  });
+
+  it("carries the operator's cancellation window, so the app says what the web says", async () => {
+    await testDb.update(operators).set({ cancelWindowHrs: 24 }).where(eq(operators.id, ctx.operatorId));
+    try {
+      const res = await quote(
+        req("/api/bookings/quote", { cart: [{ tripId: ctx.tripId, tickets: [{ ticketType: "adult", quantity: 1 }] }] }),
+      );
+      expect((await res.json()).cancelWindowHrs).toBe(24);
+    } finally {
+      await testDb.update(operators).set({ cancelWindowHrs: 48 }).where(eq(operators.id, ctx.operatorId));
+    }
   });
 
   it("quotes exactly what the booking charges: schedule price, group discount, two trips", async () => {

@@ -10,6 +10,7 @@ export default async function CheckoutPage() {
       phone={operator?.phone ?? null}
       dockAddress={operator?.dockAddress ?? null}
       stripeAccountId={operator?.stripeAccountId ?? null}
+      cancelWindowHrs={operator?.cancelWindowHrs ?? null}
       demoMode={env.DEMO_MODE === "true"}
     />
   );

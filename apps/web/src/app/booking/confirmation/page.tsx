@@ -21,10 +21,19 @@ export default async function ConfirmationPage({ searchParams }: { searchParams:
     dockAddress: operator.dockAddress ?? null,
     phone: operator.phone ?? null,
   };
+  // The operator's cancellation window (admin Settings), as every page shows it.
+  const cancelWindowHrs = operator.cancelWindowHrs;
 
   switch (state.kind) {
     case "confirmed":
-      return <ConfirmedBookingView {...shell} dockMapsUrl={operator.dockMapsUrl ?? null} booking={state.booking} />;
+      return (
+        <ConfirmedBookingView
+          {...shell}
+          dockMapsUrl={operator.dockMapsUrl ?? null}
+          cancelWindowHrs={cancelWindowHrs}
+          booking={state.booking}
+        />
+      );
     case "processing":
       return (
         <div className="min-h-screen bg-deck font-archivo">

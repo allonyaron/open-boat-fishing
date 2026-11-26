@@ -55,12 +55,14 @@ function CheckoutInner({
   phone,
   dockAddress,
   stripeAccountId,
+  cancelWindowHrs,
   demoMode,
 }: {
   operatorName: string;
   phone: string | null;
   dockAddress: string | null;
   stripeAccountId: string | null;
+  cancelWindowHrs: number | null;
   demoMode: boolean;
 }) {
   // The cart stays until the payment succeeds (the confirmed-booking view
@@ -132,7 +134,13 @@ function CheckoutInner({
   return (
     <Shell operatorName={operatorName} phone={phone} dockAddress={dockAddress}>
       <Elements stripe={stripeFor(stripeAccountId)} options={elementsOptions}>
-        <CheckoutForm lines={lines} quote={quote} demoMode={demoMode} stripeAccountId={stripeAccountId} />
+        <CheckoutForm
+          lines={lines}
+          quote={quote}
+          demoMode={demoMode}
+          stripeAccountId={stripeAccountId}
+          cancelWindowHrs={cancelWindowHrs}
+        />
       </Elements>
 
       {/* Checkout footer — trust/contact line only, not the full site footer */}
@@ -152,6 +160,7 @@ export function CheckoutClient({
   phone,
   dockAddress,
   stripeAccountId,
+  cancelWindowHrs,
   demoMode = false,
 }: {
   operatorName: string;
@@ -159,6 +168,8 @@ export function CheckoutClient({
   dockAddress: string | null;
   /** The operator's Stripe account, which the payment is made on (row 32). */
   stripeAccountId: string | null;
+  /** The operator's cancellation window (operators.cancel_window_hrs). */
+  cancelWindowHrs: number | null;
   /** The live demo: shows the Stripe test card above the payment form. */
   demoMode?: boolean;
 }) {
@@ -169,6 +180,7 @@ export function CheckoutClient({
         phone={phone}
         dockAddress={dockAddress}
         stripeAccountId={stripeAccountId}
+        cancelWindowHrs={cancelWindowHrs}
         demoMode={demoMode}
       />
     </Suspense>
