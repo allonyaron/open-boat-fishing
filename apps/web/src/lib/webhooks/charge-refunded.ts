@@ -14,7 +14,8 @@ import { bookingLabel, usd } from "@/lib/stripe-events/notes";
 /** The `reason` metadata the app puts on the refunds it issues itself. */
 const APP_REFUND_REASONS = new Set(["admin_ticket_refund", "trip_cancelled", "auto_refund"]);
 
-function isAppRefund(refund: Stripe.Refund): boolean {
+/** Whether the app issued this refund itself (an outbox command or one of its reasons). */
+export function isAppRefund(refund: Stripe.Refund): boolean {
   const meta = refund.metadata ?? {};
   return Boolean(meta.command_id) || APP_REFUND_REASONS.has(meta.reason ?? "") || Boolean(meta.tripId);
 }

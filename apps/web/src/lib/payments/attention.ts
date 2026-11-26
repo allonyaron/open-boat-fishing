@@ -1,6 +1,7 @@
-import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { bookings, stripeCommands, stripeEvents } from "@openboat/db";
+import { bookingItems, bookings, payments, products, stripeCommands, stripeEvents, tickets, trips } from "@openboat/db";
+import { isLive } from "@/lib/tickets/queries";
 import { sendCommand, type SendResult } from "./commands";
 import { recordAudit } from "@/lib/audit";
 import type { RequestContext } from "@/lib/request-context";
@@ -29,6 +30,20 @@ export type AttentionItem = {
    * still waiting can't: the cron would send it anyway.
    */
   canResolve: boolean;
+  /**
+   * A partial refund made outside the app (row 32): the booking's tickets that
+   * can still board, so the office can say which one the refund was for.
+   */
+  outsideRefundTickets?: OutsideRefundTicket[];
+};
+
+export type OutsideRefundTicket = {
+  id: string;
+  ticketType: string;
+  priceCents: number;
+  tripName: string;
+  /** Departure, ISO. */
+  startsAt: string;
 };
 
 const EVENT_HEADLINES: Record<string, string> = {
@@ -97,6 +112,7 @@ export async function listAttention(operatorId: string, now: Date = new Date()):
       type: stripeEvents.type,
       note: stripeEvents.lastError,
       at: stripeEvents.stripeCreatedAt,
+      paymentIntentId: sql<string | null>`${stripeEvents.payload}->'data'->'object'->>'payment_intent'`,
     })
     .from(stripeEvents)
     .where(
@@ -108,6 +124,46 @@ export async function listAttention(operatorId: string, now: Date = new Date()):
     )
     .orderBy(desc(stripeEvents.stripeCreatedAt))
     .limit(100);
+
+  // A refund made outside the app names a payment: find its booking and the
+  // tickets on it that can still board.
+  const refundPis = events
+    .filter((e) => e.type === "charge.refunded" && e.paymentIntentId)
+    .map((e) => e.paymentIntentId as string);
+  const refundTickets = refundPis.length
+    ? await db
+        .select({
+          paymentIntentId: payments.stripePaymentIntentId,
+          confirmationCode: bookings.confirmationCode,
+          id: tickets.id,
+          ticketType: tickets.ticketType,
+          priceCents: tickets.priceCents,
+          tripName: products.displayName,
+          startsAt: trips.startTime,
+        })
+        .from(payments)
+        .innerJoin(bookings, eq(bookings.id, payments.bookingId))
+        .leftJoin(tickets, and(eq(tickets.bookingId, bookings.id), isLive))
+        .leftJoin(bookingItems, eq(bookingItems.id, tickets.bookingItemId))
+        .leftJoin(trips, eq(trips.id, bookingItems.tripId))
+        .leftJoin(products, eq(products.id, trips.productId))
+        .where(and(eq(payments.operatorId, operatorId), inArray(payments.stripePaymentIntentId, refundPis)))
+        .orderBy(asc(trips.startTime), asc(tickets.id))
+    : [];
+  const byPi = new Map<string, { confirmationCode: string; tickets: OutsideRefundTicket[] }>();
+  for (const r of refundTickets) {
+    const entry = byPi.get(r.paymentIntentId) ?? { confirmationCode: r.confirmationCode, tickets: [] };
+    if (r.id && r.priceCents !== null && r.startsAt) {
+      entry.tickets.push({
+        id: r.id,
+        ticketType: r.ticketType ?? "adult",
+        priceCents: r.priceCents,
+        tripName: r.tripName ?? "Trip",
+        startsAt: r.startsAt.toISOString(),
+      });
+    }
+    byPi.set(r.paymentIntentId, entry);
+  }
 
   const items: AttentionItem[] = [
     ...commands.map((c): AttentionItem => {
@@ -124,19 +180,21 @@ export async function listAttention(operatorId: string, now: Date = new Date()):
         canResolve: c.status === "failed",
       };
     }),
-    ...events.map(
-      (e): AttentionItem => ({
+    ...events.map((e): AttentionItem => {
+      const outside = e.type === "charge.refunded" && e.paymentIntentId ? byPi.get(e.paymentIntentId) : undefined;
+      return {
         kind: "event",
         id: e.id,
         what: EVENT_HEADLINES[e.type] ?? "A Stripe event needs checking",
         detail: e.note,
         at: e.at.toISOString(),
         amountCents: null,
-        confirmationCode: null,
+        confirmationCode: outside?.confirmationCode ?? null,
         canRetry: false,
         canResolve: true,
-      }),
-    ),
+        ...(outside && { outsideRefundTickets: outside.tickets }),
+      };
+    }),
   ];
   return items.sort((a, b) => b.at.localeCompare(a.at));
 }
