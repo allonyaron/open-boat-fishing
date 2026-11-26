@@ -34,7 +34,7 @@ in Vercel; EAS store submission is not done; SMS (Twilio) is not wired.
 A platform for party fishing boat operators. Two deployment models coexist:
 
 - **Single-deploy (enterprise/white-label):** Each operator gets their own Vercel + Neon Postgres deployment. One `operators` row per database. Set `OPERATOR_ID` env var — middleware short-circuits the DB lookup. Onboarding = fork repo + configure env vars + deploy (~2–3 hours).
-- **Centralized (platform mode):** One shared Vercel + Neon deployment. Multiple operators in the same database, all queries scoped by `operator_id`. Hostname → operator resolved via `domains` table in Edge middleware. New operators created via `/platform` (named `platform_users` accounts; `PLATFORM_SECRET` creates the first one and turns the console on). Stripe Connect Destination Charges — each operator has their own connected account.
+- **Centralized (platform mode):** One shared Vercel + Neon deployment. Multiple operators in the same database, all queries scoped by `operator_id`. Hostname → operator resolved via `domains` table in Edge middleware. New operators created via `/platform` (named `platform_users` accounts; `PLATFORM_SECRET` creates the first one and turns the console on). Stripe Connect direct charges — each operator has their own connected Standard account and pays Stripe directly.
 
 See `docs/centralized-architecture.md` for architecture details and `docs/competitive-position.md` for market context.
 
@@ -76,7 +76,7 @@ open-boat-fishing/
 
 **Seat inventory:** `FOR UPDATE SKIP LOCKED` on seat decrement — never application-level checks.
 
-**Payments:** Stripe Connect Destination Charges. Use `/v1/payment_intents`, NOT `/v1/charges`. Platform fee = `application_fee_amount: 150` ($1.50 per ticket).
+**Payments:** Stripe Connect direct charges on the operator's own account (row 32): the operator is the merchant of record, pays Stripe's processing fee and handles its refunds and disputes. Use `/v1/payment_intents`, NOT `/v1/charges`. Platform fee = `application_fee_amount: 150` ($1.50 per ticket), exactly the tickets' fees.
 
 **Fee lifecycle:** `held` at charge time → `earned` after `departure + settle_grace_hrs` (default 48h) → `reversed` on any cancellation. Revenue reporting counts only `WHERE fee_status = 'earned'`. See `docs/fee-mechanism-decision.md`.
 
@@ -110,7 +110,8 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 - `bookings.status` changes only through `transitionBookings` (`lib/bookings/status.ts`) and `trips.status` only through `transitionTrips` (`lib/trips/status.ts`): a transition table and one conditional UPDATE each. Act only on the ids they return.
 
 **Payments**
-- Use `stripe.paymentIntents.create()` with `transfer_data.destination` and `application_fee_amount`. Never `stripe.charges.create()`.
+- Use `stripe.paymentIntents.create()` on the operator's account (`onAccount(stripeAccountId)`, `lib/stripe-account.ts`) with `application_fee_amount` = the tickets' fees, and no `transfer_data`. Never `stripe.charges.create()`.
+- The account a payment is on is stored on `bookings.stripe_account_id`, `payments.stripe_account_id` and each refund command's `stripe_account`. Every later call on that PI, charge or refund passes it (`paymentAccount(...)`), never `operators.stripe_account_id`, which changes if the operator reconnects. A null account is a destination charge from before row 32, on the platform. Application fees live on the platform and take no header.
 - Stripe PI creation lives outside the booking transaction. On PI failure, restore seats and cancel the booking in a new atomic transaction before returning an error.
 
 **Auth and token audiences**
@@ -128,10 +129,11 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 **Webhook integrity**
 - The Stripe webhook handler must call `stripe.webhooks.constructEvent()` with the raw (un-parsed) request body before reading any event data.
 - Guard against duplicate delivery: check current booking/ticket status before applying any state transition. An already-cancelled booking must not be re-cancelled.
-- Never trust `metadata.bookingId` alone: a `payment_intent.*` event acts on a booking only if the PI id equals the booking's stored PI (and, for succeeded, amount, currency and destination match). Events carrying `event.account` are ignored.
+- Connected accounts' events arrive on `/api/webhooks/stripe-connect` (`STRIPE_CONNECT_WEBHOOK_SECRET`); the platform's own on `/api/webhooks/stripe`. Both go through `receiveStripeWebhook` into the same inbox.
+- Never trust `metadata.bookingId` alone: an event acts on a booking only if the PI id equals the booking's stored PI and `event.account` is the account that booking's payment is on (`sameAccount`); for succeeded, amount, currency and platform fee must match too.
 - Every Stripe event goes through the inbox (`lib/stripe-events/inbox.ts`): saved before it is acted on, processed once, and a handler returns an outcome (handled, ignored, needs_review) or throws to be retried. Handlers find bookings by `bookings.stripe_payment_intent_id`, never by metadata.
-- Every money movement goes through the outbox (`lib/payments/commands.ts`): `queueRefund` / `queueFeeRefund` / `queueTransferReversal` / `queueTransfer` in the transaction that changes the tickets (or with a dedupe key), `sendCommand` after commit. Nothing calls `stripe.refunds.create`, `stripe.applicationFees.createRefund`, `stripe.transfers.createReversal` or `stripe.transfers.create` directly.
-- Chargebacks (`lib/disputes/chargebacks.ts`): Stripe takes a destination charge's dispute from the platform, so the app takes the amount back from the operator's transfer when a chargeback opens (`created`, or `funds_withdrawn` after an inquiry), transfers it back if won, and refunds the tickets and their platform fee if lost. A refund made outside the app without a `transfer_reversal` is taken back the same way (`charge.refunded`). Stripe's dispute fees become an `operator_debts` row, collected on the platform fee of the operator's next booking. Once a dispute has closed, a late event changes nothing.
+- Every money movement goes through the outbox (`lib/payments/commands.ts`): `queueRefund` (on the payment's account) / `queueFeeRefund` (on the platform, exactly the tickets' fees) in the transaction that changes the tickets (or with a dedupe key), `sendCommand` after commit. Nothing calls `stripe.refunds.create` or `stripe.applicationFees.createRefund` directly. A direct charge's application fee is created asynchronously, so a fee refund may name the charge (`ch_…`) and the fee is found by it when sent.
+- Chargebacks (`lib/disputes/chargebacks.ts`): Stripe takes a direct charge's dispute and its fee from the operator's account, so the app moves no money while a dispute is open or won: the tickets move to disputed when a chargeback opens (`created`, or `funds_withdrawn` after an inquiry), back to live if won, and to refunded if lost, when their platform fee is refunded to the operator. A full refund the operator makes in their own Dashboard returns the rest of the platform fee and cancels the booking (`charge.refunded`); a partial one needs review. Once a dispute has closed, a late event changes nothing. `operator_debts` and the `transfer` / `transfer_reversal` command kinds are no longer written (row 32) and wait for a contract migration.
 
 **Customer booking pages**
 - `/booking/confirmation` and `/boarding/[bookingId]` open only with the booking key (`lib/bookings/booking-key.ts`, an HMAC of operator + booking id) or, on the confirmation page, the PaymentIntent's id and client secret checked against Stripe (`resolveBookingPage`), which then redirects to the key URL. A confirmation code or booking id alone opens nothing, and a refusal looks the same whether or not the code exists. Links stop opening 14 days after the booking's last trip. A customer who lost the email uses "Email my link" (`POST /api/bookings/resend-links`, `lib/bookings/resend-links.ts`): rate-limited per IP and per address before anything else, the same answer whether or not a booking matches, and the links go only to the address on the booking.
@@ -152,7 +154,7 @@ Hard rules — a violation is a bug, not a style issue. Use these as a checklist
 - `tickets.price_cents` is what the ticket paid (net of any group discount); `list_price_cents` is the fare. Refunds pay `price_cents`; display uses `list_price_cents ?? price_cents`.
 
 **Fee lifecycle**
-- Fees are inserted as `fee_status = 'held'`. Only the fee-earn cron (or lazy earn on revenue report render) may transition them to `'earned'`, and only on live tickets. Revenue queries must filter `WHERE fee_status = 'earned'` — never count `'held'` fees — and count reversals only on tickets that were paid (refunded, disputed). A ticket back from disputed after its trip sailed is earned by `earnFeesIfSailed`. A chargeback fee collected from the operator rides on `application_fee_amount` but is not a ticket fee and not revenue; refunds on that booking return only the tickets' own fees.
+- Fees are inserted as `fee_status = 'held'`. Only the fee-earn cron (or lazy earn on revenue report render) may transition them to `'earned'`, and only on live tickets. Revenue queries must filter `WHERE fee_status = 'earned'` — never count `'held'` fees — and count reversals only on tickets that were paid (refunded, disputed). A ticket back from disputed after its trip sailed is earned by `earnFeesIfSailed`. Stripe's processing fee (`payments.stripe_fee_cents`) is the operator's cost, not platform revenue.
 
 **QR codes** *(pre-launch gap — tracking in Known Tech Debt)*
 - `tickets.qrPayload` must be an HMAC of `ticketId + per-operator secret`, not a bare UUID. Currently bare UUIDs. Must be fixed and the mate app updated to validate signatures before go-live.
@@ -210,6 +212,7 @@ DATABASE_URL=... tsx packages/db/src/seed-test-customers.ts  # seed fixture book
 | ------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `SESSION_SECRET`          | `apps/web/.env.local` + Vercel | Signs mate tokens and customer tokens (HMAC-SHA256). Must be ≥ 32 chars.                                                                   |
 | `CRON_SECRET`             | `apps/web/.env.local` + Vercel | Authenticates Vercel cron calls to `/api/cron/trip-reminders` and `/api/cron/expire-pending-bookings`. Add to Vercel env before deploying. |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | `apps/web/.env.local` + Vercel | Signing secret of the Connect webhook endpoint (`/api/webhooks/stripe-connect`), which receives every payment's events since row 32. Locally, `stripe listen --forward-connect-to` uses the same secret as the platform endpoint. |
 | `EXPO_PUBLIC_APP_VARIANT` | `apps/mobile/.env.local`       | Set to `mate` to run/build the mate check-in app. Leave unset for consumer app.                                                            |
 | `EXPO_PUBLIC_API_URL`     | `apps/mobile/.env.local`       | Override API host. In dev: `http://localhost:3000`. In production: operator's domain.                                                      |
 

@@ -3,6 +3,12 @@
 **Status:** ✅ **RESOLVED — Option A + C's bookkeeping.** Payment code is unblocked. See "DECIDED" below.
 **Decides:** how the $1.50 gets from a passenger's card into our account, given we only earn it if the boat sails.
 
+**Update 2026-11-25 (row 32 in `CODE_REVIEW.md`):** the charge type changed from destination charges to **direct
+charges** on the operator's own Stripe account, so the operator pays Stripe's processing fee and handles its refunds and
+disputes, and the platform keeps exactly `application_fee_amount` = $1.50 a ticket. The fee lifecycle below (held →
+earned → reversed, A + C's bookkeeping) is unchanged; where the text says `transfer_data.destination`, read "the
+PaymentIntent is created on the operator's account". Charging only after the trip sails is row 33.
+
 _Options A, B, and C are retained below as the record of why. The decision is A + C._
 
 ---
