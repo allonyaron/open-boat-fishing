@@ -31,7 +31,7 @@ export default async function TermsPage() {
 
       <div className="max-w-2xl mx-auto px-5 py-10">
         <h1 className="font-grotesk text-28 font-bold text-ink mb-2">Terms &amp; Conditions</h1>
-        <p className="text-13 text-faint mb-8">Last updated January 2025</p>
+        <p className="text-13 text-faint mb-8">Last updated November 2026</p>
 
         <div className="prose prose-sm max-w-none space-y-6 text-15 text-ink leading-relaxed">
           <section>
@@ -39,9 +39,12 @@ export default async function TermsPage() {
               1. Ticket Purchase
             </h2>
             <p className="text-muted">
-              By purchasing tickets through this platform you agree to these terms. All ticket sales
-              are final at the time of purchase. Tickets are non-transferable and valid only for the
-              specific departure date, time, and vessel shown on your boarding pass.
+              Tickets are sold by the boat operator named on your booking. The operator takes your
+              payment, appears on your card statement, and issues any refund; this website is the
+              booking platform the operator uses. By purchasing tickets you agree to these terms. All
+              ticket sales are final at the time of purchase, except as described below. Tickets are
+              non-transferable and valid only for the specific departure date, time, and vessel shown
+              on your boarding pass.
             </p>
           </section>
 
@@ -56,9 +59,10 @@ export default async function TermsPage() {
             </p>
             <p className="text-muted">
               In the event of a trip cancellation due to weather, mechanical issues, or other
-              circumstances beyond the operator&apos;s control, a full refund will be issued to the
-              original payment method within 5–10 business days. The platform service fee ($1.50 per
-              ticket) is refunded in all operator-initiated cancellations.
+              circumstances beyond the operator&apos;s control, the operator refunds the full ticket
+              price, including the booking fee, to the original payment method. Refunds usually appear
+              within 5–10 business days, depending on your bank. For a refund or a question about a
+              charge, contact the operator first; they can usually resolve it faster than your bank.
             </p>
           </section>
 
@@ -118,12 +122,13 @@ export default async function TermsPage() {
 
           <section>
             <h2 className="font-grotesk text-18 font-semibold text-ink mb-2">
-              8. Platform Service Fee
+              8. Booking Fee
             </h2>
             <p className="text-muted">
-              A $1.50 platform service fee is charged per ticket at the time of purchase. This fee
-              covers payment processing and booking platform costs. The fee is included in the
-              displayed ticket price.
+              Each ticket price includes a $1.50 booking fee, which the operator pays to the booking
+              platform. It is not added on top of the price shown, and there is no separate card
+              processing charge: the operator pays its own card processing costs. When a ticket is
+              refunded, the booking fee is refunded with it.
             </p>
           </section>
 
@@ -132,7 +137,8 @@ export default async function TermsPage() {
             <p className="text-muted">
               Your name, email, and phone number are collected to fulfill your booking and send
               trip-related communications. This information is not sold to third parties. Payments
-              are processed securely by Stripe; we do not store card details.
+              are processed securely by Stripe on the operator&apos;s behalf; neither the operator
+              nor the booking platform stores your card details.
             </p>
           </section>
 
@@ -142,8 +148,8 @@ export default async function TermsPage() {
             </h2>
             <p className="text-muted">
               These terms may be updated at any time. Continued use of the booking platform
-              constitutes acceptance of the current terms. Questions? Contact us at the email
-              provided in your confirmation.
+              constitutes acceptance of the current terms. Questions? Contact the operator at the
+              phone number or email shown in your confirmation.
             </p>
           </section>
         </div>
