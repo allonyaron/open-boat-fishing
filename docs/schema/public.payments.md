@@ -6,21 +6,23 @@ Stripe payment record, written when payment_intent.succeeded arrives.
 
 ## Columns
 
-| Name                     | Type                        | Default           | Nullable | Children | Parents                                 | Comment                                                       |
-| ------------------------ | --------------------------- | ----------------- | -------- | -------- | --------------------------------------- | ------------------------------------------------------------- |
-| id                       | uuid                        | gen_random_uuid() | false    |          |                                         |                                                               |
-| booking_id               | uuid                        |                   | false    |          | [public.bookings](public.bookings.md)   |                                                               |
-| operator_id              | uuid                        |                   | false    |          | [public.operators](public.operators.md) | Owning operator. Every query on this table must filter by it. |
-| stripe_payment_intent_id | text                        |                   | false    |          |                                         |                                                               |
-| stripe_charge_id         | text                        |                   | true     |          |                                         | Stripe Charge created by the PaymentIntent.                   |
-| stripe_transfer_id       | text                        |                   | true     |          |                                         | Transfer to the operator's connected account.                 |
-| application_fee_id       | text                        |                   | true     |          |                                         | Stripe application fee object for the platform fee.           |
-| amount_cents             | integer                     |                   | false    |          |                                         | Amount charged, in cents.                                     |
-| application_fee_cents    | integer                     |                   | false    |          |                                         | Platform fee taken, in cents.                                 |
-| currency                 | text                        | 'usd'::text       | false    |          |                                         |                                                               |
-| status                   | text                        |                   | false    |          |                                         | Stripe PaymentIntent status.                                  |
-| metadata                 | jsonb                       |                   | true     |          |                                         |                                                               |
-| created_at               | timestamp without time zone | now()             | false    |          |                                         |                                                               |
+| Name                     | Type                        | Default           | Nullable | Children | Parents                                 | Comment                                                                                                              |
+| ------------------------ | --------------------------- | ----------------- | -------- | -------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| id                       | uuid                        | gen_random_uuid() | false    |          |                                         |                                                                                                                      |
+| booking_id               | uuid                        |                   | false    |          | [public.bookings](public.bookings.md)   |                                                                                                                      |
+| operator_id              | uuid                        |                   | false    |          | [public.operators](public.operators.md) | Owning operator. Every query on this table must filter by it.                                                        |
+| stripe_payment_intent_id | text                        |                   | false    |          |                                         |                                                                                                                      |
+| stripe_charge_id         | text                        |                   | true     |          |                                         | Stripe Charge created by the PaymentIntent.                                                                          |
+| stripe_transfer_id       | text                        |                   | true     |          |                                         | Transfer to the operator's connected account, for a destination charge from before row 32. Direct charges have none. |
+| application_fee_id       | text                        |                   | true     |          |                                         | Stripe application fee object for the platform fee.                                                                  |
+| amount_cents             | integer                     |                   | false    |          |                                         | Amount charged, in cents.                                                                                            |
+| application_fee_cents    | integer                     |                   | false    |          |                                         | Platform fee taken, in cents.                                                                                        |
+| currency                 | text                        | 'usd'::text       | false    |          |                                         |                                                                                                                      |
+| status                   | text                        |                   | false    |          |                                         | Stripe PaymentIntent status.                                                                                         |
+| metadata                 | jsonb                       |                   | true     |          |                                         |                                                                                                                      |
+| created_at               | timestamp without time zone | now()             | false    |          |                                         |                                                                                                                      |
+| stripe_account_id        | text                        |                   | true     |          |                                         | The connected account the charge is on (row 32); null for a destination charge from before row 32.                   |
+| stripe_fee_cents         | integer                     |                   | true     |          |                                         | Stripe's processing fee on the charge, read from its balance transaction. Paid by the operator (row 32).             |
 
 ## Constraints
 
