@@ -8,9 +8,7 @@ import { CustomerAuthProvider } from "@/lib/customer-auth-context";
 import { Colors } from "@/constants/Colors";
 import { color as nativeColor } from "@/constants/nativeTokens";
 
-const STRIPE_PK = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
-const MERCHANT_ID = process.env.EXPO_PUBLIC_APPLE_MERCHANT_ID ?? "";
-const URL_SCHEME = process.env.EXPO_PUBLIC_URL_SCHEME ?? "";
+import { MERCHANT_ID, STRIPE_PK, URL_SCHEME } from "@/lib/stripe-config";
 const IS_MATE = process.env.EXPO_PUBLIC_APP_VARIANT === "mate";
 
 function AppStack() {

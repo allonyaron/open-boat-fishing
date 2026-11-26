@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { stripe } from "@/lib/stripe";
+import { paymentAccount, stripe } from "@/lib/stripe";
 import { cancelPendingBooking } from "@/lib/bookings/cancel";
 import { notifyHoldsExpired } from "@/lib/bookings/reclaim-expired-holds";
 import { verifyCronAuth } from "@/lib/cron-auth";
@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
       id: bookings.id,
       confirmationCode: bookings.confirmationCode,
       stripePaymentIntentId: bookings.stripePaymentIntentId,
+      stripeAccountId: bookings.stripeAccountId,
       customerEmail: bookings.customerEmail,
       operatorId: bookings.operatorId,
     })
@@ -70,7 +71,9 @@ export async function GET(req: NextRequest) {
       // Kept outside the transaction — external API calls should not hold a DB connection open.
       if (booking.stripePaymentIntentId) {
         try {
-          const pi = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+          // On the operator's account (row 32).
+          const account = paymentAccount(booking.stripeAccountId);
+          const pi = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId, {}, account);
           if (pi.status === "succeeded" || pi.status === "processing") {
             // Payment went through — the payment_intent.succeeded webhook will confirm
             // this booking. Do not restore seats here or we create an overbook window.
@@ -82,9 +85,11 @@ export async function GET(req: NextRequest) {
           if (pi.status !== "canceled") {
             // "abandoned": if the canceled webhook wins the race, it sends
             // the same "Booking Expired" push this cron would.
-            await stripe.paymentIntents.cancel(booking.stripePaymentIntentId, {
-              cancellation_reason: "abandoned",
-            });
+            await stripe.paymentIntents.cancel(
+              booking.stripePaymentIntentId,
+              { cancellation_reason: "abandoned" },
+              account,
+            );
           }
         } catch (stripeErr) {
           console.error(

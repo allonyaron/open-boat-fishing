@@ -4,7 +4,7 @@ import { cancelPendingBooking } from "@/lib/bookings/cancel";
 import { notifyHoldsExpired } from "@/lib/bookings/reclaim-expired-holds";
 import type Stripe from "stripe";
 import type { EventResult } from "@/lib/stripe-events/inbox";
-import { bookingForPaymentIntent } from "@/lib/stripe-events/ownership";
+import { bookingForPaymentIntent, sameAccount } from "@/lib/stripe-events/ownership";
 
 // Restore seats when a PaymentIntent is explicitly cancelled (customer abandoned
 // checkout and Stripe cancelled the PI, or we cancelled it programmatically).
@@ -18,11 +18,18 @@ import { bookingForPaymentIntent } from "@/lib/stripe-events/ownership";
 // - abandoned: the hold expired (cron, reclaim). The same "Booking Expired"
 //   push those send.
 // - anything else (a cancel from the Stripe Dashboard, say): "Booking Cancelled".
-export async function handlePaymentIntentCanceled(pi: Stripe.PaymentIntent): Promise<EventResult> {
+export async function handlePaymentIntentCanceled(
+  pi: Stripe.PaymentIntent,
+  /** event.account: the connected account the PI is on; null for the platform's own. */
+  account: string | null = null,
+): Promise<EventResult> {
   // Found by the PI id the booking stored, never by metadata (P3-2). No
   // booking means no seats are held for it: nothing to do.
   const found = await bookingForPaymentIntent(pi.id);
   if (!found) return { outcome: "ignored", note: "no booking has this payment" };
+  if (!sameAccount(account, found.stripeAccountId)) {
+    return { outcome: "ignored", note: `not the account the booking's payment is on (${account ?? "platform"})` };
+  }
   const bookingId = found.id;
 
   // The PI id is checked again under the booking lock.

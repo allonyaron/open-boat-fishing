@@ -245,10 +245,13 @@ export function CheckoutForm({
   lines,
   quote,
   demoMode = false,
+  stripeAccountId = null,
 }: {
   lines: WebCartLine[];
   quote: QuoteState & { refresh: () => void };
   demoMode?: boolean;
+  /** The Stripe account this page loaded Stripe.js on (row 32). */
+  stripeAccountId?: string | null;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -367,6 +370,7 @@ export function CheckoutForm({
       error?: string;
       code?: string;
       clientSecret?: string;
+      stripeAccountId?: string;
       confirmationCode?: string;
       bookingId?: string;
       holdExpiresAt?: string;
@@ -403,6 +407,11 @@ export function CheckoutForm({
       typeof data.totalCents !== "number"
     ) {
       return { kind: "error", message: data.error ?? SOMETHING_WRONG, answered: reachedReclaim(status) };
+    }
+    if (data.stripeAccountId !== stripeAccountId) {
+      // The boat reconnected Stripe since this page loaded: Stripe.js here
+      // can't confirm a payment on the new account. Its hold runs out.
+      return { kind: "error", message: "The boat's payment setup just changed. Reload the page and try again.", answered: true };
     }
     return {
       kind: "ready",

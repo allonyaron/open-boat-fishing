@@ -19,8 +19,9 @@ export type RefundTicketResult =
  * The office's per-ticket refund: the ticket is refunded, its seat comes
  * back and the refund is queued in one transaction, with who did it (row 12).
  * Refunds what the ticket paid (its share of the charge, net of any group
- * discount; P2-2), not its list price. With the platform fee's id its exact
- * amount is refunded separately; without it Stripe refunds it in proportion.
+ * discount; P2-2), not its list price, on the operator's account (row 32).
+ * The ticket's platform fee is refunded exactly, from the platform, by the
+ * fee's id or, until the payment has it, by its charge.
  * The caller sends the queued commands after this returns.
  */
 export async function refundTicket(
@@ -41,7 +42,8 @@ export async function refundTicket(
   if (!isTicketLive(ticket)) return { kind: ticket.status === "held" ? "unpaid" : "already_refunded" };
   if (booking.status !== "confirmed" || !booking.stripePaymentIntentId) return { kind: "not_refundable" };
 
-  const hasExactFee = !!payment.applicationFeeId;
+  const feeOrChargeId = payment.applicationFeeId ?? payment.stripeChargeId;
+  const hasExactFee = !!feeOrChargeId;
   const paymentIntentId = booking.stripePaymentIntentId;
 
   // The refund is recorded before Stripe is asked, so it can't be lost or
@@ -58,9 +60,9 @@ export async function refundTicket(
         operatorId,
         bookingId: booking.id,
         paymentIntentId,
+        stripeAccount: booking.stripeAccountId,
         amountCents: ticket.priceCents,
         reason: "admin_ticket_refund",
-        reverseTransfer: true,
         refundApplicationFee: !hasExactFee,
         metadata: { ticketId },
       }),
@@ -71,7 +73,7 @@ export async function refundTicket(
           ctx,
           operatorId,
           bookingId: booking.id,
-          applicationFeeId: payment.applicationFeeId!,
+          feeOrChargeId: feeOrChargeId!,
           amountCents: ticket.feeAmountCents,
           reason: "admin_ticket_refund",
           metadata: { ticketId },

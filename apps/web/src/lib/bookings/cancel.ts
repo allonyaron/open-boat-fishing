@@ -4,7 +4,6 @@ import { eq } from "drizzle-orm";
 import { moveTickets } from "@/lib/tickets/lifecycle";
 import { giveBackSeatsForTickets } from "@/lib/inventory/seats";
 import { transitionBookings } from "./status";
-import { releaseDebts } from "@/lib/payments/operator-debts";
 
 export type CancelledBooking = {
   id: string;
@@ -81,8 +80,6 @@ export async function cancelPendingBookingInTx(
   const moved = await moveTickets(tx, { operatorId: booking.operatorId, bookingId }, "held", "voided");
   await giveBackSeatsForTickets(tx, booking.operatorId, moved, "release");
   await transitionBookings(tx, { operatorId: booking.operatorId, bookingId }, "pending", "cancelled");
-  // A chargeback fee reserved to this booking's platform fee waits for the next one.
-  await releaseDebts(tx, { operatorId: booking.operatorId, bookingId });
 
   return {
     id: booking.id,

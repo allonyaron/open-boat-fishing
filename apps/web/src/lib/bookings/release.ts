@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { stripe } from "@/lib/stripe";
+import { paymentAccount, stripe } from "@/lib/stripe";
 import { bookings } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
 import { cancelPendingBooking } from "./cancel";
@@ -20,14 +20,17 @@ import { cancelPendingBooking } from "./cancel";
  */
 export async function cancelPaymentIntentForRelease(
   paymentIntentId: string | null,
+  /** The account the PI is on (bookings.stripe_account_id; row 32). */
+  stripeAccountId: string | null,
   reason: "abandoned" | "requested_by_customer",
 ): Promise<"canceled" | "paid" | "error"> {
   if (!paymentIntentId) return "canceled";
+  const account = paymentAccount(stripeAccountId);
   try {
-    const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {}, account);
     if (pi.status === "succeeded" || pi.status === "processing") return "paid";
     if (pi.status !== "canceled") {
-      await stripe.paymentIntents.cancel(paymentIntentId, { cancellation_reason: reason });
+      await stripe.paymentIntents.cancel(paymentIntentId, { cancellation_reason: reason }, account);
     }
     return "canceled";
   } catch (err) {
@@ -52,6 +55,7 @@ export async function releasePendingBooking(
     .select({
       status: bookings.status,
       stripePaymentIntentId: bookings.stripePaymentIntentId,
+      stripeAccountId: bookings.stripeAccountId,
     })
     .from(bookings)
     .where(and(eq(bookings.id, bookingId), eq(bookings.operatorId, operatorId)));
@@ -60,7 +64,11 @@ export async function releasePendingBooking(
   if (booking.status === "cancelled") return "released";
   if (booking.status === "confirmed") return "paid";
 
-  const pi = await cancelPaymentIntentForRelease(booking.stripePaymentIntentId, "requested_by_customer");
+  const pi = await cancelPaymentIntentForRelease(
+    booking.stripePaymentIntentId,
+    booking.stripeAccountId,
+    "requested_by_customer",
+  );
   if (pi !== "canceled") return pi;
 
   // Null means a concurrent cancel (webhook, cron) or confirm got there first.

@@ -1,6 +1,6 @@
 import { waitUntil } from "@vercel/functions";
 import { db } from "@/lib/db";
-import { stripe } from "@/lib/stripe";
+import { paymentAccount, stripe } from "@/lib/stripe";
 import { sendPushToEmails } from "@/lib/push";
 import { getPostHogServer } from "@/lib/posthog";
 import { sendConfirmationEmail } from "@/lib/notifications/send-confirmation-email";
@@ -12,17 +12,28 @@ import { bookings, bookingItems, tickets, trips, payments, operators } from "@op
 import { and, eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import type { RequestContext } from "@/lib/request-context";
-import { collectDebts } from "@/lib/payments/operator-debts";
 import type { EventResult } from "@/lib/stripe-events/inbox";
-import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
+import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner, sameAccount } from "@/lib/stripe-events/ownership";
 import { bookingLabel, usd } from "@/lib/stripe-events/notes";
 
 /**
- * Why `pi` cannot stand for `booking`, or null when it can. Exported for tests.
+ * Why `pi`, from an event on `eventAccount`, cannot stand for `booking`, or
+ * null when it can. Exported for tests.
+ *
+ * A direct charge (row 32) must come from the account the booking's PI was
+ * created on and carry exactly the booking's platform fee. One from before
+ * row 32 is a destination charge on the platform, paid to the operator's
+ * account.
  */
 export function paymentIntentMismatch(
-  pi: Pick<Stripe.PaymentIntent, "id" | "amount" | "currency" | "transfer_data">,
-  booking: { stripePaymentIntentId: string | null; totalCents: number },
+  pi: Pick<Stripe.PaymentIntent, "id" | "amount" | "currency" | "transfer_data" | "application_fee_amount">,
+  booking: {
+    stripePaymentIntentId: string | null;
+    totalCents: number;
+    platformFeeCents: number;
+    stripeAccountId: string | null;
+  },
+  eventAccount: string | null,
   operatorStripeAccountId: string | null,
 ): string | null {
   if (booking.stripePaymentIntentId !== pi.id) {
@@ -32,6 +43,15 @@ export function paymentIntentMismatch(
     return `amount ${pi.amount} != booking total ${booking.totalCents}`;
   }
   if (pi.currency !== "usd") return `currency ${pi.currency}`;
+  if (!sameAccount(eventAccount, booking.stripeAccountId)) {
+    return `paid on ${eventAccount ?? "the platform"}, not ${booking.stripeAccountId ?? "the platform"}`;
+  }
+  if (booking.stripeAccountId) {
+    if (pi.application_fee_amount !== booking.platformFeeCents) {
+      return `platform fee ${pi.application_fee_amount ?? "none"} != booking's ${booking.platformFeeCents}`;
+    }
+    return null;
+  }
   const destination =
     typeof pi.transfer_data?.destination === "string"
       ? pi.transfer_data.destination
@@ -42,15 +62,25 @@ export function paymentIntentMismatch(
   return null;
 }
 
+/** Stripe's processing fee on a charge, from its balance transaction (row 32). */
+export function stripeFeeOf(balanceTransaction: Stripe.BalanceTransaction | string | null): number | null {
+  if (!balanceTransaction || typeof balanceTransaction === "string") return null;
+  return balanceTransaction.fee_details
+    .filter((d) => d.type === "stripe_fee")
+    .reduce((sum, d) => sum + d.amount, 0);
+}
+
 export async function handlePaymentIntentSucceeded(
   pi: Stripe.PaymentIntent,
   ctx: RequestContext,
+  /** event.account: the connected account the PI is on; null for the platform's own. */
+  account: string | null = null,
 ): Promise<EventResult> {
   // The booking is found by the PI id it stored when the PI was created, never
   // by metadata, which whoever owns the PI can write (P3-2).
   const found = await bookingForPaymentIntent(pi.id);
   if (!found) {
-    const owner = await orphanPaymentOwner(destinationOf(pi), pi.metadata);
+    const owner = await orphanPaymentOwner(account ?? destinationOf(pi), pi.metadata);
     if (!owner.ours) return { outcome: "ignored", note: owner.why };
     return {
       outcome: "needs_review",
@@ -63,17 +93,27 @@ export async function handlePaymentIntentSucceeded(
   // Fetch the charge outside the transaction — external API calls should not
   // hold a DB connection open. A failure throws, so the event is retried
   // rather than recording the payment without its fee and transfer ids.
+  // A booking whose PI is on another account than the event's is refused
+  // below; only its own account is asked about the charge.
   const chargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : null;
   let applicationFeeId: string | null = null;
   let stripeTransferId: string | null = null;
   // The fee Stripe actually took, not the one the booking expected.
   let applicationFeeCents: number | null = null;
-  if (chargeId) {
-    const charge = await stripe.charges.retrieve(chargeId);
+  let stripeFeeCents: number | null = null;
+  if (chargeId && sameAccount(account, found.stripeAccountId)) {
+    const charge = await stripe.charges.retrieve(
+      chargeId,
+      { expand: ["balance_transaction"] },
+      paymentAccount(account),
+    );
+    // A direct charge's application fee is created asynchronously, so it may
+    // not be on the charge yet; a fee refund then finds it by the charge.
     applicationFeeId = typeof charge.application_fee === "string" ? charge.application_fee : null;
     stripeTransferId = typeof charge.transfer === "string" ? charge.transfer : null;
     applicationFeeCents =
       typeof charge.application_fee_amount === "number" ? charge.application_fee_amount : null;
+    stripeFeeCents = stripeFeeOf(charge.balance_transaction);
   }
 
   // FOR UPDATE atomically re-checks status so concurrent webhook deliveries
@@ -99,7 +139,7 @@ export async function handlePaymentIntentSucceeded(
       .select({ stripeAccountId: operators.stripeAccountId })
       .from(operators)
       .where(eq(operators.id, fresh.operatorId));
-    const mismatch = paymentIntentMismatch(pi, fresh, operator?.stripeAccountId ?? null);
+    const mismatch = paymentIntentMismatch(pi, fresh, account, operator?.stripeAccountId ?? null);
     if (mismatch) return { kind: "mismatch", reason: mismatch };
 
     // Idempotency: skip if already confirmed
@@ -132,19 +172,18 @@ export async function handlePaymentIntentSucceeded(
     // voided (its trip was cancelled while the booking was pending) stays void.
     await moveTickets(tx, { operatorId: fresh.operatorId, bookingId }, "held", "live");
 
-    // A chargeback fee reserved to this booking rode on its platform fee (row 11).
-    await collectDebts(tx, { operatorId: fresh.operatorId, bookingId });
-
     // Record the payment
     await tx.insert(payments).values({
       bookingId,
       operatorId: fresh.operatorId,
       stripePaymentIntentId: pi.id,
       stripeChargeId: chargeId,
+      stripeAccountId: fresh.stripeAccountId,
       applicationFeeId,
       stripeTransferId,
       amountCents: pi.amount,
       applicationFeeCents: applicationFeeCents ?? fresh.platformFeeCents,
+      stripeFeeCents,
       status: pi.status,
       metadata: pi.metadata,
     });
@@ -172,9 +211,9 @@ export async function handlePaymentIntentSucceeded(
       operatorId,
       bookingId,
       paymentIntentId: pi.id,
+      stripeAccount: account,
       amountCents: null,
       reason: "auto_refund",
-      reverseTransfer: true,
       refundApplicationFee: true,
       dedupeKey: `auto-refund:${pi.id}`,
     });

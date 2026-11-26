@@ -19,6 +19,7 @@ import { shownQuote, useQuote } from "@/lib/quote";
 import { color, font, ls, space, tracking } from "@/constants/nativeTokens";
 import { fmtTimeRange, tripTypeColor } from "@/lib/trip-helpers";
 import { upsertBooking } from "@/lib/wallet";
+import { loadStripeAccount } from "@/lib/stripe-config";
 
 // The booking from the first Pay press. A retry after a decline or a dismissed
 // sheet presents the same PI again instead of holding the seats twice (P2-3).
@@ -33,6 +34,8 @@ type Attempt = {
   email: string;
   /** The booking's totalCents: the PI's amount, which the sheet charges. */
   totalCents: number;
+  /** The operator's Stripe account the PI is on (row 32). */
+  stripeAccountId: string;
 };
 
 const HOLD_RAN_OUT = "Your seat hold ran out and the seats were released. Tap Pay to check they're still free.";
@@ -167,6 +170,7 @@ export default function CheckoutScreen() {
 
         type BookingResponse = {
           clientSecret?: string;
+          stripeAccountId?: string;
           bookingId?: string;
           confirmationCode?: string;
           holdExpiresAt?: string;
@@ -193,6 +197,7 @@ export default function CheckoutScreen() {
         if (
           !res.ok ||
           !data.clientSecret ||
+          !data.stripeAccountId ||
           !data.confirmationCode ||
           !data.bookingId ||
           !data.holdExpiresAt ||
@@ -210,6 +215,7 @@ export default function CheckoutScreen() {
           holdToken: data.holdToken,
           email: cleanEmail,
           totalCents: data.totalCents,
+          stripeAccountId: data.stripeAccountId,
         };
         attemptRef.current = attempt;
         // The booking was priced under the trip locks. Show its total, which is
@@ -237,6 +243,7 @@ export default function CheckoutScreen() {
         })
         .catch(() => {});
 
+      await loadStripeAccount(attempt.stripeAccountId);
       const { error: initError } = await initPaymentSheet({
         merchantDisplayName: process.env.EXPO_PUBLIC_MERCHANT_NAME ?? "Fishing Tickets",
         paymentIntentClientSecret: clientSecret,

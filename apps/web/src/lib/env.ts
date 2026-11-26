@@ -10,6 +10,11 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(32),
   STRIPE_SECRET_KEY: z.string().min(1),
   STRIPE_WEBHOOK_SECRET: z.string().min(1),
+  // Signing secret of the Connect webhook endpoint (/api/webhooks/stripe-connect),
+  // which receives the connected accounts' events: every payment since row 32.
+  // Locally, `stripe listen --forward-connect-to` uses the same secret as the
+  // platform endpoint.
+  STRIPE_CONNECT_WEBHOOK_SECRET: z.string().optional(),
   CRON_SECRET: z.string().min(1),
   RESEND_API_KEY: z.string().min(1),
   // Platform Connect client_id (ca_xxx). Required in centralized mode to generate

@@ -50,6 +50,8 @@ type RevenueResponse = {
     heldCount: number;
     reversedCount: number;
   };
+  /** Stripe's processing fee on the period's payments, paid from the operator's Stripe balance (row 32). */
+  processing: { stripeFeeCents: number; payments: number; recorded: number };
   trips: RevenueTrip[];
 };
 
@@ -236,6 +238,15 @@ export default function MoneyPage() {
             ))}
           </div>
 
+          {revenue && revenue.processing.recorded > 0 && (
+            <div className="px-5 py-3 bg-ob-panel border-2 border-ob-rule rounded-ob text-body-sm text-ob-ink-2 max-md:px-4">
+              <span className="font-bold text-ob-ink">Card processing:</span> Stripe&rsquo;s fee on{" "}
+              <span className="font-num text-ob-ink">{revenue.processing.recorded}</span>{" "}
+              {revenue.processing.recorded === 1 ? "payment" : "payments"} in this period was{" "}
+              <span className="font-num text-ob-ink">{fmtMoney(revenue.processing.stripeFeeCents)}</span>. Stripe takes it
+              from your Stripe balance; it isn&rsquo;t part of the platform fee above.
+            </div>
+          )}
           <Panel aria-labelledby="mo-l">
             <div className="px-5 py-4 border-b-2 border-ob-rule max-md:px-4">
               <h2 id="mo-l" className="text-title-panel">

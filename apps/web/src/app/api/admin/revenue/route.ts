@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { settleTrips } from "@/lib/settle-trips";
-import { trips, vessels, products, bookingItems, tickets } from "@openboat/db";
+import { trips, vessels, products, bookingItems, tickets, payments } from "@openboat/db";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { isLive } from "@/lib/tickets/queries";
 
@@ -79,5 +79,24 @@ export async function GET(req: NextRequest) {
     },
   );
 
-  return NextResponse.json({ fromDate, toDate, totals, trips: tripRows });
+  // Stripe's processing fee on the payments taken in the period (row 32).
+  // Payments are direct charges, so Stripe takes it from the operator's own
+  // balance; it is not part of the platform fee above. A payment recorded
+  // before Stripe's fee was read has none.
+  const [processing] = await db
+    .select({
+      stripeFeeCents: sql<number>`cast(coalesce(sum(${payments.stripeFeeCents}), 0) as int)`,
+      payments: sql<number>`cast(count(*) as int)`,
+      recorded: sql<number>`cast(count(${payments.stripeFeeCents}) as int)`,
+    })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.operatorId, session.operatorId),
+        gte(payments.createdAt, new Date(`${fromDate}T00:00:00Z`)),
+        lte(payments.createdAt, new Date(`${toDate}T23:59:59.999Z`)),
+      ),
+    );
+
+  return NextResponse.json({ fromDate, toDate, totals, processing, trips: tripRows });
 }

@@ -95,6 +95,7 @@ async function cancelExpiredHoldPayments(
     .selectDistinct({
       id: bookings.id,
       stripePaymentIntentId: bookings.stripePaymentIntentId,
+      stripeAccountId: bookings.stripeAccountId,
     })
     .from(bookings)
     .innerJoin(bookingItems, eq(bookingItems.bookingId, bookings.id))
@@ -119,6 +120,7 @@ async function cancelExpiredHoldPayments(
         id: bookings.id,
         status: bookings.status,
         stripePaymentIntentId: bookings.stripePaymentIntentId,
+        stripeAccountId: bookings.stripeAccountId,
         paymentId: payments.id,
       })
       .from(bookings)
@@ -127,7 +129,11 @@ async function cancelExpiredHoldPayments(
     if (replaced?.status === "confirmed" || replaced?.paymentId) {
       replacedPaid = true;
     } else if (replaced?.status === "pending" && !candidates.some((b) => b.id === replacing)) {
-      candidates.push({ id: replaced.id, stripePaymentIntentId: replaced.stripePaymentIntentId });
+      candidates.push({
+        id: replaced.id,
+        stripePaymentIntentId: replaced.stripePaymentIntentId,
+        stripeAccountId: replaced.stripeAccountId,
+      });
     }
   }
 
@@ -137,6 +143,7 @@ async function cancelExpiredHoldPayments(
     candidates.map((b) =>
       cancelPaymentIntentForRelease(
         b.stripePaymentIntentId,
+        b.stripeAccountId,
         b.id === replacing ? "requested_by_customer" : "abandoned",
       ),
     ),
