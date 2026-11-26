@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { handlePaymentIntentSucceeded } from "@/lib/webhooks/payment-intent-succeeded";
 import { handlePaymentIntentCanceled } from "@/lib/webhooks/payment-intent-canceled";
 import { handleChargeRefunded } from "@/lib/webhooks/charge-refunded";
+import { handleChargeUpdated } from "@/lib/webhooks/charge-updated";
 import { handleChargeDisputeCreated } from "@/lib/webhooks/charge-dispute-created";
 import {
   handleChargeDisputeClosed,
@@ -33,6 +34,9 @@ export async function dispatchStripeEvent(event: Stripe.Event): Promise<EventRes
       return handlePaymentIntentCanceled(event.data.object as Stripe.PaymentIntent, account);
     case "charge.refunded":
       return handleChargeRefunded(event.data.object as Stripe.Charge, ctx, account);
+    case "charge.updated":
+      // Fills in the fee id and Stripe's fee a direct charge gets after it succeeds (row 32).
+      return handleChargeUpdated(event.data.object as Stripe.Charge, account);
     case "charge.dispute.created":
       return handleChargeDisputeCreated(event.data.object as Stripe.Dispute, ctx, account);
     case "charge.dispute.funds_withdrawn":
