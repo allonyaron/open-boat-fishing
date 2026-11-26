@@ -114,7 +114,7 @@ describe("resolveBookingPage: who gets in", () => {
       redirect_status: "failed", // never read
     });
     expect(state).toEqual({ kind: "redirect", to: `/booking/confirmation?code=${b.code}&k=${b.key}` });
-    expect(retrieve).toHaveBeenCalledWith(b.pi);
+    expect(retrieve).toHaveBeenCalledWith(b.pi, {}, undefined);
   });
 
   it("a booking with no PaymentIntent can't be opened by PaymentIntent parameters", async () => {

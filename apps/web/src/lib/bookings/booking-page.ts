@@ -3,7 +3,8 @@ import { timingSafeEqual } from "crypto";
 import { and, eq, max } from "drizzle-orm";
 import { bookingItems, bookings, trips } from "@openboat/db";
 import { db } from "@/lib/db";
-import { paymentAccount, stripe } from "@/lib/stripe";
+import { stripe } from "@/lib/stripe";
+import { paymentAccount } from "@/lib/stripe-account";
 import { bookingLinksOpen, confirmationPagePath, verifyBookingKey } from "./booking-key";
 import { getConfirmedBooking, type ConfirmedBooking } from "./get-confirmed-booking";
 

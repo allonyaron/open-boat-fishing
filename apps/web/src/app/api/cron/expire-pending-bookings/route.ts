@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { paymentAccount, stripe } from "@/lib/stripe";
+import { stripe } from "@/lib/stripe";
+import { paymentAccount } from "@/lib/stripe-account";
 import { cancelPendingBooking } from "@/lib/bookings/cancel";
 import { notifyHoldsExpired } from "@/lib/bookings/reclaim-expired-holds";
 import { verifyCronAuth } from "@/lib/cron-auth";

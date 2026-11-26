@@ -3,16 +3,15 @@
 // after Stripe's 24-hour window; Stripe refusing a request marks it failed;
 // network errors leave it pending for the cron.
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import { seedOperator, cleanupOperator, testDb, stripeTestCtx } from "../db-helpers";
+import { seedOperator, cleanupOperator, seedBooking, testDb, stripeTestCtx } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { stripeCommands } from "@openboat/db";
+import { payments, stripeCommands } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
 vi.mock("@/lib/stripe", () => ({
   stripe: {
     refunds: { create: vi.fn(), list: vi.fn() },
-    applicationFees: { createRefund: vi.fn(), listRefunds: vi.fn() },
-    transfers: { createReversal: vi.fn(), listReversals: vi.fn(), create: vi.fn(), list: vi.fn() },
+    applicationFees: { createRefund: vi.fn(), listRefunds: vi.fn(), list: vi.fn() },
   },
 }));
 
@@ -21,8 +20,6 @@ import {
   confirmRefundCommands,
   queueFeeRefund,
   queueRefund,
-  queueTransfer,
-  queueTransferReversal,
   sendCommand,
   sendPendingCommands,
 } from "@/lib/payments/commands";
@@ -43,7 +40,11 @@ beforeEach(() => {
   vi.mocked(stripe.refunds.list).mockReset();
   vi.mocked(stripe.applicationFees.createRefund).mockReset();
   vi.mocked(stripe.applicationFees.listRefunds).mockReset();
+  vi.mocked(stripe.applicationFees.list).mockReset();
 });
+
+// The operator's account, which a direct charge's refunds are made on (row 32).
+const ACCT = "acct_cmd";
 
 function refund(paymentIntentId: string, extra: Partial<Parameters<typeof queueRefund>[1]> = {}) {
   return queueRefund(db, {
@@ -51,9 +52,9 @@ function refund(paymentIntentId: string, extra: Partial<Parameters<typeof queueR
     operatorId: ctx.operatorId,
     bookingId: null,
     paymentIntentId,
+    stripeAccount: ACCT,
     amountCents: 2500,
     reason: "admin_ticket_refund",
-    reverseTransfer: true,
     refundApplicationFee: false,
     ...extra,
   });
@@ -68,14 +69,25 @@ describe("queueRefund", () => {
   it("stores the exact request, with its own id as command_id", async () => {
     const id = await refund("pi_q1", { metadata: { ticketId: "t1" } });
     const row = await command(id);
-    expect(row).toMatchObject({ status: "pending", kind: "refund", targetId: "pi_q1", amountCents: 2500 });
+    expect(row).toMatchObject({ status: "pending", kind: "refund", targetId: "pi_q1", amountCents: 2500, stripeAccount: ACCT });
     expect(row.params).toMatchObject({
       payment_intent: "pi_q1",
       amount: 2500,
-      reverse_transfer: true,
       refund_application_fee: false,
       metadata: { ticketId: "t1", reason: "admin_ticket_refund", command_id: id },
     });
+    // A direct charge has no transfer to reverse.
+    expect(row.params).not.toHaveProperty("reverse_transfer");
+  });
+
+  it("reverses the transfer of a destination charge made before row 32, on the platform", async () => {
+    vi.mocked(stripe.refunds.create).mockResolvedValueOnce({ id: "re_legacy" } as never);
+    const id = await refund("pi_legacy", { stripeAccount: null });
+    const row = await command(id);
+    expect(row.stripeAccount).toBeNull();
+    expect(row.params).toMatchObject({ reverse_transfer: true });
+    expect(await sendCommand(id)).toBe("sent");
+    expect(vi.mocked(stripe.refunds.create).mock.calls[0][1]).toEqual({ idempotencyKey: id });
   });
 
   it("returns the existing command for a repeated dedupe key", async () => {
@@ -92,6 +104,7 @@ describe("sendCommand", () => {
     const id = await refund("pi_s1");
     expect(await sendCommand(id)).toBe("sent");
     expect(stripe.refunds.create).toHaveBeenCalledWith(expect.objectContaining({ payment_intent: "pi_s1" }), {
+      stripeAccount: ACCT,
       idempotencyKey: id,
     });
     expect(await command(id)).toMatchObject({ status: "sent", stripeObjectId: "re_ok", attempts: 1, lastError: null });
@@ -106,16 +119,54 @@ describe("sendCommand", () => {
       ctx: stripeTestCtx,
       operatorId: ctx.operatorId,
       bookingId: null,
-      applicationFeeId: "fee_s2",
+      feeOrChargeId: "fee_s2",
       amountCents: 150,
       reason: "admin_ticket_refund",
     });
     expect(await sendCommand(id)).toBe("confirmed");
+    // On the platform, which holds the fee: no Stripe-Account header.
     expect(stripe.applicationFees.createRefund).toHaveBeenCalledWith(
       "fee_s2",
       expect.objectContaining({ amount: 150 }),
       { idempotencyKey: id },
     );
+  });
+
+  it("finds a direct charge's fee by its charge when the payment doesn't have it yet, and saves it", async () => {
+    const booking = await seedBooking(ctx, { status: "confirmed", stripePaymentIntentId: "pi_feelookup" });
+    await testDb.insert(payments).values({
+      bookingId: booking.bookingId,
+      operatorId: ctx.operatorId,
+      stripePaymentIntentId: "pi_feelookup",
+      stripeChargeId: "ch_feelookup",
+      stripeAccountId: ACCT,
+      amountCents: 10000,
+      applicationFeeCents: 150,
+      status: "succeeded",
+    });
+    const id = await queueFeeRefund(db, {
+      ctx: stripeTestCtx,
+      operatorId: ctx.operatorId,
+      bookingId: booking.bookingId,
+      feeOrChargeId: "ch_feelookup",
+      amountCents: 150,
+      reason: "admin_ticket_refund",
+    });
+
+    // Stripe hasn't created it yet: the command waits for the cron.
+    vi.mocked(stripe.applicationFees.list).mockResolvedValueOnce({ data: [] } as never);
+    expect(await sendCommand(id)).toBe("pending");
+    expect((await command(id)).lastError).toMatch(/hasn't been created yet/);
+    expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
+
+    vi.mocked(stripe.applicationFees.list).mockResolvedValue({ data: [{ id: "fee_found" }] } as never);
+    vi.mocked(stripe.applicationFees.listRefunds).mockResolvedValueOnce({ data: [] } as never);
+    vi.mocked(stripe.applicationFees.createRefund).mockResolvedValueOnce({ id: "fr_found" } as never);
+    expect(await sendCommand(id)).toBe("confirmed");
+    expect(stripe.applicationFees.list).toHaveBeenCalledWith({ charge: "ch_feelookup", limit: 1 });
+    expect(vi.mocked(stripe.applicationFees.createRefund).mock.calls[0][0]).toBe("fee_found");
+    const [payment] = await testDb.select().from(payments).where(eq(payments.bookingId, booking.bookingId));
+    expect(payment.applicationFeeId).toBe("fee_found");
   });
 
   it("leaves a command pending on a network error, and on retry finds the refund an earlier attempt made", async () => {
@@ -146,9 +197,10 @@ describe("sendCommand", () => {
     vi.mocked(stripe.refunds.create).mockResolvedValueOnce({ id: "re_second" } as never);
     expect(await sendCommand(id)).toBe("sent");
     expect(vi.mocked(stripe.refunds.create).mock.calls.map((c) => c[1])).toEqual([
-      { idempotencyKey: id },
-      { idempotencyKey: `${id}:2` },
+      { stripeAccount: ACCT, idempotencyKey: id },
+      { stripeAccount: ACCT, idempotencyKey: `${id}:2` },
     ]);
+    expect(vi.mocked(stripe.refunds.list).mock.calls[0][1]).toEqual({ stripeAccount: ACCT });
   });
 
   it("marks a command failed when Stripe refuses the request", async () => {
@@ -193,100 +245,5 @@ describe("confirmRefundCommands", () => {
     ] as never);
     expect(confirmed).toEqual([id]);
     expect(await command(id)).toMatchObject({ status: "confirmed" });
-  });
-});
-
-// Row 11: transfer reversals and transfers go through the same outbox.
-describe("transfer commands", () => {
-  beforeEach(() => {
-    vi.mocked(stripe.transfers.createReversal).mockReset();
-    vi.mocked(stripe.transfers.listReversals).mockReset();
-    vi.mocked(stripe.transfers.create).mockReset();
-    vi.mocked(stripe.transfers.list).mockReset();
-  });
-
-  it("sends a transfer reversal with its id as the key and confirms it on acceptance", async () => {
-    const id = await queueTransferReversal(db, {
-      ctx: stripeTestCtx,
-      operatorId: ctx.operatorId,
-      bookingId: null,
-      transferId: "tr_cmd_1",
-      amountCents: 5000,
-      reason: "chargeback",
-    });
-    vi.mocked(stripe.transfers.createReversal).mockResolvedValueOnce({ id: "trr_cmd_1" } as any);
-    expect(await sendCommand(id)).toBe("confirmed");
-    expect(stripe.transfers.createReversal).toHaveBeenCalledWith(
-      "tr_cmd_1",
-      {
-        amount: 5000,
-        metadata: { actor_kind: "stripe", actor_id: "evt_test", reason: "chargeback", command_id: id },
-      },
-      { idempotencyKey: id },
-    );
-    expect(stripe.refunds.create).not.toHaveBeenCalled();
-    expect(stripe.applicationFees.createRefund).not.toHaveBeenCalled();
-    expect(await command(id)).toMatchObject({ status: "confirmed", stripeObjectId: "trr_cmd_1" });
-  });
-
-  it("finds a reversal an earlier attempt made instead of making a second one", async () => {
-    const id = await queueTransferReversal(db, {
-      ctx: stripeTestCtx,
-      operatorId: ctx.operatorId,
-      bookingId: null,
-      transferId: "tr_cmd_2",
-      amountCents: 5000,
-      reason: "chargeback",
-    });
-    vi.mocked(stripe.transfers.createReversal).mockRejectedValueOnce(
-      Object.assign(new Error("socket hang up"), { type: "StripeConnectionError" }),
-    );
-    expect(await sendCommand(id)).toBe("pending");
-    vi.mocked(stripe.transfers.listReversals).mockResolvedValueOnce({
-      data: [{ id: "trr_lost_answer", metadata: { command_id: id } }],
-    } as any);
-    expect(await sendCommand(id)).toBe("confirmed");
-    expect(stripe.transfers.createReversal).toHaveBeenCalledTimes(1);
-    expect((await command(id)).stripeObjectId).toBe("trr_lost_answer");
-  });
-
-  it("sends a transfer funded by the original charge", async () => {
-    const id = await queueTransfer(db, {
-      ctx: stripeTestCtx,
-      operatorId: ctx.operatorId,
-      bookingId: null,
-      destination: "acct_cmd",
-      sourceChargeId: "ch_cmd",
-      amountCents: 5000,
-      reason: "chargeback_won",
-    });
-    vi.mocked(stripe.transfers.create).mockResolvedValueOnce({ id: "tr_back" } as any);
-    expect(await sendCommand(id)).toBe("confirmed");
-    expect(stripe.transfers.create).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: 5000, currency: "usd", destination: "acct_cmd", source_transaction: "ch_cmd" }),
-      { idempotencyKey: id },
-    );
-  });
-
-  it("finds a transfer an earlier attempt made", async () => {
-    const id = await queueTransfer(db, {
-      ctx: stripeTestCtx,
-      operatorId: ctx.operatorId,
-      bookingId: null,
-      destination: "acct_cmd",
-      sourceChargeId: "ch_cmd",
-      amountCents: 5000,
-      reason: "chargeback_won",
-    });
-    vi.mocked(stripe.transfers.create).mockRejectedValueOnce(
-      Object.assign(new Error("timeout"), { type: "StripeAPIError" }),
-    );
-    expect(await sendCommand(id)).toBe("pending");
-    vi.mocked(stripe.transfers.list).mockResolvedValueOnce({
-      data: [{ id: "tr_other", metadata: {} }, { id: "tr_found", metadata: { command_id: id } }],
-    } as any);
-    expect(await sendCommand(id)).toBe("confirmed");
-    expect(vi.mocked(stripe.transfers.list).mock.calls[0][0]).toMatchObject({ destination: "acct_cmd" });
-    expect((await command(id)).stripeObjectId).toBe("tr_found");
   });
 });

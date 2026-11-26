@@ -1,6 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { db } from "@/lib/db";
-import { paymentAccount, stripe } from "@/lib/stripe";
+import { stripe } from "@/lib/stripe";
+import { paymentAccount } from "@/lib/stripe-account";
 import { sendPushToEmails } from "@/lib/push";
 import { getPostHogServer } from "@/lib/posthog";
 import { sendConfirmationEmail } from "@/lib/notifications/send-confirmation-email";

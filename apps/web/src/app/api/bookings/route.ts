@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { onAccount, stripe } from "@/lib/stripe";
+import { stripe } from "@/lib/stripe";
+import { onAccount } from "@/lib/stripe-account";
 import {
   vessels,
   products,

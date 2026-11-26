@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { paymentAccount, stripe } from "@/lib/stripe";
+import { stripe } from "@/lib/stripe";
+import { paymentAccount } from "@/lib/stripe-account";
 import { bookings } from "@openboat/db";
 import { and, eq } from "drizzle-orm";
 import { cancelPendingBooking } from "./cancel";

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { paymentAccount, stripe } from "@/lib/stripe";
+import { stripe } from "@/lib/stripe";
+import { paymentAccount } from "@/lib/stripe-account";
 import { payments } from "@openboat/db";
 import { eq } from "drizzle-orm";
 import { cancelConfirmedBooking } from "@/lib/bookings/cancel";
@@ -30,7 +31,7 @@ async function feeLeftOn(
   const fee = payment.applicationFeeId
     ? await stripe.applicationFees.retrieve(payment.applicationFeeId)
     : (await stripe.applicationFees.list({ charge: chargeId, limit: 1 })).data[0];
-  return fee ? { feeId: fee.id, leftCents: fee.amount - fee.amount_refunded } : null;
+  return fee ? { feeId: payment.applicationFeeId ?? fee.id, leftCents: fee.amount - fee.amount_refunded } : null;
 }
 
 // A charge was refunded, by the app or by the operator in their own Stripe
