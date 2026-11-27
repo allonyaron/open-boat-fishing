@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
+import { onAccount } from "@/lib/stripe-account";
 import {
   vessels,
   products,
@@ -15,7 +16,6 @@ import { randomBytes, randomUUID } from "crypto";
 import { checkRateLimit, resetRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 import { getOperatorContext, getOperatorId } from "@/lib/operator";
 import { cancelPendingBooking } from "@/lib/bookings/cancel";
-import { reserveDebts } from "@/lib/payments/operator-debts";
 import { customerContactSchema } from "@/lib/bookings/contact";
 import { signHoldToken, verifyHoldToken } from "@/lib/bookings/hold-token";
 import { reclaimExpiredHolds } from "@/lib/bookings/reclaim-expired-holds";
@@ -77,6 +77,8 @@ export async function POST(req: NextRequest) {
   if (!operator.stripeAccountId) {
     return NextResponse.json({ error: "Stripe not configured for this operator" }, { status: 500 });
   }
+  // The payment is a direct charge on the operator's own account (row 32).
+  const stripeAccountId = operator.stripeAccountId;
 
   const tripIds = cart.map((c) => c.tripId);
 
@@ -107,10 +109,9 @@ export async function POST(req: NextRequest) {
   let ticketCount: number;
   let groupDiscountCents: number;
   let holdExpiresAt: Date;
-  let debtCents: number;
 
   try {
-    ({ booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt, debtCents } = await db.transaction(
+    ({ booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt } = await db.transaction(
       async (tx) => {
         // Locked in id order, so concurrent multi-trip carts can't deadlock.
         const tripRows = await tx
@@ -152,6 +153,7 @@ export async function POST(req: NextRequest) {
             totalCents,
             platformFeeCents,
             groupDiscountCents,
+            stripeAccountId,
             customerName: customerName ?? null,
             customerEmail,
             customerPhone,
@@ -211,15 +213,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // A chargeback fee the operator owes rides on this booking's platform
-        // fee (row 11). The customer pays the same total either way.
-        const debtCents = await reserveDebts(tx, {
-          operatorId: operator.id,
-          bookingId: booking.id,
-          roomCents: totalCents - platformFeeCents,
-        });
-
-        return { booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt, debtCents };
+        return { booking, totalCents, ticketCount, groupDiscountCents, holdExpiresAt };
       },
     ));
   } catch (err: unknown) {
@@ -234,20 +228,23 @@ export async function POST(req: NextRequest) {
   // and cancel the booking so no ghost holds accumulate.
   let paymentIntent;
   try {
-    paymentIntent = await stripe.paymentIntents.create({
-      amount: totalCents,
-      currency: "usd",
-      // Pinned so Dashboard settings can't enable a delayed-settlement method (P2-5).
-      payment_method_types: [...ALLOWED_PAYMENT_METHOD_TYPES],
-      transfer_data: { destination: operator.stripeAccountId },
-      application_fee_amount: booking.platformFeeCents + debtCents,
-      metadata: {
-        bookingId: booking.id,
-        operatorId: operator.id,
-        confirmationCode: booking.confirmationCode,
-        ...(debtCents > 0 && { chargebackFeesCollectedCents: String(debtCents) }),
+    // A direct charge (row 32): made on the operator's account, which pays
+    // Stripe's fee; the platform's application fee is exactly the tickets' fees.
+    paymentIntent = await stripe.paymentIntents.create(
+      {
+        amount: totalCents,
+        currency: "usd",
+        // Pinned so Dashboard settings can't enable a delayed-settlement method (P2-5).
+        payment_method_types: [...ALLOWED_PAYMENT_METHOD_TYPES],
+        application_fee_amount: booking.platformFeeCents,
+        metadata: {
+          bookingId: booking.id,
+          operatorId: operator.id,
+          confirmationCode: booking.confirmationCode,
+        },
       },
-    });
+      onAccount(stripeAccountId),
+    );
   } catch (err) {
     await cancelPendingBooking(booking.id);
     console.error("Stripe PaymentIntent creation failed, booking cancelled:", err);
@@ -261,6 +258,8 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     clientSecret: paymentIntent.client_secret,
+    // Stripe.js and the PaymentSheet must load on this account to find the PI.
+    stripeAccountId,
     bookingId: booking.id,
     confirmationCode: booking.confirmationCode,
     totalCents,

@@ -170,12 +170,12 @@ describe("POST /api/webhooks/stripe", () => {
     expect((await stored(evt.id)).processedAt).toBeNull();
   });
 
-  it("records an event from a connected account as ignored and calls no handler (P3-2)", async () => {
+  it("hands an event from a connected account to its handler with the account, which checks it (row 32)", async () => {
     const evt = event("payment_intent.succeeded", { id: "pi_acct" }, { account: "acct_someone" });
     const res = await deliver(evt);
     expect(res.status).toBe(200);
-    expect(handlePaymentIntentSucceeded).not.toHaveBeenCalled();
-    expect(await stored(evt.id)).toMatchObject({ outcome: "ignored", account: "acct_someone" });
+    expect(handlePaymentIntentSucceeded).toHaveBeenCalledWith({ id: "pi_acct" }, expect.anything(), "acct_someone");
+    expect(await stored(evt.id)).toMatchObject({ account: "acct_someone" });
   });
 
   it("records an event type it doesn't handle as ignored", async () => {
@@ -195,5 +195,48 @@ describe("POST /api/webhooks/stripe", () => {
     const evt = event("charge.dispute.created", { id: "dp_review" });
     expect((await deliver(evt)).status).toBe(200);
     expect(await stored(evt.id)).toMatchObject({ outcome: "needs_review", lastError: "Dispute opened" });
+  });
+
+  describe("POST /api/webhooks/stripe-connect (row 32)", () => {
+    function connectReq(body: string) {
+      return new NextRequest("http://localhost/api/webhooks/stripe-connect", {
+        method: "POST",
+        body,
+        headers: { "stripe-signature": "sig" },
+      });
+    }
+
+    it("verifies with the Connect endpoint's own secret and feeds the same inbox", async () => {
+      vi.resetModules();
+      vi.stubEnv("STRIPE_CONNECT_WEBHOOK_SECRET", "whsec_connect_test");
+      try {
+        const evt = event("payment_intent.succeeded", { id: "pi_connect" }, { account: "acct_connect" });
+        const { stripe: freshStripe } = await import("@/lib/stripe");
+        vi.mocked(freshStripe.webhooks.constructEvent).mockReturnValue(evt as never);
+        const { POST } = await import("@/app/api/webhooks/stripe-connect/route");
+        const res = await POST(connectReq(JSON.stringify(evt)));
+        expect(res.status).toBe(200);
+        expect(vi.mocked(freshStripe.webhooks.constructEvent).mock.calls[0][2]).toBe("whsec_connect_test");
+        expect(await stored(evt.id)).toMatchObject({ account: "acct_connect" });
+      } finally {
+        vi.unstubAllEnvs();
+        vi.resetModules();
+      }
+    });
+
+    it("answers 503 and saves nothing when its secret isn't set", async () => {
+      vi.resetModules();
+      vi.stubEnv("STRIPE_CONNECT_WEBHOOK_SECRET", "");
+      try {
+        const evt = event("payment_intent.succeeded", { id: "pi_noconnect" }, { account: "acct_connect" });
+        const { POST } = await import("@/app/api/webhooks/stripe-connect/route");
+        const res = await POST(connectReq(JSON.stringify(evt)));
+        expect(res.status).toBe(503);
+        expect(await testDb.select().from(stripeEvents).where(eq(stripeEvents.id, evt.id))).toEqual([]);
+      } finally {
+        vi.unstubAllEnvs();
+        vi.resetModules();
+      }
+    });
   });
 });

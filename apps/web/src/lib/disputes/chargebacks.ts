@@ -3,37 +3,35 @@ import type Stripe from "stripe";
 import type { RequestContext } from "@/lib/request-context";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { disputes, operators, payments, stripeCommands, tickets } from "@openboat/db";
+import { paymentAccount } from "@/lib/stripe-account";
+import { disputes, payments, tickets } from "@openboat/db";
 import { moveTickets } from "@/lib/tickets/lifecycle";
 import { holdsSeat } from "@/lib/tickets/queries";
 import { giveBackSeatsForTickets } from "@/lib/inventory/seats";
 import { transitionBookings } from "@/lib/bookings/status";
 import { earnFeesIfSailed } from "@/lib/settle-trips";
-import { queueFeeRefund, queueTransfer, queueTransferReversal, sendCommand, type SendResult } from "@/lib/payments/commands";
-import { recordDisputeFee } from "@/lib/payments/operator-debts";
+import { queueFeeRefund, sendCommand } from "@/lib/payments/commands";
 import { OutOfOrderEventError } from "@/lib/stripe-events/inbox";
-import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
+import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner, sameAccount } from "@/lib/stripe-events/ownership";
 
-// Chargebacks on destination charges (row 11, P3-3). Stripe takes the
-// disputed amount and its fee from the platform the day a chargeback opens,
-// and never touches the operator's transfer or the platform fee. So:
+// Chargebacks (row 11, P3-3). Payments are direct charges on the operator's
+// own account (row 32), so Stripe takes the disputed amount and its dispute
+// fee from the operator, and the operator responds in their Stripe Dashboard.
+// The app keeps the tickets in step:
 //
 // - Opened (charge.dispute.created, or funds_withdrawn when an inquiry
 //   escalates): the booking's live tickets move to disputed (they can't board,
-//   the seat and the fee stay held), and the amount is taken back from the
-//   operator's transfer with a transfer_reversal command.
-// - Won: the tickets are live again and what was taken back is transferred to
-//   the operator again (Stripe returns the amount to the platform, not the fee).
+//   the seat and the fee stay held).
+// - Won: the tickets are live again.
 // - Lost: the tickets are refunded, their seats come back, the booking is
 //   cancelled once nothing holds a seat, and the platform fee on those tickets
-//   is refunded to the operator.
-// - Either way, the operator owes Stripe's dispute fees (operator_debts).
+//   is refunded to the operator (the passenger didn't sail).
 //
 // An inquiry (status warning_*) takes no money, so it moves nothing; Stripe
 // sends funds_withdrawn if it becomes a chargeback.
 //
-// Every step can run again: the ticket moves are conditional, the commands
-// have dedupe keys, and once a dispute has closed, a late "opened" event does
+// Every step can run again: the ticket moves are conditional, the fee refund
+// has a dedupe key, and once a dispute has closed, a late "opened" event does
 // nothing.
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -43,7 +41,6 @@ export type DisputedPayment = {
   bookingId: string;
   operatorId: string;
   applicationFeeId: string | null;
-  stripeTransferId: string | null;
   stripeChargeId: string | null;
 };
 
@@ -66,32 +63,39 @@ export function paymentIntentOf(dispute: Stripe.Dispute): string | null {
 }
 
 /**
- * Whose payment a dispute is on. Throws OutOfOrderEventError when the booking
+ * Whose payment a dispute is on, for an event from `account` (event.account;
+ * null for the platform's own). Throws OutOfOrderEventError when the booking
  * is ours but its payment_intent.succeeded hasn't been processed yet (Stripe
  * sends charge.dispute.created before it when a card disputes at once).
  */
-export async function findDisputedPayment(piId: string): Promise<DisputeOwner> {
+export async function findDisputedPayment(piId: string, account: string | null = null): Promise<DisputeOwner> {
+  const notItsAccount = { kind: "orphan", ours: false, why: `not the account the payment is on (${account ?? "platform"})` } as const;
   const [payment] = await db
     .select({
       bookingId: payments.bookingId,
       operatorId: payments.operatorId,
       applicationFeeId: payments.applicationFeeId,
-      stripeTransferId: payments.stripeTransferId,
       stripeChargeId: payments.stripeChargeId,
+      stripeAccountId: payments.stripeAccountId,
     })
     .from(payments)
     .where(eq(payments.stripePaymentIntentId, piId));
-  if (payment) return { kind: "paid", payment };
+  if (payment) {
+    if (!sameAccount(account, payment.stripeAccountId)) return notItsAccount;
+    const { stripeAccountId: _, ...rest } = payment;
+    return { kind: "paid", payment: rest };
+  }
 
   const booking = await bookingForPaymentIntent(piId);
+  if (booking && !sameAccount(account, booking.stripeAccountId)) return notItsAccount;
   if (booking?.status === "pending") {
     throw new OutOfOrderEventError(`dispute for PI ${piId} before its payment was recorded`);
   }
   if (booking) return { kind: "cancelled", bookingId: booking.id, operatorId: booking.operatorId };
 
   // Not a booking here: whose payment is it? The dispute names only the PI.
-  const pi = await stripe.paymentIntents.retrieve(piId);
-  const owner = await orphanPaymentOwner(destinationOf(pi), pi.metadata);
+  const pi = await stripe.paymentIntents.retrieve(piId, {}, paymentAccount(account));
+  const owner = await orphanPaymentOwner(account ?? destinationOf(pi), pi.metadata);
   return owner.ours ? { kind: "orphan", ours: true, operatorId: owner.operatorId } : { kind: "orphan", ours: false, why: owner.why };
 }
 
@@ -148,46 +152,17 @@ export async function recordDispute(
   return { closed: Boolean(row?.closedAt) };
 }
 
-const reversalKey = (disputeId: string) => `dispute-reversal:${disputeId}`;
-
-export type TakeBack =
-  | { kind: "queued"; amountCents: number; send: SendResult }
-  | { kind: "nothing"; why: string };
-
 /**
- * How much to take back from the operator's transfer: the disputed amount,
- * capped at what is left of it (an earlier refund with reverse_transfer took
- * some back). Asks Stripe, so it runs outside the transaction.
- */
-async function planTakeBack(
-  dispute: Stripe.Dispute,
-  payment: DisputedPayment,
-): Promise<{ existing: { id: string; amountCents: number } } | { amountCents: number } | { why: string }> {
-  const [existing] = await db
-    .select({ id: stripeCommands.id, amountCents: stripeCommands.amountCents })
-    .from(stripeCommands)
-    .where(eq(stripeCommands.dedupeKey, reversalKey(dispute.id)));
-  if (existing) return { existing: { id: existing.id, amountCents: existing.amountCents ?? 0 } };
-  if (!payment.stripeTransferId) return { why: "the payment has no transfer recorded" };
-  const transfer = await stripe.transfers.retrieve(payment.stripeTransferId);
-  const amountCents = Math.min(dispute.amount, transfer.amount - transfer.amount_reversed);
-  return amountCents > 0 ? { amountCents } : { why: "nothing is left of the transfer to take back" };
-}
-
-/**
- * A chargeback opened (or an inquiry became one): the tickets can't board and
- * the money is taken back from the operator. The reversal is queued in the
- * transaction that checks the dispute hasn't closed, so a won dispute
- * processed at the same time either sees the reversal (and returns it) or
- * stops this from queueing one.
+ * A chargeback opened (or an inquiry became one): the tickets can't board.
+ * Stripe has taken the money from the operator's account. Checked against the
+ * dispute's close in the same transaction, so a late "opened" event can't
+ * undo a won dispute.
  */
 export async function openChargeback(
   dispute: Stripe.Dispute,
   payment: DisputedPayment,
-  ctx: RequestContext,
-): Promise<{ closed: true } | { closed: false; ticketsDisputed: number; takeBack: TakeBack }> {
-  const plan = await planTakeBack(dispute, payment);
-  const result = await db.transaction(async (tx) => {
+): Promise<{ closed: true } | { closed: false; ticketsDisputed: number }> {
+  return db.transaction(async (tx) => {
     const { closed } = await recordDispute(tx, dispute, payment);
     if (closed) return { closed: true as const };
     const moved = await moveTickets(
@@ -196,47 +171,19 @@ export async function openChargeback(
       "live",
       "disputed",
     );
-    let reversal: { id: string; amountCents: number } | null = null;
-    if ("existing" in plan) reversal = plan.existing;
-    else if ("amountCents" in plan) {
-      const id = await queueTransferReversal(tx, {
-        ctx,
-        operatorId: payment.operatorId,
-        bookingId: payment.bookingId,
-        transferId: payment.stripeTransferId!,
-        amountCents: plan.amountCents,
-        reason: "chargeback",
-        metadata: { disputeId: dispute.id },
-        dedupeKey: reversalKey(dispute.id),
-      });
-      reversal = { id, amountCents: plan.amountCents };
-    }
-    return { closed: false as const, ticketsDisputed: moved.length, reversal };
+    return { closed: false as const, ticketsDisputed: moved.length };
   });
-  if (result.closed) return { closed: true };
-
-  const takeBack: TakeBack = result.reversal
-    ? { kind: "queued", amountCents: result.reversal.amountCents, send: await sendCommand(result.reversal.id) }
-    : { kind: "nothing", why: "why" in plan ? plan.why : "nothing to take back" };
-  return { closed: false, ticketsDisputed: result.ticketsDisputed, takeBack };
 }
-
-export type WonOutcome = {
-  ticketsBack: number;
-  returned: { kind: "queued"; amountCents: number; send: SendResult } | { kind: "nothing"; why: string };
-};
 
 /**
  * The dispute closed in the operator's favour (won, or an inquiry that went
- * no further): the tickets are live again, and what was taken back from the
- * operator is sent back. Throws while the reversal is still waiting to reach
- * Stripe, so the event is retried once it has.
+ * no further): the tickets are live again. Stripe returns the money to the
+ * operator's account itself.
  */
 export async function closeChargebackWon(
   dispute: Stripe.Dispute,
   payment: DisputedPayment,
-  ctx: RequestContext,
-): Promise<WonOutcome> {
+): Promise<{ ticketsBack: number }> {
   const moved = await db.transaction(async (tx) => {
     await recordDispute(tx, dispute, payment, { closed: true });
     const moved = await moveTickets(
@@ -248,50 +195,12 @@ export async function closeChargebackWon(
     await earnFeesIfSailed(tx, payment.operatorId, moved.map((t) => t.id));
     return moved;
   });
-  await recordDisputeFee(db, { operatorId: payment.operatorId, disputeId: dispute.id, amountCents: disputeFeeCents(dispute) });
-
-  const [reversal] = await db
-    .select({ id: stripeCommands.id, status: stripeCommands.status, amountCents: stripeCommands.amountCents })
-    .from(stripeCommands)
-    .where(eq(stripeCommands.dedupeKey, reversalKey(dispute.id)));
-  if (!reversal) return { ticketsBack: moved.length, returned: { kind: "nothing", why: "nothing was taken back" } };
-  if (reversal.status === "pending") {
-    throw new Error(`dispute ${dispute.id} was won, but taking it back from the operator hasn't reached Stripe yet`);
-  }
-  if (reversal.status === "failed") {
-    // Nothing was taken from the operator, so there is nothing to return,
-    // and the refused reversal no longer needs anyone's attention.
-    await db.update(stripeCommands).set({ resolvedAt: new Date() }).where(eq(stripeCommands.id, reversal.id));
-    return { ticketsBack: moved.length, returned: { kind: "nothing", why: "taking it back had failed" } };
-  }
-
-  const [operator] = await db
-    .select({ stripeAccountId: operators.stripeAccountId })
-    .from(operators)
-    .where(eq(operators.id, payment.operatorId));
-  const chargeId = payment.stripeChargeId ?? (typeof dispute.charge === "string" ? dispute.charge : dispute.charge.id);
-  if (!operator?.stripeAccountId) throw new Error(`operator ${payment.operatorId} has no Stripe account to return dispute ${dispute.id} to`);
-
-  const amountCents = reversal.amountCents ?? 0;
-  const commandId = await queueTransfer(db, {
-    ctx,
-    operatorId: payment.operatorId,
-    bookingId: payment.bookingId,
-    destination: operator.stripeAccountId,
-    sourceChargeId: chargeId,
-    amountCents,
-    reason: "chargeback_won",
-    metadata: { disputeId: dispute.id },
-    dedupeKey: `dispute-return:${dispute.id}`,
-  });
-  return { ticketsBack: moved.length, returned: { kind: "queued", amountCents, send: await sendCommand(commandId) } };
+  return { ticketsBack: moved.length };
 }
 
 export type LostOutcome = {
   ticketsRefunded: number;
   bookingCancelled: boolean;
-  /** Whether the amount was ever taken back from the operator. */
-  takenBack: boolean;
 };
 
 /**
@@ -299,7 +208,7 @@ export type LostOutcome = {
  * tickets (and any still live, if the opening event never got processed) are
  * refunded and their seats come back, the booking is cancelled once nothing
  * on it holds a seat, and the platform fee on those tickets is refunded to
- * the operator. If nothing was taken back from the operator yet, it is now.
+ * the operator.
  */
 export async function closeChargebackLost(
   dispute: Stripe.Dispute,
@@ -307,28 +216,14 @@ export async function closeChargebackLost(
   ctx: RequestContext,
 ): Promise<LostOutcome> {
   const scope = { operatorId: payment.operatorId, bookingId: payment.bookingId };
-  const plan = await planTakeBack(dispute, payment);
-  const { moved, bookingCancelled, feeCommandId, reversalId } = await db.transaction(async (tx) => {
+  const disputedCharge = typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id ?? null;
+  const feeOrChargeId = payment.applicationFeeId ?? payment.stripeChargeId ?? disputedCharge;
+  const { moved, bookingCancelled, feeCommandId } = await db.transaction(async (tx) => {
     await recordDispute(tx, dispute, payment, { closed: true });
     const moved = [
       ...(await moveTickets(tx, scope, "disputed", "refunded")),
       ...(await moveTickets(tx, scope, "live", "refunded")),
     ];
-    const reversalId =
-      "existing" in plan
-        ? plan.existing.id
-        : "amountCents" in plan
-          ? await queueTransferReversal(tx, {
-              ctx,
-              operatorId: payment.operatorId,
-              bookingId: payment.bookingId,
-              transferId: payment.stripeTransferId!,
-              amountCents: plan.amountCents,
-              reason: "chargeback",
-              metadata: { disputeId: dispute.id },
-              dedupeKey: reversalKey(dispute.id),
-            })
-          : null;
     await giveBackSeatsForTickets(tx, payment.operatorId, moved, "refund");
 
     const [left] = await tx
@@ -341,7 +236,7 @@ export async function closeChargebackLost(
         : false;
 
     let feeCommandId: string | null = null;
-    if (moved.length > 0 && payment.applicationFeeId) {
+    if (moved.length > 0 && feeOrChargeId) {
       const fees = await tx
         .select({ cents: tickets.feeAmountCents })
         .from(tickets)
@@ -352,7 +247,7 @@ export async function closeChargebackLost(
           ctx,
           operatorId: payment.operatorId,
           bookingId: payment.bookingId,
-          applicationFeeId: payment.applicationFeeId,
+          feeOrChargeId,
           amountCents: feeCents,
           reason: "chargeback_lost",
           metadata: { disputeId: dispute.id },
@@ -360,15 +255,8 @@ export async function closeChargebackLost(
         });
       }
     }
-    return { moved, bookingCancelled, feeCommandId, reversalId };
+    return { moved, bookingCancelled, feeCommandId };
   });
-  await recordDisputeFee(db, { operatorId: payment.operatorId, disputeId: dispute.id, amountCents: disputeFeeCents(dispute) });
-  // The operator's money comes back before the fee goes out.
-  if (reversalId) await sendCommand(reversalId);
   if (feeCommandId) await sendCommand(feeCommandId);
-
-  const [reversal] = reversalId
-    ? await db.select({ status: stripeCommands.status }).from(stripeCommands).where(eq(stripeCommands.id, reversalId))
-    : [];
-  return { ticketsRefunded: moved.length, bookingCancelled, takenBack: Boolean(reversal) && reversal.status !== "failed" };
+  return { ticketsRefunded: moved.length, bookingCancelled };
 }

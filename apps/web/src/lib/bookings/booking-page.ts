@@ -4,6 +4,7 @@ import { and, eq, max } from "drizzle-orm";
 import { bookingItems, bookings, trips } from "@openboat/db";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
+import { paymentAccount } from "@/lib/stripe-account";
 import { bookingLinksOpen, confirmationPagePath, verifyBookingKey } from "./booking-key";
 import { getConfirmedBooking, type ConfirmedBooking } from "./get-confirmed-booking";
 
@@ -73,6 +74,7 @@ export async function resolveBookingPage(
       id: bookings.id,
       status: bookings.status,
       stripePaymentIntentId: bookings.stripePaymentIntentId,
+      stripeAccountId: bookings.stripeAccountId,
     })
     .from(bookings)
     .where(and(eq(bookings.confirmationCode, code), eq(bookings.operatorId, operatorId)));
@@ -83,7 +85,11 @@ export async function resolveBookingPage(
   } else {
     // Compare the id first, so made-up parameters never cost a Stripe call.
     if (!booking.stripePaymentIntentId || piId !== booking.stripePaymentIntentId) return { kind: "locked" };
-    const intent = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+    const intent = await stripe.paymentIntents.retrieve(
+      booking.stripePaymentIntentId,
+      {},
+      paymentAccount(booking.stripeAccountId),
+    );
     if (!sameSecret(piSecret!, intent.client_secret)) return { kind: "locked" };
     return { kind: "redirect", to: confirmationPagePath(code, operatorId, booking.id) };
   }
@@ -104,7 +110,11 @@ export async function resolveBookingPage(
 
   // Pending: ask Stripe whether the payment is on its way.
   if (!booking.stripePaymentIntentId) return { kind: "unpaid" };
-  const intent = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+  const intent = await stripe.paymentIntents.retrieve(
+    booking.stripePaymentIntentId,
+    {},
+    paymentAccount(booking.stripeAccountId),
+  );
   if (intent.status === "succeeded") return { kind: "processing", paid: true };
   if (intent.status === "processing") return { kind: "processing", paid: false };
   return { kind: "unpaid" };

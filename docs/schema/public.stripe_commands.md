@@ -27,6 +27,7 @@ Outbox of refunds the app asks Stripe for (row 10). Written in the same transact
 | confirmed_at     | timestamp with time zone |                                  | true     |          |                                         |                                                                                                                                                                            |
 | resolved_at      | timestamp with time zone |                                  | true     |          |                                         | When a person marked a failed command dealt with on the Money page (for example, refunded by hand in Stripe).                                                              |
 | resolved_by      | uuid                     |                                  | true     |          | [public.staff](public.staff.md)         | Staff member who marked it dealt with.                                                                                                                                     |
+| stripe_account   | text                     |                                  | true     |          |                                         | The connected account a refund is made on (row 32); null = the platform.                                                                                                   |
 
 ## Constraints
 

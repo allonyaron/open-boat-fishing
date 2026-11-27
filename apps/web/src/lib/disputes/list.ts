@@ -1,9 +1,9 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { bookings, disputes, operatorDebts } from "@openboat/db";
+import { bookings, disputes } from "@openboat/db";
 
 // The Money page's chargeback list (row 11): each dispute on the operator's
-// bookings, its state in plain words, and Stripe's fee the operator owes.
+// bookings, its state in plain words, and the fee Stripe charged for it.
 
 export type ChargebackState = "inquiry" | "open" | "under_review" | "won" | "lost" | "closed";
 
@@ -16,13 +16,11 @@ export type ChargebackRow = {
   openedAt: string;
   respondBy: string | null;
   closedAt: string | null;
-  /** Stripe's dispute fee the operator owes, once the dispute has closed. */
-  fee: {
-    cents: number;
-    status: "owed" | "reserved" | "collected";
-    /** The booking whose platform fee carried it. */
-    collectedOn: string | null;
-  } | null;
+  /**
+   * Stripe's dispute fees net of any returned, once the dispute has closed.
+   * Stripe takes them from the operator's own account (row 32).
+   */
+  stripeFeeCents: number | null;
 };
 
 export function chargebackState(status: string): ChargebackState {
@@ -45,52 +43,23 @@ export async function listChargebacks(operatorId: string, limit = 50): Promise<C
       openedAt: disputes.openedAt,
       respondBy: disputes.respondBy,
       closedAt: disputes.closedAt,
+      stripeFeeCents: disputes.stripeFeeCents,
     })
     .from(disputes)
     .leftJoin(bookings, eq(bookings.id, disputes.bookingId))
     .where(eq(disputes.operatorId, operatorId))
     .orderBy(desc(disputes.openedAt))
     .limit(limit);
-  if (rows.length === 0) return [];
 
-  const debts = await db
-    .select({
-      disputeId: operatorDebts.disputeId,
-      cents: operatorDebts.amountCents,
-      status: operatorDebts.status,
-      collectedOn: bookings.confirmationCode,
-    })
-    .from(operatorDebts)
-    .leftJoin(bookings, eq(bookings.id, operatorDebts.bookingId))
-    .where(
-      and(
-        eq(operatorDebts.operatorId, operatorId),
-        inArray(
-          operatorDebts.disputeId,
-          rows.map((r) => r.id),
-        ),
-      ),
-    );
-  const debtOf = new Map(debts.map((d) => [d.disputeId, d]));
-
-  return rows.map((r) => {
-    const debt = debtOf.get(r.id);
-    return {
-      id: r.id,
-      confirmationCode: r.confirmationCode,
-      amountCents: r.amountCents,
-      reason: r.reason,
-      state: chargebackState(r.status),
-      openedAt: r.openedAt.toISOString(),
-      respondBy: r.respondBy?.toISOString() ?? null,
-      closedAt: r.closedAt?.toISOString() ?? null,
-      fee: debt
-        ? {
-            cents: debt.cents,
-            status: debt.status,
-            collectedOn: debt.status === "collected" ? debt.collectedOn : null,
-          }
-        : null,
-    };
-  });
+  return rows.map((r) => ({
+    id: r.id,
+    confirmationCode: r.confirmationCode,
+    amountCents: r.amountCents,
+    reason: r.reason,
+    state: chargebackState(r.status),
+    openedAt: r.openedAt.toISOString(),
+    respondBy: r.respondBy?.toISOString() ?? null,
+    closedAt: r.closedAt?.toISOString() ?? null,
+    stripeFeeCents: r.closedAt && r.stripeFeeCents ? r.stripeFeeCents : null,
+  }));
 }

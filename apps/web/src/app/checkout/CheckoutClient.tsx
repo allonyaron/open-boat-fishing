@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
-import { loadStripe, type StripeElementsOptionsMode } from "@stripe/stripe-js";
+import { loadStripe, type Stripe, type StripeElementsOptionsMode } from "@stripe/stripe-js";
 import { Elements } from "@stripe/react-stripe-js";
 import { CheckoutForm } from "./CheckoutForm";
 import posthog from "posthog-js";
@@ -11,7 +11,22 @@ import { clearHold, loadHold, releaseHold } from "@/lib/checkout/stored-hold";
 import { useCartStore } from "@/lib/cart/store";
 import { useQuote } from "@/lib/cart/quote";
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+// Payments are direct charges on the operator's own Stripe account (row 32),
+// so Stripe.js loads on that account: it confirms the PaymentIntent there.
+// One instance per account, made once.
+const stripeByAccount = new Map<string, Promise<Stripe | null>>();
+function stripeFor(stripeAccountId: string | null): Promise<Stripe | null> {
+  const key = stripeAccountId ?? "";
+  let promise = stripeByAccount.get(key);
+  if (!promise) {
+    promise = loadStripe(
+      process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!,
+      stripeAccountId ? { stripeAccount: stripeAccountId } : undefined,
+    );
+    stripeByAccount.set(key, promise);
+  }
+  return promise;
+}
 
 function Shell({
   operatorName,
@@ -39,11 +54,13 @@ function CheckoutInner({
   operatorName,
   phone,
   dockAddress,
+  stripeAccountId,
   demoMode,
 }: {
   operatorName: string;
   phone: string | null;
   dockAddress: string | null;
+  stripeAccountId: string | null;
   demoMode: boolean;
 }) {
   // The cart stays until the payment succeeds (the confirmed-booking view
@@ -114,8 +131,8 @@ function CheckoutInner({
 
   return (
     <Shell operatorName={operatorName} phone={phone} dockAddress={dockAddress}>
-      <Elements stripe={stripePromise} options={elementsOptions}>
-        <CheckoutForm lines={lines} quote={quote} demoMode={demoMode} />
+      <Elements stripe={stripeFor(stripeAccountId)} options={elementsOptions}>
+        <CheckoutForm lines={lines} quote={quote} demoMode={demoMode} stripeAccountId={stripeAccountId} />
       </Elements>
 
       {/* Checkout footer — trust/contact line only, not the full site footer */}
@@ -134,17 +151,26 @@ export function CheckoutClient({
   operatorName,
   phone,
   dockAddress,
+  stripeAccountId,
   demoMode = false,
 }: {
   operatorName: string;
   phone: string | null;
   dockAddress: string | null;
+  /** The operator's Stripe account, which the payment is made on (row 32). */
+  stripeAccountId: string | null;
   /** The live demo: shows the Stripe test card above the payment form. */
   demoMode?: boolean;
 }) {
   return (
     <Suspense>
-      <CheckoutInner operatorName={operatorName} phone={phone} dockAddress={dockAddress} demoMode={demoMode} />
+      <CheckoutInner
+        operatorName={operatorName}
+        phone={phone}
+        dockAddress={dockAddress}
+        stripeAccountId={stripeAccountId}
+        demoMode={demoMode}
+      />
     </Suspense>
   );
 }

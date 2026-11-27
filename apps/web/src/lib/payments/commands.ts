@@ -3,15 +3,19 @@ import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { stripeCommands } from "@openboat/db";
+import { paymentAccount } from "@/lib/stripe-account";
+import { payments, stripeCommands } from "@openboat/db";
 import { actorMetadata, recordAudit } from "@/lib/audit";
 import type { RequestContext } from "@/lib/request-context";
 
 // The Stripe command outbox (row 10, AR-6). A refund is written here in the
 // same transaction as the ticket and seat changes it pays for, and sent after
-// that transaction commits. Row 11 adds transfer reversals (taking a
-// chargeback or a Dashboard refund back from the operator) and transfers
-// (returning it when a chargeback is won), which work the same way:
+// that transaction commits. Payments are direct charges (row 32): a refund is
+// made on the operator's account (the command's stripe_account) and the
+// platform fee is refunded from the platform with a fee_refund command.
+// Transfer reversals and transfers (row 11, destination charges) are no
+// longer queued; the code that sends them stays until no command of those
+// kinds can be pending.
 //
 // - The row id is the refund's metadata.command_id and the first attempt's
 //   idempotency key. A retry first looks on Stripe for a refund an earlier
@@ -36,11 +40,15 @@ export type RefundCommandInput = {
   operatorId: string;
   bookingId: string | null;
   paymentIntentId: string;
+  /**
+   * The connected account the payment is on (bookings.stripe_account_id). Null
+   * for a destination charge made before row 32, which is refunded on the
+   * platform and reverses the operator's transfer.
+   */
+  stripeAccount: string | null;
   /** Null refunds everything left on the payment. */
   amountCents: number | null;
   reason: string;
-  /** Reverse the operator's transfer with the refund (destination charges). */
-  reverseTransfer: boolean;
   /** Refund the platform fee in proportion. False when it is refunded separately. */
   refundApplicationFee: boolean;
   metadata?: Record<string, string>;
@@ -52,36 +60,13 @@ export type FeeRefundCommandInput = {
   ctx: RequestContext;
   operatorId: string;
   bookingId: string | null;
-  applicationFeeId: string;
+  /**
+   * The platform fee (fee_…), or the charge it was taken on (ch_…) when the
+   * payment doesn't have the fee's id yet: Stripe creates a direct charge's
+   * application fee asynchronously, so it is looked up when the command is sent.
+   */
+  feeOrChargeId: string;
   amountCents: number | null;
-  reason: string;
-  metadata?: Record<string, string>;
-  dedupeKey?: string;
-};
-
-export type TransferReversalCommandInput = {
-  /** Who asks for it: written to audit_log and to the Stripe metadata (row 12). */
-  ctx: RequestContext;
-  operatorId: string;
-  bookingId: string | null;
-  /** The operator's transfer for the charge (tr_…). */
-  transferId: string;
-  amountCents: number;
-  reason: string;
-  metadata?: Record<string, string>;
-  dedupeKey?: string;
-};
-
-export type TransferCommandInput = {
-  /** Who asks for it: written to audit_log and to the Stripe metadata (row 12). */
-  ctx: RequestContext;
-  operatorId: string;
-  bookingId: string | null;
-  /** The operator's connected account (acct_…). */
-  destination: string;
-  /** The charge the money came from, so the transfer is funded by it (and capped by Stripe at its amount). */
-  sourceChargeId: string;
-  amountCents: number;
   reason: string;
   metadata?: Record<string, string>;
   dedupeKey?: string;
@@ -97,7 +82,8 @@ export async function queueRefund(tx: Executor, input: RefundCommandInput): Prom
   const params: Stripe.RefundCreateParams = {
     payment_intent: input.paymentIntentId,
     ...(input.amountCents !== null && { amount: input.amountCents }),
-    reverse_transfer: input.reverseTransfer,
+    // A direct charge has no transfer; a destination charge from before row 32 does.
+    ...(input.stripeAccount === null && { reverse_transfer: true }),
     refund_application_fee: input.refundApplicationFee,
     metadata: {
       ...input.metadata,
@@ -114,6 +100,7 @@ export async function queueRefund(tx: Executor, input: RefundCommandInput): Prom
     bookingId: input.bookingId,
     reason: input.reason,
     targetId: input.paymentIntentId,
+    stripeAccount: input.stripeAccount,
     amountCents: input.amountCents,
     params,
     dedupeKey: input.dedupeKey ?? null,
@@ -139,62 +126,7 @@ export async function queueFeeRefund(tx: Executor, input: FeeRefundCommandInput)
     kind: "fee_refund",
     bookingId: input.bookingId,
     reason: input.reason,
-    targetId: input.applicationFeeId,
-    amountCents: input.amountCents,
-    params,
-    dedupeKey: input.dedupeKey ?? null,
-  });
-}
-
-/** Writes a transfer-reversal command and returns its id. See queueRefund. */
-export async function queueTransferReversal(tx: Executor, input: TransferReversalCommandInput): Promise<string> {
-  const id = randomUUID();
-  const params: Stripe.TransferCreateReversalParams = {
-    amount: input.amountCents,
-    metadata: {
-      ...input.metadata,
-      ...actorMetadata(input.ctx),
-      reason: input.reason,
-      ...(input.bookingId && { bookingId: input.bookingId }),
-      command_id: id,
-    },
-  };
-  return insertCommand(tx, input.ctx, {
-    id,
-    operatorId: input.operatorId,
-    kind: "transfer_reversal",
-    bookingId: input.bookingId,
-    reason: input.reason,
-    targetId: input.transferId,
-    amountCents: input.amountCents,
-    params,
-    dedupeKey: input.dedupeKey ?? null,
-  });
-}
-
-/** Writes a transfer command (money to the operator) and returns its id. See queueRefund. */
-export async function queueTransfer(tx: Executor, input: TransferCommandInput): Promise<string> {
-  const id = randomUUID();
-  const params: Stripe.TransferCreateParams = {
-    amount: input.amountCents,
-    currency: "usd",
-    destination: input.destination,
-    source_transaction: input.sourceChargeId,
-    metadata: {
-      ...input.metadata,
-      ...actorMetadata(input.ctx),
-      reason: input.reason,
-      ...(input.bookingId && { bookingId: input.bookingId }),
-      command_id: id,
-    },
-  };
-  return insertCommand(tx, input.ctx, {
-    id,
-    operatorId: input.operatorId,
-    kind: "transfer",
-    bookingId: input.bookingId,
-    reason: input.reason,
-    targetId: input.destination,
+    targetId: input.feeOrChargeId,
     amountCents: input.amountCents,
     params,
     dedupeKey: input.dedupeKey ?? null,
@@ -277,15 +209,21 @@ async function findEarlierAttempt(cmd: {
   id: string;
   kind: CommandKind;
   targetId: string;
+  stripeAccount: string | null;
   createdAt: Date;
 }): Promise<string | null> {
   const mine = (objects: { id: string; metadata?: Stripe.Metadata | null }[]) =>
     objects.find((o) => o.metadata?.command_id === cmd.id)?.id ?? null;
   switch (cmd.kind) {
     case "refund":
-      return mine((await stripe.refunds.list({ payment_intent: cmd.targetId, limit: 100 })).data);
-    case "fee_refund":
-      return mine((await stripe.applicationFees.listRefunds(cmd.targetId, { limit: 100 })).data);
+      return mine(
+        (await stripe.refunds.list({ payment_intent: cmd.targetId, limit: 100 }, paymentAccount(cmd.stripeAccount)))
+          .data,
+      );
+    case "fee_refund": {
+      const feeId = await resolveFee(cmd.targetId);
+      return mine((await stripe.applicationFees.listRefunds(feeId, { limit: 100 })).data);
+    }
     case "transfer_reversal":
       return mine((await stripe.transfers.listReversals(cmd.targetId, { limit: 100 })).data);
     case "transfer": {
@@ -298,18 +236,47 @@ async function findEarlierAttempt(cmd: {
   }
 }
 
+/** Not there yet; the command stays pending and the cron tries again. */
+export class FeeNotCreatedYetError extends Error {
+  constructor(chargeId: string) {
+    super(`the platform fee on charge ${chargeId} hasn't been created yet`);
+    this.name = "FeeNotCreatedYetError";
+  }
+}
+
+/**
+ * The platform fee a fee_refund command refunds. A command written before the
+ * payment knew its fee names the charge instead; the fee is found by it (and
+ * saved on the payment).
+ */
+async function resolveFee(feeOrChargeId: string): Promise<string> {
+  if (feeOrChargeId.startsWith("fee_")) return feeOrChargeId;
+  const [fee] = (await stripe.applicationFees.list({ charge: feeOrChargeId, limit: 1 })).data;
+  if (!fee) throw new FeeNotCreatedYetError(feeOrChargeId);
+  await db
+    .update(payments)
+    .set({ applicationFeeId: fee.id })
+    .where(and(eq(payments.stripeChargeId, feeOrChargeId), isNull(payments.applicationFeeId)));
+  return fee.id;
+}
+
 /** Asks Stripe for the command's object and returns its id. */
 async function createOnStripe(
-  cmd: { kind: CommandKind; targetId: string; params: unknown },
+  cmd: { kind: CommandKind; targetId: string; stripeAccount: string | null; params: unknown },
   idempotencyKey: string,
 ): Promise<string> {
   switch (cmd.kind) {
     case "refund":
-      return (await stripe.refunds.create(cmd.params as Stripe.RefundCreateParams, { idempotencyKey })).id;
+      return (
+        await stripe.refunds.create(cmd.params as Stripe.RefundCreateParams, {
+          ...paymentAccount(cmd.stripeAccount),
+          idempotencyKey,
+        })
+      ).id;
     case "fee_refund":
       return (
         await stripe.applicationFees.createRefund(
-          cmd.targetId,
+          await resolveFee(cmd.targetId),
           cmd.params as Stripe.ApplicationFeeCreateRefundParams,
           { idempotencyKey },
         )

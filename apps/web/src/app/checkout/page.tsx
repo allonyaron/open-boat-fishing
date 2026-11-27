@@ -9,6 +9,7 @@ export default async function CheckoutPage() {
       operatorName={operator?.name ?? "Fishing Charter"}
       phone={operator?.phone ?? null}
       dockAddress={operator?.dockAddress ?? null}
+      stripeAccountId={operator?.stripeAccountId ?? null}
       demoMode={env.DEMO_MODE === "true"}
     />
   );

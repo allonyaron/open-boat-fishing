@@ -1,87 +1,58 @@
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { payments, stripeCommands } from "@openboat/db";
-import { eq, inArray } from "drizzle-orm";
+import { paymentAccount } from "@/lib/stripe-account";
+import { payments } from "@openboat/db";
+import { eq } from "drizzle-orm";
 import { cancelConfirmedBooking } from "@/lib/bookings/cancel";
 import type Stripe from "stripe";
 import type { RequestContext } from "@/lib/request-context";
 import { OutOfOrderEventError, type EventResult } from "@/lib/stripe-events/inbox";
-import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner } from "@/lib/stripe-events/ownership";
-import { confirmRefundCommands, queueFeeRefund, queueTransferReversal, sendCommands } from "@/lib/payments/commands";
-import { collectedOnBooking } from "@/lib/payments/operator-debts";
+import { bookingForPaymentIntent, destinationOf, orphanPaymentOwner, sameAccount } from "@/lib/stripe-events/ownership";
+import { confirmRefundCommands, queueFeeRefund, sendCommands } from "@/lib/payments/commands";
 import { bookingLabel, usd } from "@/lib/stripe-events/notes";
 
 /** The `reason` metadata the app puts on the refunds it issues itself. */
 const APP_REFUND_REASONS = new Set(["admin_ticket_refund", "trip_cancelled", "auto_refund"]);
 
-function isAppRefund(refund: Stripe.Refund): boolean {
+/** Whether the app issued this refund itself (an outbox command or one of its reasons). */
+export function isAppRefund(refund: Stripe.Refund): boolean {
   const meta = refund.metadata ?? {};
   return Boolean(meta.command_id) || APP_REFUND_REASONS.has(meta.reason ?? "") || Boolean(meta.tripId);
 }
 
 /**
- * Takes refunds made outside the app back from the operator, for each one
- * that didn't reverse the transfer itself (P3-3): otherwise the platform pays
- * the customer and the operator keeps the money. Capped at what is left of
- * the transfer. Returns the queued command ids, once per refund.
+ * What is left of the payment's platform fee, by the fee's id or, until the
+ * payment has it, by its charge (a direct charge's fee is created
+ * asynchronously). Null when the fee can't be found yet.
  */
-async function queueReversalsFor(
-  foreign: Stripe.Refund[],
-  charge: Stripe.Charge,
-  payment: { operatorId: string; bookingId: string },
-  ctx: RequestContext,
-): Promise<string[]> {
-  const unreversed = foreign.filter((r) => !r.transfer_reversal && r.status !== "failed" && r.status !== "canceled");
-  const transferId = typeof charge.transfer === "string" ? charge.transfer : charge.transfer?.id ?? null;
-  if (unreversed.length === 0 || !transferId) return [];
-
-  // Refunds already queued (a redelivery) keep their command; one still
-  // pending hasn't reached the transfer yet, so it counts against what's left.
-  const keyOf = (r: Stripe.Refund) => `refund-reversal:${r.id}`;
-  const queued = await db
-    .select({ id: stripeCommands.id, key: stripeCommands.dedupeKey, status: stripeCommands.status, amountCents: stripeCommands.amountCents })
-    .from(stripeCommands)
-    .where(inArray(stripeCommands.dedupeKey, unreversed.map(keyOf)));
-  const queuedKeys = new Set(queued.map((q) => q.key));
-  const fresh = unreversed.filter((r) => !queuedKeys.has(keyOf(r)));
-  const ids = queued.map((q) => q.id);
-  if (fresh.length === 0) return ids;
-
-  const transfer = await stripe.transfers.retrieve(transferId);
-  let left =
-    transfer.amount -
-    transfer.amount_reversed -
-    queued.filter((q) => q.status === "pending").reduce((sum, q) => sum + (q.amountCents ?? 0), 0);
-  for (const r of fresh) {
-    const amountCents = Math.min(r.amount, left);
-    if (amountCents <= 0) break;
-    ids.push(
-      await queueTransferReversal(db, {
-        ctx,
-        operatorId: payment.operatorId,
-        bookingId: payment.bookingId,
-        transferId,
-        amountCents,
-        reason: "dashboard_refund",
-        metadata: { refundId: r.id },
-        dedupeKey: keyOf(r),
-      }),
-    );
-    left -= amountCents;
-  }
-  return ids;
+async function feeLeftOn(
+  payment: { applicationFeeId: string | null },
+  chargeId: string,
+): Promise<{ feeId: string; leftCents: number } | null> {
+  const fee = payment.applicationFeeId
+    ? await stripe.applicationFees.retrieve(payment.applicationFeeId)
+    : (await stripe.applicationFees.list({ charge: chargeId, limit: 1 })).data[0];
+  return fee ? { feeId: payment.applicationFeeId ?? fee.id, leftCents: fee.amount - fee.amount_refunded } : null;
 }
 
-// A charge was refunded, by the app or from the Stripe Dashboard.
-// - A refund from outside the app that didn't reverse the operator's transfer
-//   is taken back from the operator (queueReversalsFor), partial or full.
-// - Fully refunded: reverse the platform fee and cancel the booking (its live
-//   and disputed tickets move to refunded, their seats come back).
+// A charge was refunded, by the app or by the operator in their own Stripe
+// Dashboard. Payments are direct charges on the operator's account (row 32),
+// so a refund there comes out of the operator's balance and takes nothing
+// from the platform; the platform's fee isn't refunded with it.
+// - Fully refunded: the rest of the platform fee goes back to the operator
+//   (decided 2026-11-25: the fee always reverses when the passenger doesn't
+//   sail) and the booking is cancelled (its live and disputed tickets move to
+//   refunded, their seats come back).
 // - Partly refunded by the app (office ticket refunds, trip cancellations):
-//   those paths already updated the tickets; nothing more to do.
+//   those paths already updated the tickets and their fees; nothing more to do.
 // - Partly refunded from the Dashboard: the app can't tell which tickets were
 //   refunded, so the event needs review.
-export async function handleChargeRefunded(charge: Stripe.Charge, ctx: RequestContext): Promise<EventResult> {
+export async function handleChargeRefunded(
+  charge: Stripe.Charge,
+  ctx: RequestContext,
+  /** event.account: the connected account the charge is on; null for the platform's own. */
+  account: string | null = null,
+): Promise<EventResult> {
   const piId = typeof charge.payment_intent === "string" ? charge.payment_intent : null;
   if (!piId) return { outcome: "ignored", note: `charge ${charge.id} has no payment intent` };
 
@@ -90,12 +61,16 @@ export async function handleChargeRefunded(charge: Stripe.Charge, ctx: RequestCo
       bookingId: payments.bookingId,
       operatorId: payments.operatorId,
       applicationFeeId: payments.applicationFeeId,
+      stripeAccountId: payments.stripeAccountId,
     })
     .from(payments)
     .where(eq(payments.stripePaymentIntentId, piId));
 
   if (!payment) {
     const booking = await bookingForPaymentIntent(piId);
+    if (booking && !sameAccount(account, booking.stripeAccountId)) {
+      return { outcome: "ignored", note: `not the account the booking's payment is on (${account ?? "platform"})` };
+    }
     if (booking?.status === "pending") {
       // Ours, but payment_intent.succeeded hasn't been processed yet (P3-8).
       throw new OutOfOrderEventError(`charge.refunded for PI ${piId} before its payment was recorded`);
@@ -106,8 +81,8 @@ export async function handleChargeRefunded(charge: Stripe.Charge, ctx: RequestCo
       return { outcome: "handled", operatorId: booking.operatorId, note: "refund of a payment on a cancelled booking" };
     }
     // Whose payment is it? The PI carries the booking reference.
-    const pi = await stripe.paymentIntents.retrieve(piId);
-    const owner = await orphanPaymentOwner(destinationOf(pi) ?? destinationOf(charge), pi.metadata);
+    const pi = await stripe.paymentIntents.retrieve(piId, {}, paymentAccount(account));
+    const owner = await orphanPaymentOwner(account ?? destinationOf(pi) ?? destinationOf(charge), pi.metadata);
     if (!owner.ours) return { outcome: "ignored", note: owner.why };
     return {
       outcome: "needs_review",
@@ -115,52 +90,47 @@ export async function handleChargeRefunded(charge: Stripe.Charge, ctx: RequestCo
       note: `${usd(charge.amount_refunded)} was refunded on a payment no booking has (${piId}).`,
     };
   }
+  if (!sameAccount(account, payment.stripeAccountId)) {
+    return { outcome: "ignored", note: `not the account the payment is on (${account ?? "platform"})` };
+  }
 
   // Which refunds on this charge did the app issue? Its own are confirmed
   // against their commands; the rest came from outside the app (the
-  // Stripe Dashboard).
-  const refunds = await stripe.refunds.list({ charge: charge.id, limit: 100 });
+  // operator's Stripe Dashboard).
+  const refunds = await stripe.refunds.list({ charge: charge.id, limit: 100 }, paymentAccount(account));
   await confirmRefundCommands(refunds.data);
   const foreign = refunds.data.filter((r) => !isAppRefund(r));
-  // A redelivery finds the commands by their dedupe keys and sends nothing new.
-  const reversalIds = await queueReversalsFor(foreign, charge, payment, ctx);
 
   if (charge.amount_refunded < charge.amount) {
-    await sendCommands(reversalIds);
     if (foreign.length === 0) return { outcome: "handled", operatorId: payment.operatorId };
     return {
       outcome: "needs_review",
       operatorId: payment.operatorId,
-      note: `${await bookingLabel(payment.bookingId)}: ${usd(charge.amount_refunded)} of ${usd(charge.amount)} was refunded in the Stripe Dashboard, so the app can't tell which tickets it covers. Their tickets can still board.${reversalIds.length > 0 ? " The refund was taken back from the boat's Stripe balance." : ""}`,
+      note: `${await bookingLabel(payment.bookingId)}: ${usd(charge.amount_refunded)} of ${usd(charge.amount)} was refunded in the Stripe Dashboard, so the app can't tell which tickets it covers. Their tickets can still board. Don't refund this payment again in the app: the customer already has that money back. Next time, refund single tickets from the passenger list.`,
     };
   }
 
-  // Fully refunded. The app's own refunds already returned the platform fee
-  // (in proportion, or exactly per ticket); a refund from outside the app
-  // may not have, so reverse what is left of it, once per charge. A Dashboard
-  // refund can return the fee itself: check first, so a fee with nothing left
-  // doesn't become a refused refund on the Money page. A debt the operator
-  // owed that this payment's fee carried (a chargeback fee) isn't returned.
-  const feeLeft =
-    foreign.length > 0 && payment.applicationFeeId
-      ? await (async () => {
-          const fee = await stripe.applicationFees.retrieve(payment.applicationFeeId!);
-          const debt = await collectedOnBooking(payment.operatorId, payment.bookingId);
-          return fee.amount - fee.amount_refunded - debt;
-        })()
-      : 0;
-  // Reversals first: the operator's money comes back before the fee goes out.
-  const commandIds = [...reversalIds];
-  if (feeLeft > 0 && payment.applicationFeeId) {
-    commandIds.push(await queueFeeRefund(db, {
-      ctx,
-      operatorId: payment.operatorId,
-      bookingId: payment.bookingId,
-      applicationFeeId: payment.applicationFeeId,
-      amountCents: feeLeft,
-      reason: "dashboard_refund_fee",
-      dedupeKey: `fee-refund:${charge.id}`,
-    }));
+  // Fully refunded. The app's own refunds already returned their tickets'
+  // fees exactly; a refund from outside the app didn't return any, so the
+  // rest of the fee goes back, once per charge. Checked first, so a fee with
+  // nothing left doesn't become a refused refund on the Money page. A fee
+  // Stripe hasn't created yet is refunded in full once it exists.
+  const commandIds: string[] = [];
+  if (foreign.length > 0) {
+    const fee = await feeLeftOn(payment, charge.id);
+    if (!fee || fee.leftCents > 0) {
+      commandIds.push(
+        await queueFeeRefund(db, {
+          ctx,
+          operatorId: payment.operatorId,
+          bookingId: payment.bookingId,
+          feeOrChargeId: fee?.feeId ?? charge.id,
+          amountCents: fee ? fee.leftCents : null,
+          reason: "dashboard_refund_fee",
+          dedupeKey: `fee-refund:${charge.id}`,
+        }),
+      );
+    }
   }
   await sendCommands(commandIds);
 

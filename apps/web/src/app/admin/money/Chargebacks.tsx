@@ -47,14 +47,6 @@ function moneyLine(c: ChargebackRow): string {
   }
 }
 
-function feeLine(fee: NonNullable<ChargebackRow["fee"]>): string {
-  const amount = fmtMoney(fee.cents);
-  if (fee.status === "collected") {
-    return `Stripe's ${amount} chargeback fee was added to the platform fee on booking ${fee.collectedOn ?? "—"}.`;
-  }
-  return `Stripe's ${amount} chargeback fee will be added to the platform fee on your next booking.`;
-}
-
 /**
  * Chargebacks on the operator's bookings (row 11): open ones first in time
  * order, what happened to the money, and Stripe's fee. Hidden when there are
@@ -116,7 +108,11 @@ export function Chargebacks() {
                   terms, any messages with the customer.
                 </div>
               )}
-              {c.fee && <div className="mt-1 text-body-sm text-ob-ink-2">{feeLine(c.fee)}</div>}
+              {c.stripeFeeCents !== null && (
+                <div className="mt-1 text-body-sm text-ob-ink-2">
+                  Stripe charged its {fmtMoney(c.stripeFeeCents)} chargeback fee to your Stripe account.
+                </div>
+              )}
             </li>
           );
         })}

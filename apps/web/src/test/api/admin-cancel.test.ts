@@ -339,7 +339,7 @@ describe("trip cancel settles every booking on the trip (row 9)", () => {
     // The other trip gets its seat back; the cancelled one gives none.
     expect(await seatsLeft(otherTripId)).toBe(20);
     expect(await seatsLeft(tripId)).toBe(18);
-    expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith(piId, { cancellation_reason: "requested_by_customer" });
+    expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith(piId, { cancellation_reason: "requested_by_customer" }, undefined);
     expect(stripe.refunds.create).not.toHaveBeenCalled();
     expect(pushBodyFor(await emailOf(bookingId))).toMatch(/haven't been charged/);
   });

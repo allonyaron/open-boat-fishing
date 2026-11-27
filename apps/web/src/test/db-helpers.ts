@@ -236,6 +236,8 @@ export async function seedBooking(
     ticketStatus?: "held" | "live" | "refunded" | "voided" | "disputed";
     holdExpiresAt?: Date;
     stripePaymentIntentId?: string;
+    /** The connected account the PI is on (a direct charge, row 32). */
+    stripeAccountId?: string;
   } = {},
 ): Promise<BookingSeedResult> {
   const ticketStatus = opts.ticketStatus ?? TICKET_STATUS_FOR_BOOKING[opts.status ?? "pending"];
@@ -251,6 +253,7 @@ export async function seedBooking(
       customerEmail: `test-${randomUUID().slice(0, 6)}@test.com`,
       holdExpiresAt: opts.holdExpiresAt ?? new Date(Date.now() - 60_000), // 1 min ago
       stripePaymentIntentId: opts.stripePaymentIntentId ?? null,
+      stripeAccountId: opts.stripeAccountId ?? null,
     })
     .returning({ id: bookings.id });
 

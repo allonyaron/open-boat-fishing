@@ -292,6 +292,10 @@ export const bookings = pgTable("bookings", {
   status: bookingStatusEnum("status").notNull().default("pending"),
   statusChangedAt: timestamp("status_changed_at", { withTimezone: true }), // set by transitionBookings
   stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
+  // The operator's Stripe account the PaymentIntent was created on (direct
+  // charges, row 32). Every later call on it uses this, not the operator's
+  // current account, which changes if the operator reconnects.
+  stripeAccountId: text("stripe_account_id"),
   totalCents: integer("total_cents").notNull(),
   platformFeeCents: integer("platform_fee_cents").notNull(),       // $1.50 × ticket count
   groupDiscountCents: integer("group_discount_cents").notNull().default(0),
@@ -430,10 +434,12 @@ export const payments = pgTable("payments", {
   operatorId: uuid("operator_id").notNull().references(() => operators.id),
   stripePaymentIntentId: text("stripe_payment_intent_id").notNull().unique(),
   stripeChargeId: text("stripe_charge_id"),
-  stripeTransferId: text("stripe_transfer_id"),
-  applicationFeeId: text("application_fee_id"),
+  stripeAccountId: text("stripe_account_id"),     // the connected account the charge is on (row 32)
+  stripeTransferId: text("stripe_transfer_id"),   // destination charges only (before row 32); unused, dropped later
+  applicationFeeId: text("application_fee_id"),   // set when known; direct-charge fees are created asynchronously
   amountCents: integer("amount_cents").notNull(),
   applicationFeeCents: integer("application_fee_cents").notNull(),
+  stripeFeeCents: integer("stripe_fee_cents"),    // Stripe's processing fee, paid by the operator (row 32)
   currency: text("currency").notNull().default("usd"),
   status: text("status").notNull(),
   metadata: jsonb("metadata"),
@@ -674,8 +680,8 @@ export const stripeEvents = pgTable("stripe_events", {
 export const stripeCommandKindEnum = pgEnum("stripe_command_kind", [
   "refund",            // refund (part of) a PaymentIntent
   "fee_refund",        // refund (part of) the platform's application fee
-  "transfer_reversal", // take money back from the operator's transfer (chargeback, Dashboard refund)
-  "transfer",          // send money to the operator (a won chargeback returns what was taken back)
+  "transfer_reversal", // destination charges only (row 11); unused since row 32, kept until a contract migration
+  "transfer",          // destination charges only (row 11); unused since row 32, kept until a contract migration
 ]);
 
 export const stripeCommandStatusEnum = pgEnum("stripe_command_status", [
@@ -691,7 +697,8 @@ export const stripeCommands = pgTable("stripe_commands", {
   kind: stripeCommandKindEnum("kind").notNull(),
   bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
   reason: text("reason").notNull(),                  // admin_ticket_refund, trip_cancelled, auto_refund, dashboard_refund_fee, chargeback, dashboard_refund, chargeback_won
-  targetId: text("target_id").notNull(),             // pi_… refund, fee_… fee refund, tr_… reversal, acct_… transfer
+  targetId: text("target_id").notNull(),             // pi_… refund; fee_… (or ch_…, until the fee exists) fee refund
+  stripeAccount: text("stripe_account"),             // the connected account a refund is made on (row 32); null = platform
   amountCents: integer("amount_cents"),              // null = everything left
   params: jsonb("params").notNull(),                 // the exact request sent to Stripe
   dedupeKey: text("dedupe_key").unique(),            // set when the same command could be queued twice
@@ -714,9 +721,9 @@ export const stripeCommands = pgTable("stripe_commands", {
 // ─── Disputes (chargebacks) ──────────────────────────────────────────────────
 // The read model of each chargeback on a booking (row 11), kept up to date by
 // the charge.dispute.* handlers. The Money page and the passenger list read
-// it. With destination charges, Stripe takes the disputed amount and its fee
-// from the platform; the app takes the amount back from the operator with a
-// transfer_reversal command and returns it if the dispute is won.
+// it. With direct charges (row 32), Stripe takes the disputed amount and its
+// fee from the operator's own account; the app moves the tickets and returns
+// the platform fee when a dispute is lost.
 
 export const disputes = pgTable("disputes", {
   id: text("id").primaryKey(),                       // Stripe dispute id (du_…)
@@ -739,6 +746,8 @@ export const disputes = pgTable("disputes", {
 ]);
 
 // ─── Operator debts ──────────────────────────────────────────────────────────
+// Unused since row 32: with direct charges Stripe takes a chargeback's fee from
+// the operator itself. Kept until a contract migration drops it.
 // Money an operator owes the platform: the Stripe fee on a chargeback (row 11).
 // Standard connected accounts can't be debited, so a debt is collected by
 // adding it to the platform fee on the operator's next booking: reserved to

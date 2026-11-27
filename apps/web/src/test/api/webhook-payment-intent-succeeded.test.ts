@@ -274,10 +274,111 @@ describe("handlePaymentIntentSucceeded", () => {
       stripeTestCtx,
     );
 
-    expect(stripe.charges.retrieve).toHaveBeenCalledWith("ch_1");
+    expect(stripe.charges.retrieve).toHaveBeenCalledWith("ch_1", { expand: ["balance_transaction"] }, undefined);
     const [payment] = await testDb.select().from(payments).where(eq(payments.bookingId, bookingId));
     expect(payment.stripeChargeId).toBe("ch_1");
     expect(payment.applicationFeeId).toBe("fee_1");
     expect(payment.stripeTransferId).toBe("tr_1");
   });
 });
+
+describe("handlePaymentIntentSucceeded: direct charges on the operator's account (row 32)", () => {
+  function directPi(overrides: Record<string, unknown>) {
+    return pi({ transfer_data: null, application_fee_amount: 150, ...overrides });
+  }
+
+  it("confirms the booking from an event on its account and records Stripe's fee from the balance transaction", async () => {
+    const { bookingId } = await seedBooking(ctx, {
+      status: "pending",
+      stripePaymentIntentId: "pi_direct_ok",
+      stripeAccountId: ACCT,
+    });
+    vi.mocked(stripe.charges.retrieve).mockResolvedValue({
+      application_fee: null, // created asynchronously on direct charges
+      transfer: null,
+      application_fee_amount: 150,
+      balance_transaction: {
+        fee: 470,
+        fee_details: [
+          { type: "stripe_fee", amount: 320 },
+          { type: "application_fee", amount: 150 },
+        ],
+      },
+    } as any);
+
+    const result = await handlePaymentIntentSucceeded(
+      directPi({ id: "pi_direct_ok", latest_charge: "ch_direct" }),
+      stripeTestCtx,
+      ACCT,
+    );
+
+    expect(result.outcome).toBe("handled");
+    expect(stripe.charges.retrieve).toHaveBeenCalledWith(
+      "ch_direct",
+      { expand: ["balance_transaction"] },
+      { stripeAccount: ACCT },
+    );
+    const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(booking.status).toBe("confirmed");
+    const [payment] = await testDb.select().from(payments).where(eq(payments.bookingId, bookingId));
+    expect(payment).toMatchObject({
+      stripeAccountId: ACCT,
+      stripeChargeId: "ch_direct",
+      applicationFeeId: null,
+      applicationFeeCents: 150,
+      stripeFeeCents: 320,
+    });
+  });
+
+  it("refuses a payment from another account than the one the booking's PI is on, without asking Stripe (P3-2)", async () => {
+    const { bookingId } = await seedBooking(ctx, {
+      status: "pending",
+      stripePaymentIntentId: "pi_direct_wrong_acct",
+      stripeAccountId: ACCT,
+    });
+    const result = await handlePaymentIntentSucceeded(
+      directPi({ id: "pi_direct_wrong_acct", latest_charge: "ch_x" }),
+      stripeTestCtx,
+      "acct_other",
+    );
+    expect(result.outcome).toBe("needs_review");
+    expect(result.note).toMatch(/paid on acct_other/);
+    expect(stripe.charges.retrieve).not.toHaveBeenCalled();
+    const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(booking.status).toBe("pending");
+  });
+
+  it("refuses the platform's own event for a booking whose PI is on the operator's account", async () => {
+    await seedBooking(ctx, { status: "pending", stripePaymentIntentId: "pi_direct_platform", stripeAccountId: ACCT });
+    const result = await handlePaymentIntentSucceeded(directPi({ id: "pi_direct_platform" }), stripeTestCtx, null);
+    expect(result.outcome).toBe("needs_review");
+    expect(result.note).toMatch(/paid on the platform/);
+  });
+
+  it("refuses a payment whose platform fee isn't the booking's", async () => {
+    const { bookingId } = await seedBooking(ctx, {
+      status: "pending",
+      stripePaymentIntentId: "pi_direct_fee",
+      stripeAccountId: ACCT,
+    });
+    const result = await handlePaymentIntentSucceeded(
+      directPi({ id: "pi_direct_fee", application_fee_amount: 50 }),
+      stripeTestCtx,
+      ACCT,
+    );
+    expect(result.outcome).toBe("needs_review");
+    expect(result.note).toMatch(/platform fee 50 != booking's 150/);
+    const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(booking.status).toBe("pending");
+  });
+
+  it("refunds a payment that lands on a cancelled booking on the booking's account", async () => {
+    await seedBooking(ctx, { status: "cancelled", stripePaymentIntentId: "pi_direct_late", stripeAccountId: ACCT });
+    await handlePaymentIntentSucceeded(directPi({ id: "pi_direct_late" }), stripeTestCtx, ACCT);
+    const [create] = vi.mocked(stripe.refunds.create).mock.calls;
+    expect(create[0]).toMatchObject({ payment_intent: "pi_direct_late", refund_application_fee: true });
+    expect(create[0]).not.toHaveProperty("reverse_transfer");
+    expect(create[1]).toMatchObject({ stripeAccount: ACCT });
+  });
+});
+

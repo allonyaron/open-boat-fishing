@@ -7,7 +7,6 @@ import { holdsSeat } from "@/lib/tickets/queries";
 import { giveBackSeatsForTickets } from "@/lib/inventory/seats";
 import { transitionTrips } from "@/lib/trips/status";
 import { transitionBookings } from "./status";
-import { releaseDebts } from "@/lib/payments/operator-debts";
 import { cancelPaymentIntentForRelease } from "./release";
 import { queueFeeRefund, queueRefund, sendCommands } from "@/lib/payments/commands";
 import { recordAudit } from "@/lib/audit";
@@ -56,6 +55,7 @@ type Settled =
       kind: "pending";
       bookingId: string;
       paymentIntentId: string | null;
+      stripeAccountId: string | null;
       email: string | null;
       ticketsOut: number;
     }
@@ -80,7 +80,9 @@ async function settleBooking(
       status: bookings.status,
       email: bookings.customerEmail,
       paymentIntentId: bookings.stripePaymentIntentId,
+      stripeAccountId: bookings.stripeAccountId,
       applicationFeeId: payments.applicationFeeId,
+      chargeId: payments.stripeChargeId,
     })
     .from(bookings)
     .leftJoin(payments, eq(payments.bookingId, bookings.id))
@@ -95,11 +97,11 @@ async function settleBooking(
     await giveBackSeatsForTickets(tx, operatorId, moved, "trip_cancel");
     const done = await transitionBookings(tx, { operatorId, bookingId }, "pending", "cancelled");
     if (done.length === 0) return { kind: "none" };
-    await releaseDebts(tx, { operatorId, bookingId });
     return {
       kind: "pending",
       bookingId,
       paymentIntentId: booking.paymentIntentId,
+      stripeAccountId: booking.stripeAccountId,
       email: booking.email,
       ticketsOut: moved.length,
     };
@@ -139,10 +141,11 @@ async function settleBooking(
     paid.map((t) => t.priceCents),
     left.length,
   );
-  // With the fee's id, exactly these tickets' platform fees are refunded,
-  // as the office ticket refund does; in proportion, Stripe would also hand
-  // back a chargeback fee the payment carried for the operator (row 11).
-  const exactFee = !!booking.applicationFeeId;
+  // Exactly these tickets' platform fees are refunded, from the platform, as
+  // the office ticket refund does (row 32): by the fee's id or, until the
+  // payment has it, by its charge.
+  const feeOrChargeId = booking.applicationFeeId ?? booking.chargeId;
+  const exactFee = !!feeOrChargeId;
   const metadata = { tripId, ...(input.reason && { cancelReason: input.reason.slice(0, 200) }) };
   const commandId =
     plan && booking.paymentIntentId
@@ -151,9 +154,9 @@ async function settleBooking(
           operatorId,
           bookingId,
           paymentIntentId: booking.paymentIntentId,
+          stripeAccount: booking.stripeAccountId,
           amountCents: plan.amountCents,
           reason: "trip_cancelled",
-          reverseTransfer: true,
           refundApplicationFee: !exactFee,
           metadata,
           dedupeKey: `trip-cancel:${tripId}:${bookingId}`,
@@ -166,7 +169,7 @@ async function settleBooking(
           ctx,
           operatorId,
           bookingId,
-          applicationFeeId: booking.applicationFeeId!,
+          feeOrChargeId: feeOrChargeId!,
           amountCents: feeCents,
           reason: "trip_cancelled",
           metadata,
@@ -242,7 +245,7 @@ export async function finishTripCancellation(
   for (const s of acted) {
     if (s.kind !== "pending") continue;
     const pi = s.paymentIntentId
-      ? await cancelPaymentIntentForRelease(s.paymentIntentId, "requested_by_customer")
+      ? await cancelPaymentIntentForRelease(s.paymentIntentId, s.stripeAccountId, "requested_by_customer")
       : "canceled";
     if (pi !== "canceled") paymentsNotCancelled++;
     if (s.email) (pi === "paid" ? paidEmails : unpaidEmails).push(s.email);

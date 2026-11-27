@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { seedOperator, cleanupOperator, seedBooking, testDb, stripeTestCtx } from "../db-helpers";
 import type { SeedResult } from "../db-helpers";
-import { bookings, operators, operatorDebts, payments, tickets, trips, stripeCommands } from "@openboat/db";
+import { bookings, operators, payments, tickets, trips, stripeCommands } from "@openboat/db";
 import { eq } from "drizzle-orm";
 
 vi.mock("@/lib/stripe", () => ({
@@ -10,13 +10,11 @@ vi.mock("@/lib/stripe", () => ({
     applicationFees: {
       createRefund: vi.fn().mockResolvedValue({ id: "fr_test" }),
       retrieve: vi.fn().mockResolvedValue({ amount: 150, amount_refunded: 0 }),
+      list: vi.fn().mockResolvedValue({ data: [] }),
+      listRefunds: vi.fn().mockResolvedValue({ data: [] }),
     },
     refunds: { list: vi.fn().mockResolvedValue({ data: [] }) },
     paymentIntents: { retrieve: vi.fn().mockResolvedValue({ metadata: {}, transfer_data: null }) },
-    transfers: {
-      retrieve: vi.fn().mockResolvedValue({ amount: 10000, amount_reversed: 0 }),
-      createReversal: vi.fn().mockResolvedValue({ id: "trr_test" }),
-    },
   },
 }));
 
@@ -42,15 +40,23 @@ beforeEach(() => {
   vi.mocked(stripe.applicationFees.retrieve).mockResolvedValue({ amount: 150, amount_refunded: 0 } as any);
   vi.mocked(stripe.refunds.list).mockReset();
   vi.mocked(stripe.refunds.list).mockResolvedValue({ data: [] } as any);
-  vi.mocked(stripe.transfers.createReversal).mockClear();
+  vi.mocked(stripe.applicationFees.list).mockReset();
+  vi.mocked(stripe.applicationFees.list).mockResolvedValue({ data: [] } as any);
 });
 
-async function seedPaidBooking(piId: string, applicationFeeId: string | null = "fee_abc") {
-  const { bookingId } = await seedBooking(ctx, { status: "confirmed", stripePaymentIntentId: piId });
+async function seedPaidBooking(
+  piId: string,
+  applicationFeeId: string | null = "fee_abc",
+  /** The connected account a direct charge is on (row 32); none for a destination charge. */
+  stripeAccountId?: string,
+) {
+  const { bookingId } = await seedBooking(ctx, { status: "confirmed", stripePaymentIntentId: piId, stripeAccountId });
   await testDb.insert(payments).values({
     bookingId,
     operatorId: ctx.operatorId,
     stripePaymentIntentId: piId,
+    stripeChargeId: `ch_for_${piId}`,
+    stripeAccountId: stripeAccountId ?? null,
     applicationFeeId,
     amountCents: 10000,
     applicationFeeCents: 150,
@@ -214,92 +220,67 @@ describe("handleChargeRefunded", () => {
   });
 });
 
-// Row 11 (P3-3): a refund made outside the app that didn't reverse the
-// operator's transfer would leave the platform paying the customer while the
-// operator keeps the money.
-describe("handleChargeRefunded — taking outside refunds back from the operator", () => {
-  it("takes a partial Dashboard refund back from the operator's transfer", async () => {
-    const bookingId = await seedPaidBooking("pi_dash_partial_rev");
+// Row 32: payments are direct charges on the operator's account. A refund the
+// operator makes in their own Dashboard comes out of their balance; the
+// platform returns the rest of its fee when the charge is fully refunded.
+describe("handleChargeRefunded — direct charges on the operator's account (row 32)", () => {
+  it("on a full Dashboard refund, returns the rest of the platform fee and cancels the booking, asking only the booking's account", async () => {
+    const bookingId = await seedPaidBooking("pi_direct_full", "fee_direct_full", ACCT);
+    vi.mocked(stripe.applicationFees.retrieve).mockResolvedValueOnce({ id: "fee_direct_full", amount: 300, amount_refunded: 150 } as any);
     vi.mocked(stripe.refunds.list).mockResolvedValueOnce({
-      data: [{ id: "re_dash_partial_rev", amount: 5000, status: "succeeded", transfer_reversal: null, metadata: {} }],
+      data: [
+        { id: "re_app", amount: 5000, metadata: { reason: "admin_ticket_refund" } },
+        { id: "re_dash", amount: 5000, metadata: {} },
+      ],
     } as any);
+
     const result = await handleChargeRefunded(
-      charge({ id: "ch_dash_partial_rev", amount_refunded: 5000, payment_intent: "pi_dash_partial_rev", transfer: "tr_dash_partial_rev" }),
+      charge({ id: "ch_direct_full", payment_intent: "pi_direct_full" }),
       stripeTestCtx,
+      ACCT,
     );
 
-    expect(result.outcome).toBe("needs_review");
-    expect(result.note).toMatch(/taken back from the boat's Stripe balance/);
+    expect(result.outcome).toBe("handled");
+    expect(stripe.refunds.list).toHaveBeenCalledWith({ charge: "ch_direct_full", limit: 100 }, { stripeAccount: ACCT });
     const [cmd] = await testDb.select().from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
-    expect(cmd).toMatchObject({
-      kind: "transfer_reversal",
-      targetId: "tr_dash_partial_rev",
-      amountCents: 5000,
-      status: "confirmed",
-      dedupeKey: "refund-reversal:re_dash_partial_rev",
-    });
-    expect(stripe.transfers.createReversal).toHaveBeenCalledTimes(1);
+    expect(cmd).toMatchObject({ kind: "fee_refund", targetId: "fee_direct_full", amountCents: 150, stripeAccount: null });
+    const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(booking.status).toBe("cancelled");
   });
 
-  it("takes back a second Dashboard refund without counting the first one twice", async () => {
-    const bookingId = await seedPaidBooking("pi_dash_two");
-    const first = { id: "re_dash_two_a", amount: 5000, status: "succeeded", transfer_reversal: null, metadata: {} };
-    const second = { id: "re_dash_two_b", amount: 3000, status: "succeeded", transfer_reversal: null, metadata: {} };
-    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [first] } as any);
-    await handleChargeRefunded(
-      charge({ id: "ch_dash_two", amount_refunded: 5000, payment_intent: "pi_dash_two", transfer: "tr_dash_two" }),
-      stripeTestCtx,
-    );
-    // Stripe lists the newest refund first; the first one has been taken back.
-    vi.mocked(stripe.transfers.retrieve).mockResolvedValueOnce({ amount: 10000, amount_reversed: 5000 } as any);
-    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [second, first] } as any);
-    await handleChargeRefunded(
-      charge({ id: "ch_dash_two", amount_refunded: 8000, payment_intent: "pi_dash_two", transfer: "tr_dash_two" }),
-      stripeTestCtx,
-    );
+  it("refunds a fee Stripe hasn't created yet in full, by its charge", async () => {
+    const bookingId = await seedPaidBooking("pi_direct_nofee", null, ACCT);
+    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({ data: [{ id: "re_dash_nofee", metadata: {} }] } as any);
 
-    const cmds = await testDb.select().from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
-    expect(cmds.map((c) => `${c.dedupeKey}:${c.amountCents}`).sort()).toEqual([
-      "refund-reversal:re_dash_two_a:5000",
-      "refund-reversal:re_dash_two_b:3000",
-    ]);
-    expect(stripe.transfers.createReversal).toHaveBeenCalledTimes(2);
+    await handleChargeRefunded(charge({ id: "ch_direct_nofee", payment_intent: "pi_direct_nofee" }), stripeTestCtx, ACCT);
+
+    expect(stripe.applicationFees.list).toHaveBeenCalledWith({ charge: "ch_direct_nofee", limit: 1 });
+    const [cmd] = await testDb.select().from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
+    expect(cmd).toMatchObject({ kind: "fee_refund", targetId: "ch_direct_nofee", amountCents: null, status: "pending" });
+    const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(booking.status).toBe("cancelled");
   });
 
-  it("leaves a Dashboard refund that reversed the transfer itself alone", async () => {
-    const bookingId = await seedPaidBooking("pi_dash_reversed");
-    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({
-      data: [{ id: "re_dash_reversed", amount: 10000, status: "succeeded", transfer_reversal: "trr_by_stripe", metadata: {} }],
-    } as any);
-    await handleChargeRefunded(
-      charge({ id: "ch_dash_reversed", payment_intent: "pi_dash_reversed", transfer: "tr_dash_reversed" }),
+  it("ignores a refund event from another account than the payment's (P3-2)", async () => {
+    const bookingId = await seedPaidBooking("pi_direct_other", "fee_direct_other", ACCT);
+    const result = await handleChargeRefunded(
+      charge({ id: "ch_direct_other", payment_intent: "pi_direct_other" }),
       stripeTestCtx,
+      "acct_other",
     );
-    const cmds = await testDb.select().from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
-    expect(cmds.map((c) => c.kind)).toEqual(["fee_refund"]);
-    expect(stripe.transfers.createReversal).not.toHaveBeenCalled();
+    expect(result.outcome).toBe("ignored");
+    expect(stripe.refunds.list).not.toHaveBeenCalled();
+    const [booking] = await testDb.select().from(bookings).where(eq(bookings.id, bookingId));
+    expect(booking.status).toBe("confirmed");
   });
 
-  it("on a full Dashboard refund, takes it back first and doesn't hand back a chargeback fee the payment carried", async () => {
-    const bookingId = await seedPaidBooking("pi_dash_debt");
-    await testDb.insert(operatorDebts).values({
-      operatorId: ctx.operatorId,
-      kind: "dispute_fee",
-      amountCents: 1500,
-      status: "collected",
-      bookingId,
-    });
-    vi.mocked(stripe.applicationFees.retrieve).mockResolvedValueOnce({ amount: 1650, amount_refunded: 0 } as any);
-    vi.mocked(stripe.refunds.list).mockResolvedValueOnce({
-      data: [{ id: "re_dash_debt", amount: 10000, status: "succeeded", transfer_reversal: null, metadata: {} }],
-    } as any);
-    await handleChargeRefunded(charge({ id: "ch_dash_debt", payment_intent: "pi_dash_debt", transfer: "tr_dash_debt" }), stripeTestCtx);
-
-    const cmds = await testDb.select().from(stripeCommands).where(eq(stripeCommands.bookingId, bookingId));
-    const reversal = cmds.find((c) => c.kind === "transfer_reversal")!;
-    const fee = cmds.find((c) => c.kind === "fee_refund")!;
-    expect(reversal.amountCents).toBe(10000);
-    expect(fee.amountCents).toBe(150);
-    expect(reversal.sentAt!.getTime()).toBeLessThanOrEqual(fee.sentAt!.getTime());
+  it("ignores the platform's own event for a payment on the operator's account", async () => {
+    await seedPaidBooking("pi_direct_platform_evt", "fee_x", ACCT);
+    const result = await handleChargeRefunded(
+      charge({ id: "ch_direct_platform_evt", payment_intent: "pi_direct_platform_evt" }),
+      stripeTestCtx,
+      null,
+    );
+    expect(result.outcome).toBe("ignored");
   });
 });

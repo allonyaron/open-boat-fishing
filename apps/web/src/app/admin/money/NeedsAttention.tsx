@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button, Lamp, Panel, fmtMoney, useToast } from "@/components/admin/merchant";
-import type { AttentionItem } from "@/lib/payments/attention";
+import type { AttentionItem, OutsideRefundTicket } from "@/lib/payments/attention";
 
 /** "Nov 17, 2:05 PM" in Eastern time. */
 function fmtWhen(iso: string): string {
@@ -22,6 +22,20 @@ const RETRY_MESSAGES: Record<string, { text: string; kind: "done" | "error" }> =
   failed: { text: "Stripe refused the refund again. See the reason below.", kind: "error" },
   skipped: { text: "That refund is already being sent.", kind: "done" },
 };
+
+const TICKET_TYPE: Record<string, string> = { adult: "Adult", child: "Child", senior: "Senior" };
+
+/** "Fri, Nov 27, 6:00 AM" in Eastern time. */
+function fmtTrip(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+  });
+}
 
 /**
  * Refunds Stripe refused or hasn't received yet, and payment events that need
@@ -48,6 +62,32 @@ export function NeedsAttention() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // A partial refund made in Stripe: the office says which ticket it was for.
+  async function markTicket(item: AttentionItem, ticket: OutsideRefundTicket) {
+    setBusy(`${item.id}:${ticket.id}`);
+    try {
+      const res = await fetch(`/api/admin/payments/attention/${item.kind}/${item.id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "mark_ticket", ticketId: ticket.id }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        feeReturnedCents?: number;
+        bookingCancelled?: boolean;
+      };
+      if (!res.ok) {
+        showToast(body.error ?? "That didn't work. Try again.", "error");
+      } else {
+        const fee = body.feeReturnedCents ? ` Its ${fmtMoney(body.feeReturnedCents)} platform fee goes back to you.` : "";
+        showToast(`Ticket marked refunded; its seat is back on sale.${fee}`);
+      }
+      await load();
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function act(item: AttentionItem, action: "retry" | "resolve") {
     setBusy(`${item.id}:${action}`);
@@ -117,6 +157,38 @@ export function NeedsAttention() {
               </div>
               {item.detail && (
                 <div className="mt-1 text-body-sm text-ob-ink-2 [overflow-wrap:anywhere]">{item.detail}</div>
+              )}
+              {item.outsideRefundTickets && item.outsideRefundTickets.length > 0 && (
+                <div className="mt-3">
+                  <div className="text-body-sm font-bold">Which ticket was refunded?</div>
+                  <div className="text-body-sm text-ob-ink-2">
+                    The customer already has the money. Picking the ticket frees its seat and returns its platform fee
+                    to you; nothing is refunded to the customer again.
+                  </div>
+                  <ul className="mt-2 flex flex-col gap-2">
+                    {item.outsideRefundTickets.map((t) => (
+                      <li
+                        key={t.id}
+                        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-2 border border-ob-hair rounded-ob"
+                      >
+                        <span className="text-body-sm">
+                          <span className="font-bold">{TICKET_TYPE[t.ticketType] ?? t.ticketType}</span>
+                          {" · "}
+                          <span className="font-num">{fmtMoney(t.priceCents)}</span>
+                          {" · "}
+                          {t.tripName}, <span className="font-num">{fmtTrip(t.startsAt)}</span>
+                        </span>
+                        <Button
+                          onClick={() => void markTicket(item, t)}
+                          disabled={busy !== null}
+                          className="max-md:w-full"
+                        >
+                          {busy === `${item.id}:${t.id}` ? "Saving…" : "This one"}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
             <div className="flex gap-2.5 max-md:w-full">

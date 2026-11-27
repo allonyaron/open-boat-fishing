@@ -27,12 +27,33 @@ export async function operatorForAccount(accountId: string | null): Promise<stri
   return row?.id ?? null;
 }
 
+/**
+ * Whether an event from `eventAccount` (event.account; null for the
+ * platform's own events) may act on a payment made on `paymentAccount`
+ * (bookings.stripe_account_id). Payments are direct charges on the operator's
+ * account (row 32), so their events must come from that same account; a
+ * destination charge from before row 32 is on the platform, and its events
+ * carry no account. Anything else, such as an operator's own payment on their
+ * account naming a booking in its metadata, is never acted on (P3-2).
+ */
+export function sameAccount(eventAccount: string | null | undefined, paymentAccount: string | null | undefined): boolean {
+  return (eventAccount ?? null) === (paymentAccount ?? null);
+}
+
 /** The booking created with this PaymentIntent, found by its stored PI id (unique). */
-export async function bookingForPaymentIntent(
-  paymentIntentId: string,
-): Promise<{ id: string; operatorId: string; status: "pending" | "confirmed" | "cancelled" } | null> {
+export async function bookingForPaymentIntent(paymentIntentId: string): Promise<{
+  id: string;
+  operatorId: string;
+  status: "pending" | "confirmed" | "cancelled";
+  stripeAccountId: string | null;
+} | null> {
   const [row] = await db
-    .select({ id: bookings.id, operatorId: bookings.operatorId, status: bookings.status })
+    .select({
+      id: bookings.id,
+      operatorId: bookings.operatorId,
+      status: bookings.status,
+      stripeAccountId: bookings.stripeAccountId,
+    })
     .from(bookings)
     .where(eq(bookings.stripePaymentIntentId, paymentIntentId));
   return row ?? null;
@@ -45,16 +66,18 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * needs review, or to another one sharing the platform's Stripe account (the
  * test-mode demo shares its connected account with previews and local dev).
  *
- * The destination must be one of this database's operators. Then, if the
+ * `account` is the connected account the payment is on: event.account for a
+ * direct charge, the destination for one from before row 32. It must be one
+ * of this database's operators. Then, if the
  * payment's metadata names a booking that doesn't exist here, another
  * deployment created it. Metadata only decides between ignoring and
  * reviewing; it never confirms or cancels anything.
  */
 export async function orphanPaymentOwner(
-  destination: string | null,
+  account: string | null,
   metadata: Record<string, string> | null | undefined,
 ): Promise<{ ours: true; operatorId: string } | { ours: false; why: string }> {
-  const operatorId = await operatorForAccount(destination);
+  const operatorId = await operatorForAccount(account);
   if (!operatorId) return { ours: false, why: "not a payment of this deployment" };
   const ref = metadata?.bookingId;
   if (ref && UUID.test(ref)) {
